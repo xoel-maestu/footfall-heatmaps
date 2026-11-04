@@ -58,12 +58,27 @@ class NvidiaMtmcReader:
             raise KeyError(f"{key} not in scene {scene} calibration")
         s = sensors[key]
         attrs = {a["name"]: a["value"] for a in s["attributes"]}
+        h = self._oriented(scene, camera, s)
         return CameraCalibration(
-            world_to_image=self._oriented(scene, camera, s),
+            world_to_image=h,
             width=int(attrs["frameWidth"]),
             height=int(attrs["frameHeight"]),
             fps=float(attrs["fps"]),
+            projection=self._projection(s, h),
         )
+
+    @staticmethod
+    def _projection(sensor, h):
+        """K [R | t] scaled onto the oriented homography h, which is its floor
+        columns (0, 1, 3) up to scale. Checked on the five tune scenes: the
+        file's cameraMatrix is K [R | t] to 1e-12, its homography those three
+        columns, the camera centres 4.0-4.9 m above the floor (z up, metres),
+        and each person's 3d_location is the centre of a box standing on z = 0."""
+        if "intrinsicMatrix" not in sensor or "extrinsicMatrix" not in sensor:
+            return None
+        p = np.array(sensor["intrinsicMatrix"], float) @ np.array(sensor["extrinsicMatrix"], float)
+        floor = p[:, [0, 1, 3]]
+        return p * (np.vdot(h, floor) / np.vdot(floor, floor))
 
     def _oriented(self, scene, camera, sensor):
         """The homography times -1 if its third row is negative in front of the camera.

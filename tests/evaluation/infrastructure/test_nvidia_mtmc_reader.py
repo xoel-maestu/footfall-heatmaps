@@ -50,6 +50,22 @@ def test_homography_sign_comes_from_the_extrinsics(tmp_path, rows):
     np.testing.assert_allclose(cam.world_to_image, H)
 
 
+def test_camera_matrix_is_scaled_onto_the_oriented_homography(tmp_path, rows):
+    root = write_scene(tmp_path, rows, cameras=(7, 5), flipped=(5,))
+
+    cam = NvidiaMtmcReader(root).camera("001", "5")
+
+    assert cam.projection.shape == (3, 4)
+    np.testing.assert_allclose(cam.projection[:, [0, 1, 3]], H)
+    np.testing.assert_allclose(cam.projection[:, 2], [7.0, 7.0, 7.0])
+
+
+def test_no_extrinsics_means_no_camera_matrix(tmp_path, rows):
+    cam = NvidiaMtmcReader(write_scene(tmp_path, rows, extrinsics=False)).camera("001", "7")
+
+    assert cam.projection is None
+
+
 def test_homography_sign_falls_back_to_the_camera_ground_truth(tmp_path, rows):
     root = write_scene(tmp_path, rows, flipped=(7,), extrinsics=False)
 

@@ -1,13 +1,15 @@
 """Score the tracks of one or two configurations against the floor ground truth.
 
-Each tracked box becomes one image point (the config's foot point), projected
-to the floor with the camera's ground homography and accumulated in the floor
+Each tracked box becomes one floor point (the config's foot point, through the
+camera matrix; see floorplan.domain.foot_point) and is accumulated in the floor
 grid: dwell adds stride/fps person-seconds per sample, passage counts distinct
 track ids per cell. The three truth blocks of evaluate_oracle are scored with
 a paired block bootstrap over 30 s blocks.
 """
 
 from dataclasses import dataclass
+
+import numpy as np
 
 from space_usage_heatmaps.evaluation.application.evaluate_oracle import (
     TRUTHS,
@@ -19,8 +21,7 @@ from space_usage_heatmaps.evaluation.domain.bootstrap import (
     block_bootstrap,
     block_layers,
 )
-from space_usage_heatmaps.floorplan.domain.foot_point import image_points
-from space_usage_heatmaps.floorplan.domain.homography import Homography
+from space_usage_heatmaps.floorplan.domain.foot_point import floor_points
 
 BLOCK_S = 30.0
 
@@ -46,6 +47,24 @@ class ConfigReport:
     results: dict[str, BootstrapResult]  # truth block -> bootstrap
 
 
+def camera_floor_points(cam, boxes, config):
+    """floor_points of x1, y1, x2, y2 boxes with one camera's calibration; the
+    image points (centroid, bottom) need only its ground homography."""
+    projection = cam.projection
+    if projection is None:
+        if config.foot_point not in ("centroid", "bottom"):
+            raise ValueError(f"foot point {config.foot_point!r} needs the 3x4 camera matrix")
+        projection = np.insert(cam.world_to_image, 2, 0.0, axis=1)
+    return floor_points(
+        boxes,
+        projection,
+        cam.height,
+        config.foot_point,
+        config.person_height_m,
+        config.min_implied_height_m,
+    )
+
+
 def evaluate_config(reader, scenes, runs, cell, n_resamples=1000, seed=0):
     """scenes: [(scene, camera)]; runs: [(RunConfig, TrackSource)], one or two.
     With two, the results carry runs[0] - runs[1]."""
@@ -69,8 +88,7 @@ def evaluate_config(reader, scenes, runs, cell, n_resamples=1000, seed=0):
         for config, source in runs:
             t = source.tracks(scene, camera)
             keep = (t.frames >= first) & (t.frames <= last)
-            us, vs = image_points(t.boxes[keep], config.foot_point)
-            xs, ys = Homography(cam.world_to_image).to_world(us, vs)
+            xs, ys, _ = camera_floor_points(cam, t.boxes[keep], config)
             fps = cam.fps / config.stride
             preds.append(layers(t.track_ids[keep], t.frames[keep], xs, ys, fps))
             counts.append((int(keep.sum()), preds[-1].dropped, int((~keep).sum())))

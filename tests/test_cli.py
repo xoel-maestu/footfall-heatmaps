@@ -102,7 +102,7 @@ def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeyp
     base = (
         "detector: yolov8n\ntracker: bytetrack\ninput_size: 640\nengine: ultralytics\nstride: 1\n"
     )
-    (configs / "foot.yaml").write_text(base + "foot_point: bottom-centre\n")
+    (configs / "foot.yaml").write_text(base + "foot_point: bottom\n")
     (configs / "centre.yaml").write_text(base + "foot_point: centroid\n")
     # Tracks already cached: the detector never runs, the baseline is not needed.
     r = np.array([row for row in rows if row[0] == 7])

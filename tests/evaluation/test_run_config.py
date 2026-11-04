@@ -24,7 +24,9 @@ def test_the_iter0_file_parses_to_the_ultralytics_recipe():
 @pytest.mark.parametrize(
     ("key", "value", "message"),
     [
-        ("foot_point", "head", "foot_point"),
+        ("foot_point", "feet", "foot_point"),
+        ("person_height_m", 0, "person_height_m"),
+        ("min_implied_height_m", "1.4", "min_implied_height_m"),
         ("engine", "tensorrt-int4", "engine"),
         ("stride", 0, "stride"),
         ("stride", 1.5, "stride"),
@@ -42,3 +44,10 @@ def test_missing_and_unknown_keys_are_errors():
         RunConfig.from_mapping({k: v for k, v in ITER0.items() if k != "stride"})
     with pytest.raises(ValueError, match="unknown.*half"):
         RunConfig.from_mapping(ITER0 | {"half": True})
+
+
+def test_the_h4_auto_file_is_iter0_with_the_auto_foot_point():
+    cfg = RunConfig.from_mapping(yaml.safe_load(Path("configs/h4-auto.yaml").read_text()))
+
+    assert cfg == RunConfig(**(ITER0 | {"foot_point": "auto"}))
+    assert (cfg.person_height_m, cfg.min_implied_height_m) == (1.70, 1.40)
