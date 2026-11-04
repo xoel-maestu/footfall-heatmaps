@@ -92,3 +92,19 @@ def test_unknown_expected_values_are_not_checked_and_say_so(tmp_path, capsys):
 
     CachedTrackSource(CountingSource, tmp_path, unknown | {"conf": 0.25}).tracks("071", "645")
     assert CountingSource.made == 2
+
+
+def test_provenance_records_the_stored_metadata_and_what_was_not_checked(tmp_path):
+    CachedTrackSource(CountingSource, tmp_path, {"ultralytics": "8.4", "conf": 0.1}).tracks(
+        "071", "645"
+    )
+    cache = CachedTrackSource(CountingSource, tmp_path, {"ultralytics": None, "conf": 0.1})
+
+    cache.tracks("071", "645")
+
+    assert cache.provenance == {
+        "071/645": {
+            "stored": {"conf": 0.1, "ultralytics": "8.4"},
+            "unverified": ["ultralytics"],
+        }
+    }

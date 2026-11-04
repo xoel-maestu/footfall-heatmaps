@@ -26,6 +26,7 @@ class CachedTrackSource:
         self.directory = directory
         self.metadata = dict(metadata or {})
         self._log = log
+        self.provenance = {}  # "scene/camera" -> stored metadata and unchecked keys
 
     def tracks(self, scene, camera):
         path = self.directory / f"scene_{scene}_camera_{camera}.npz"
@@ -33,6 +34,8 @@ class CachedTrackSource:
             with np.load(path, allow_pickle=False) as f:
                 stored = json.loads(str(f["meta"])) if "meta" in f.files else None
                 if (why := self._stale(stored)) is None:
+                    unknown = sorted(k for k, v in self.metadata.items() if v is None)
+                    self.provenance[f"{scene}/{camera}"] = {"stored": stored, "unverified": unknown}
                     return Tracks(f["track_ids"], f["frames"], f["boxes"])
             self._log(f"cached tracks {path.name}: {why}; recomputing")
         if self._source is None:
@@ -43,6 +46,7 @@ class CachedTrackSource:
         meta = np.array(json.dumps(self.metadata, sort_keys=True))
         np.savez(tmp, track_ids=t.track_ids, frames=t.frames, boxes=t.boxes, meta=meta)
         tmp.replace(path)
+        self.provenance[f"{scene}/{camera}"] = {"stored": self.metadata, "unverified": []}
         return t
 
     def _stale(self, stored):

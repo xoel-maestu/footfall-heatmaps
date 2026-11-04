@@ -284,6 +284,9 @@ def run_eval_config(args):
         "pooled": "unweighted mean over scenes, blocks resampled within each scene",
         "configs": {n: vars(c) for n, c in zip(names, configs, strict=True)},
         "scenes": [vars(run) for run in r.scenes],
+        "tracks_provenance": {
+            n: getattr(src, "provenance", None) for n, (_, src) in zip(names, runs, strict=True)
+        },
         "results": {
             truth: {
                 "n_blocks": n_blocks,
