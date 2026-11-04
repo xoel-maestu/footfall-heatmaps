@@ -85,3 +85,70 @@ def test_all_cameras_reports_a_failing_camera_and_scores_the_rest(
     assert lines[-2].split()[:2] == ["7", "error:"] and "fps" in lines[-2]
     assert lines[-1].split()[0] == "8" and "error" not in lines[-1]
     assert (tmp_path / "reports" / "oracle-gt-world-s001-c8-0.5m.json").exists()
+
+
+def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeypatch, capsys):
+    import numpy as np
+
+    from space_usage_heatmaps import cli
+    from space_usage_heatmaps.evaluation.baseline.recipe import recipe_metadata
+
+    data = write_scene(tmp_path / "data", rows)
+    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    base = (
+        "detector: yolov8n\ntracker: bytetrack\ninput_size: 640\nengine: ultralytics\nstride: 1\n"
+    )
+    (configs / "foot.yaml").write_text(base + "foot_point: bottom-centre\n")
+    (configs / "centre.yaml").write_text(base + "foot_point: centroid\n")
+    # Tracks already cached: the detector never runs, the baseline is not needed.
+    r = np.array([row for row in rows if row[0] == 7])
+    x, y, w, h = r[:, 3:7].T
+    cache = data / "cache" / "tracks" / "yolov8n-bytetrack-640-ultralytics-stride1"
+    cache.mkdir(parents=True)
+    np.savez(
+        cache / "scene_001_camera_7.npz",
+        track_ids=r[:, 1].astype(int),
+        frames=r[:, 2].astype(int),
+        boxes=np.stack([x, y, x + w, y + h], 1),
+        meta=np.array(json.dumps(recipe_metadata(cli.load_config(configs / "foot.yaml")))),
+    )
+
+    code = main(
+        ["eval", "--config", str(configs / "foot.yaml"), "--split", "tiny",
+         "--compare", str(configs / "centre.yaml"), "--resamples", "20"]
+    )  # fmt: skip
+
+    assert code == 0
+    out = capsys.readouterr().out
+    blocks = ["visible@coverage", "full@coverage", "visible@visibility"]
+    assert [out.index(b) for b in blocks] == sorted(out.index(b) for b in blocks)
+    assert "recentred percentile" in out
+    rows_out = [ln.split() for ln in out.splitlines()]
+    pooled = [ln for ln in rows_out if ln[:3] == ["configs_foot", "pooled", "dwell"]]
+    # Blocks next to the CIs: the scene's, then the pooled total.
+    scene_row = next(ln for ln in rows_out if ln[:3] == ["configs_foot", "001/7", "dwell"])
+    assert pooled[0][3] == scene_row[3] and int(pooled[0][3]) > 0
+    assert pooled[0][4:7] == ["0.000", "[0.000,", "0.000]"]  # mass error with its CI
+    assert any(ln[:3] == ["delta", "001/7", "dwell"] for ln in rows_out)
+    name = "eval-configs_foot-vs-configs_centre-tiny-0.5m.json"
+    report = json.loads((tmp_path / "reports" / name).read_text())
+    assert "recentred percentile" in report["interval"]
+    vc = report["results"]["visible@coverage"]
+    assert vc["n_blocks"] == {"scenes": {"001/7": int(scene_row[3])}, "pooled": int(pooled[0][3])}
+    assert vc["pooled"]["configs_foot"]["dwell"]["tvd"] == {"value": 0.0, "lo": 0.0, "hi": 0.0}
+    assert vc["delta"]["of"] == ["configs_foot", "configs_centre"]
+    assert set(vc["scenes"]["001/7"]) == {"configs_foot", "configs_centre"}
+
+
+def test_report_names_come_from_the_config_path_so_stems_do_not_collide(tmp_path, monkeypatch):
+    from space_usage_heatmaps.cli import config_name
+
+    monkeypatch.chdir(tmp_path)
+
+    assert config_name("configs/iter0.yaml") == "configs_iter0"
+    assert config_name(str(tmp_path / "configs" / "a" / "iter0.yaml")) == "configs_a_iter0"
+    assert config_name("configs/b/iter0.yml") == "configs_b_iter0"
