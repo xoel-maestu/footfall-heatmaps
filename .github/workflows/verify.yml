@@ -1,0 +1,54 @@
+name: verify
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # The job name is the required status check on main: keep it `verify`.
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Full history, so origin/main..HEAD can be read.
+          fetch-depth: 0
+      # verify.sh needs uv once there is a pyproject.toml.
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      # One gate: scripts/verify.sh decides what "verified" means here.
+      - run: ./scripts/verify.sh
+      # Secret scan of the commits this run brings in. --redact keeps values
+      # out of the log. Pinned release binary, checked against its sha256.
+      # Fake fixtures marked `secret-scan: allow` are skipped (.gitleaks.toml).
+      - name: gitleaks
+        env:
+          EVENTO: ${{ github.event_name }}
+          ANTES: ${{ github.event.before }}
+        run: |
+          dir="$(mktemp -d)"
+          url="https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION"
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$dir/$tarball" "$url/$tarball"
+          curl -sSfL -o "$dir/checksums.txt" "$url/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep -qxF "$GITLEAKS_SHA256  $tarball" "$dir/checksums.txt"
+          (cd "$dir" && echo "$GITLEAKS_SHA256  $tarball" | sha256sum -c --quiet -)
+          tar -xzf "$dir/$tarball" -C "$dir" gitleaks
+          range="origin/main..HEAD"
+          if [ "$EVENTO" = push ]; then
+            # A new branch or the first push: no previous commit, whole history.
+            range=""
+            if git cat-file -e "$ANTES^{commit}" 2>/dev/null; then range="$ANTES..HEAD"; fi
+          fi
+          if [ -z "$range" ]; then
+            "$dir/gitleaks" git --redact --verbose --no-banner
+          else
+            git rev-list --quiet "$range"
+            "$dir/gitleaks" git --redact --verbose --no-banner --log-opts="$range"
+          fi
