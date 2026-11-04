@@ -2,10 +2,12 @@ import numpy as np
 import pytest
 
 from space_usage_heatmaps.evaluation.domain.bootstrap import (
+    DOMAINS,
     BlockLayers,
     SceneBlocks,
     block_bootstrap,
     block_layers,
+    estimate,
 )
 from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec
 
@@ -140,14 +142,46 @@ def test_the_same_seed_gives_the_same_intervals():
     assert a.scenes[0][0]["dwell"]["tvd"] == b.scenes[0][0]["dwell"]["tvd"]
 
 
-def test_intervals_are_centred_on_the_whole_run_value_despite_resampling_bias():
-    # The prediction is the truth with its blocks shifted by one: identical over
-    # the whole run (TVD 0), different in any resample that repeats blocks, so
-    # every resampled TVD is above 0. The interval is corrected by that bias.
-    def shifted(truth, layers):
-        return BlockLayers(np.roll(truth.dwell, 1, axis=0), np.roll(truth.passage, 1, axis=0))
+def shifted(truth, layers):
+    # The truth with its blocks shifted by one: identical over the whole run
+    # (TVD 0), different in any resample that repeats blocks.
+    return BlockLayers(np.roll(truth.dwell, 1, axis=0), np.roll(truth.passage, 1, axis=0))
 
+
+def test_recentred_intervals_are_clipped_to_the_metric_domain():
+    # Every resampled TVD is above 0: recentred on the whole-run value 0, the
+    # lower bound would be negative, an impossible TVD. It is clipped to 0.
     e = block_bootstrap([scene(0, shifted)], n_resamples=300, seed=1).scenes[0][0]["dwell"]["tvd"]
 
     assert e.value == pytest.approx(0, abs=1e-12)
-    assert e.lo < 0 < e.hi
+    assert e.lo == 0 < e.hi
+
+
+def test_paired_differences_are_not_clipped():
+    r = block_bootstrap([scene(0, shifted, same)], n_resamples=300, seed=1)
+
+    d = r.delta_scenes[0]["dwell"]["tvd"]
+    assert d.value == pytest.approx(0, abs=1e-12)
+    assert d.lo < 0 < d.hi
+
+
+@pytest.mark.parametrize(
+    ("metric", "draws", "bounds"),
+    [
+        ("tvd", [0.98, 0.9, 1.0, 1.0, 1.0], (None, 1.0)),
+        ("pearson", [0.99, 0.9, 1.0, 1.0, 1.0], (None, 1.0)),
+        ("pearson", [-0.99, -0.9, -1.0, -1.0, -1.0], (-1.0, None)),
+        ("mass_error", [0.01, 0.1, 0.0, 0.0, 0.0], (0.0, None)),
+        ("wape_zone", [0.01, 0.1, 0.0, 0.0, 0.0], (0.0, None)),
+        ("emd_m", [0.01, 0.1, 0.0, 0.0, 0.0], (0.0, None)),
+    ],
+)
+def test_each_metric_is_clipped_to_its_own_domain(metric, draws, bounds):
+    # draws[0] is the whole-run value; the recentred percentiles fall outside.
+    e = estimate(np.array(draws), 2.5, DOMAINS[metric])
+    unclipped = estimate(np.array(draws), 2.5)
+
+    lo, hi = bounds
+    assert (unclipped.lo < lo) if lo is not None else (unclipped.hi > hi)
+    assert (e.lo == lo) if lo is not None else (e.hi == hi)
+    assert e.value == draws[0]

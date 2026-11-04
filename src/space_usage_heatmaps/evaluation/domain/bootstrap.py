@@ -10,8 +10,12 @@ blocks resampled within that scene.
 TVD, WAPE, EMD and Pearson are not additive over blocks: a resample that
 repeats blocks scores worse than the whole run, so the raw percentile interval
 can sit entirely above the whole-run value (TVD 0.638 with [0.645, 0.708] on
-scene 071). Intervals are therefore bias-corrected percentile intervals: the
-percentiles of the draws minus their mean offset from the whole-run value.
+scene 071). Intervals are therefore recentred percentile intervals: the
+percentiles of the draws shifted by their mean offset from the whole-run value.
+This is not a bias-corrected (BCa) interval, and the shift can carry a bound
+outside the metric's range (a TVD below 0), so each bound of an absolute
+interval is clipped to its metric's domain (DOMAINS). Paired differences are
+not clipped: a difference can take either sign.
 """
 
 import math
@@ -23,6 +27,14 @@ from space_usage_heatmaps.evaluation.domain.metrics import compare_layer
 
 LAYERS = ("dwell", "passage")
 METRICS = ("mass_error", "tvd", "wape_zone", "emd_m", "pearson")
+# Valid range of each metric, for clipping absolute intervals.
+DOMAINS = {
+    "mass_error": (0.0, math.inf),
+    "tvd": (0.0, 1.0),
+    "wape_zone": (0.0, math.inf),
+    "emd_m": (0.0, math.inf),
+    "pearson": (-1.0, 1.0),
+}
 
 
 @dataclass(frozen=True)
@@ -84,7 +96,7 @@ def block_layers(spec, track_ids, frames, xs, ys, fps, block_frames, n_blocks):
 
 
 def block_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95):
-    """Estimates with percentile intervals at `level` for every scene, prediction,
+    """Estimates with recentred percentile intervals at `level` for every scene, prediction,
     layer and metric, pooled over scenes, and the paired difference of the first
     two predictions."""
     rng = np.random.default_rng(seed)
@@ -112,9 +124,10 @@ def block_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95):
     alpha = (1 - level) / 2 * 100
     result = BootstrapResult(
         scenes=[
-            [_table(values[:, i, p], alpha) for p in range(n_preds)] for i in range(len(scenes))
+            [_table(values[:, i, p], alpha, clip=True) for p in range(n_preds)]
+            for i in range(len(scenes))
         ],
-        pooled=[_table(pooled[:, p], alpha) for p in range(n_preds)],
+        pooled=[_table(pooled[:, p], alpha, clip=True) for p in range(n_preds)],
         delta_scenes=None,
         delta_pooled=None,
     )
@@ -124,8 +137,8 @@ def block_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95):
     return BootstrapResult(
         scenes=result.scenes,
         pooled=result.pooled,
-        delta_scenes=[_table(delta[:, i], alpha) for i in range(len(scenes))],
-        delta_pooled=_table(delta.mean(axis=1), alpha),
+        delta_scenes=[_table(delta[:, i], alpha, clip=False) for i in range(len(scenes))],
+        delta_pooled=_table(delta.mean(axis=1), alpha, clip=False),
     )
 
 
@@ -133,19 +146,28 @@ def _number(v):
     return math.nan if v is None else v
 
 
-def _table(v, alpha):
-    """v[draw, layer, metric] -> {layer: {metric: Estimate}}; draw 0 is the value."""
+def _table(v, alpha, clip):
+    """v[draw, layer, metric] -> {layer: {metric: Estimate}}; draw 0 is the value.
+    With clip, each interval is clipped to its metric's domain."""
     return {
-        layer: {metric: _estimate(v[:, li, mi], alpha) for mi, metric in enumerate(METRICS)}
+        layer: {
+            metric: estimate(v[:, li, mi], alpha, DOMAINS[metric] if clip else None)
+            for mi, metric in enumerate(METRICS)
+        }
         for li, layer in enumerate(LAYERS)
     }
 
 
-def _estimate(draws, alpha):
+def estimate(draws, alpha, domain=None):
+    """Recentred percentile interval: draws[0] is the whole-run value, the rest
+    are resamples, shifted so that their mean is the value. domain (lo, hi)
+    clips the bounds."""
     value, rest = draws[0], draws[1:]
     rest = rest[np.isfinite(rest)]
     if not math.isfinite(value) or rest.size == 0:
         return Estimate(None if not math.isfinite(value) else float(value), None, None)
-    bias = rest.mean() - value
-    lo, hi = np.percentile(rest - bias, [alpha, 100 - alpha])
+    offset = rest.mean() - value
+    lo, hi = np.percentile(rest - offset, [alpha, 100 - alpha])
+    if domain is not None:
+        lo, hi = np.clip([lo, hi], *domain)
     return Estimate(float(value), float(lo), float(hi))
