@@ -1,0 +1,88 @@
+[project]
+name = "space-usage-heatmaps"
+version = "0.1.0"
+description = "Anonymous foot-traffic heatmaps on the floor plan from fixed cameras"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=2.1",
+    "pot>=0.9.5",
+]
+
+[project.scripts]
+space-usage = "space_usage_heatmaps.cli:main"
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.1",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/space_usage_heatmaps"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# POT ships a docstring with an invalid escape; not ours to fix.
+filterwarnings = ["ignore:invalid escape sequence:SyntaxWarning"]
+
+# The generated contracts of scripts/check-layers.sh (--print-config py), with
+# two exceptions (docs/architecture/hexagonal.md, "Exceptions"): numpy and ot
+# (POT) are pure numerical libraries without I/O, and the grid, homography and
+# metrics are array maths. Every other installed distribution stays forbidden,
+# plus the planned I/O and model packages before they are installed.
+[tool.importlinter]
+root_packages = ["space_usage_heatmaps"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "domain imports only domain"
+type = "forbidden"
+source_modules = [
+    "space_usage_heatmaps.evaluation.domain",
+    "space_usage_heatmaps.floorplan.domain",
+    "space_usage_heatmaps.occupancy.domain",
+]
+forbidden_modules = [
+    "space_usage_heatmaps.evaluation.application",
+    "space_usage_heatmaps.evaluation.infrastructure",
+    "space_usage_heatmaps.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "application imports only domain and application"
+type = "forbidden"
+source_modules = ["space_usage_heatmaps.evaluation.application"]
+forbidden_modules = [
+    "space_usage_heatmaps.evaluation.infrastructure",
+    "space_usage_heatmaps.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "domain and application import no third-party package but numpy and ot"
+type = "forbidden"
+source_modules = [
+    "space_usage_heatmaps.evaluation.domain",
+    "space_usage_heatmaps.floorplan.domain",
+    "space_usage_heatmaps.occupancy.domain",
+    "space_usage_heatmaps.evaluation.application",
+]
+forbidden_modules = [
+    "click", "grimp", "importlinter", "iniconfig", "markdown_it", "mdurl",
+    "packaging", "pluggy", "py", "pygments", "pytest", "rich", "ruff", "scipy",
+    "typing_extensions",
+    "cv2", "yaml", "onnxruntime", "torch", "ultralytics", "tensorrt",
+]
