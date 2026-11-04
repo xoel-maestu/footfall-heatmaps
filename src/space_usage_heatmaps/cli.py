@@ -187,6 +187,24 @@ def track_source(config, reader):
     return CachedTrackSource(make, data_dir() / "cache" / "tracks" / cache_key(config))
 
 
+def config_name(path):
+    """Report name of a config: its path relative to the working directory (the
+    repo), suffix dropped, separators replaced, so configs/a/x.yaml and
+    configs/b/x.yaml do not collide."""
+    p = Path(path).absolute()
+    try:
+        p = p.relative_to(Path.cwd())
+    except ValueError:
+        p = p.relative_to(p.anchor)
+    return "_".join(p.with_suffix("").parts)
+
+
+INTERVAL = (
+    "recentred percentile: percentiles of the resamples shifted so their mean is the "
+    "whole-run value; absolute intervals clipped to each metric's domain, deltas not"
+)
+
+
 def _ci(e, width=22):
     if e.value is None:
         return f"{'n/a':>{width}}"
@@ -195,12 +213,14 @@ def _ci(e, width=22):
     return f"{f'{e.value:.3f} [{e.lo:.3f}, {e.hi:.3f}]':>{width}}"
 
 
-def _rows(label, per_scene, pooled, scenes):
+def _rows(label, per_scene, pooled, scenes, width):
+    total = sum(run.blocks for run in scenes)
     for run, table in [*zip(scenes, per_scene, strict=True), (None, pooled)]:
         where = "pooled" if run is None else f"{run.scene}/{run.camera}"
+        blocks = total if run is None else run.blocks
         for layer in LAYERS:
             cells = "".join(_ci(table[layer][m]) for m in METRICS)
-            print(f"{label:<14}{where:<10}{layer:<9}{cells}")
+            print(f"{label:<{width}}{where:<10}{layer:<9}{blocks:>7}{cells}")
 
 
 def _estimates(table):
@@ -212,14 +232,15 @@ def run_eval_config(args):
         print("space-usage: error: --config needs --split", file=sys.stderr)
         return 2
     reader = NvidiaMtmcReader(data_dir())
-    names = [Path(args.config).stem] + ([Path(args.compare).stem] if args.compare else [])
+    names = [config_name(args.config)] + ([config_name(args.compare)] if args.compare else [])
     configs = [load_config(args.config)] + ([load_config(args.compare)] if args.compare else [])
     runs = [(c, track_source(c, reader)) for c in configs]
     r = evaluate_config(reader, SPLITS[args.split], runs, args.cell, n_resamples=args.resamples)
 
     print(
         f"{r.dataset}  split {args.split}  cell {r.cell_m} m  "
-        f"paired block bootstrap: {r.block_s:g} s blocks, {r.n_resamples} resamples, 95 % CI"
+        f"paired block bootstrap: {r.block_s:g} s blocks, {r.n_resamples} resamples, "
+        "95 % recentred percentile CI (clipped to the metric's domain; deltas not clipped)"
     )
     print(
         "pooled = mean over scenes, blocks resampled within each scene"
@@ -231,14 +252,22 @@ def run_eval_config(args):
             f"{run.dropped} outside grid, {run.outside_truth_frames} outside truth frames, "
             f"{run.blocks} blocks, occlusion fraction {run.occlusion_fraction:.4f}"
         )
+    width = max(len(n) for n in [*names, "config"]) + 2
+    n_blocks = {
+        "scenes": {f"{run.scene}/{run.camera}": run.blocks for run in r.scenes},
+        "pooled": sum(run.blocks for run in r.scenes),
+    }
     for truth in TRUTHS:
         res = r.results[truth]
         print(f"\n{truth}: {TRUTH_TITLES[truth]}")
-        print(f"{'config':<14}{'scene':<10}{'layer':<9}" + "".join(f"{m:>22}" for m in METRICS))
+        print(
+            f"{'config':<{width}}{'scene':<10}{'layer':<9}{'blocks':>7}"
+            + "".join(f"{m:>22}" for m in METRICS)
+        )
         for i, name in enumerate(names):
-            _rows(name, [s[i] for s in res.scenes], res.pooled[i], r.scenes)
+            _rows(name, [s[i] for s in res.scenes], res.pooled[i], r.scenes, width)
         if res.delta_pooled is not None:
-            _rows("delta", res.delta_scenes, res.delta_pooled, r.scenes)
+            _rows("delta", res.delta_scenes, res.delta_pooled, r.scenes, width)
 
     report = {
         "dataset": r.dataset,
@@ -247,11 +276,13 @@ def run_eval_config(args):
         "block_s": r.block_s,
         "n_resamples": r.n_resamples,
         "level": 0.95,
+        "interval": INTERVAL,
         "pooled": "unweighted mean over scenes, blocks resampled within each scene",
         "configs": {n: vars(c) for n, c in zip(names, configs, strict=True)},
         "scenes": [vars(run) for run in r.scenes],
         "results": {
             truth: {
+                "n_blocks": n_blocks,
                 "scenes": {
                     f"{run.scene}/{run.camera}": {
                         n: _estimates(t) for n, t in zip(names, tables, strict=True)

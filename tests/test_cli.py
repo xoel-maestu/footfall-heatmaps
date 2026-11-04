@@ -124,12 +124,29 @@ def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeyp
     out = capsys.readouterr().out
     blocks = ["visible@coverage", "full@coverage", "visible@visibility"]
     assert [out.index(b) for b in blocks] == sorted(out.index(b) for b in blocks)
+    assert "recentred percentile" in out
     rows_out = [ln.split() for ln in out.splitlines()]
-    pooled = [ln for ln in rows_out if ln[:3] == ["foot", "pooled", "dwell"]]
-    assert pooled[0][3:6] == ["0.000", "[0.000,", "0.000]"]  # mass error with its CI
+    pooled = [ln for ln in rows_out if ln[:3] == ["configs_foot", "pooled", "dwell"]]
+    # Blocks next to the CIs: the scene's, then the pooled total.
+    scene_row = next(ln for ln in rows_out if ln[:3] == ["configs_foot", "001/7", "dwell"])
+    assert pooled[0][3] == scene_row[3] and int(pooled[0][3]) > 0
+    assert pooled[0][4:7] == ["0.000", "[0.000,", "0.000]"]  # mass error with its CI
     assert any(ln[:3] == ["delta", "001/7", "dwell"] for ln in rows_out)
-    report = json.loads((tmp_path / "reports" / "eval-foot-vs-centre-tiny-0.5m.json").read_text())
+    name = "eval-configs_foot-vs-configs_centre-tiny-0.5m.json"
+    report = json.loads((tmp_path / "reports" / name).read_text())
+    assert "recentred percentile" in report["interval"]
     vc = report["results"]["visible@coverage"]
-    assert vc["pooled"]["foot"]["dwell"]["tvd"] == {"value": 0.0, "lo": 0.0, "hi": 0.0}
-    assert vc["delta"]["of"] == ["foot", "centre"]
-    assert set(vc["scenes"]["001/7"]) == {"foot", "centre"}
+    assert vc["n_blocks"] == {"scenes": {"001/7": int(scene_row[3])}, "pooled": int(pooled[0][3])}
+    assert vc["pooled"]["configs_foot"]["dwell"]["tvd"] == {"value": 0.0, "lo": 0.0, "hi": 0.0}
+    assert vc["delta"]["of"] == ["configs_foot", "configs_centre"]
+    assert set(vc["scenes"]["001/7"]) == {"configs_foot", "configs_centre"}
+
+
+def test_report_names_come_from_the_config_path_so_stems_do_not_collide(tmp_path, monkeypatch):
+    from space_usage_heatmaps.cli import config_name
+
+    monkeypatch.chdir(tmp_path)
+
+    assert config_name("configs/iter0.yaml") == "configs_iter0"
+    assert config_name(str(tmp_path / "configs" / "a" / "iter0.yaml")) == "configs_a_iter0"
+    assert config_name("configs/b/iter0.yml") == "configs_b_iter0"
