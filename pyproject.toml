@@ -7,6 +7,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy>=2.1",
     "pot>=0.9.5",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -18,6 +19,29 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.8",
 ]
+# Iteration 0 only (spec 3): the Ultralytics reference recipe, measured.
+# ultralytics is AGPL-3.0: evaluation-only, imported only under
+# space_usage_heatmaps/evaluation/baseline and never by the pipeline. Not a default
+# group, so CI (scripts/verify.sh: uv sync --locked) never installs it.
+# Install locally with: uv sync --group baseline
+baseline = [
+    "ultralytics>=8.4",
+    "torch>=2.14",
+    "torchvision>=0.29",
+    "nvidia-ml-py>=13.0",
+    "lap>=0.5.12",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", group = "baseline" }]
+torchvision = [{ index = "pytorch-cu130", group = "baseline" }]
+
+# CUDA 13.0 wheels: bundle the CUDA runtime (no nvcc needed), support Turing
+# (sm_75, GTX 1650 Ti) and run on driver 615.
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
@@ -85,4 +109,11 @@ forbidden_modules = [
     "packaging", "pluggy", "py", "pygments", "pytest", "rich", "ruff", "scipy",
     "typing_extensions",
     "cv2", "yaml", "onnxruntime", "torch", "ultralytics", "tensorrt",
+    # The optional baseline group (uv sync --group baseline) and its dependencies.
+    "PIL", "anyio", "certifi", "charset_normalizer", "contourpy", "cuda", "cycler",
+    "dateutil", "example", "filelock", "fontTools", "fsspec", "functorch", "h11",
+    "httpcore", "httpx", "idna", "isympy", "jinja2", "kiwisolver", "lap", "markupsafe",
+    "matplotlib", "mpl_toolkits", "mpmath", "networkx", "nvidia", "polars", "psutil",
+    "pylab", "pynvml", "pyparsing", "requests", "setuptools", "sympy", "thop",
+    "torchgen", "torchvision", "triton", "tzdata", "ultralytics_platform", "urllib3",
 ]
