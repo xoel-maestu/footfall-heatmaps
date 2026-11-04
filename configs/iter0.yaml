@@ -1,0 +1,7 @@
+# Iteration 0 (spec 8): the Ultralytics reference recipe, measured as is.
+detector: yolov8n      # Ultralytics YOLOv8n, COCO weights, class person only
+tracker: bytetrack     # Ultralytics built-in bytetrack.yaml, defaults
+input_size: 640        # Ultralytics default imgsz
+foot_point: centroid   # the box centre, the point Ultralytics' heatmap solution uses
+engine: ultralytics    # PyTorch through ultralytics (AGPL, evaluation only)
+stride: 1              # every frame
