@@ -19,6 +19,7 @@ from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
 from space_usage_heatmaps.evaluation.domain.splits import SPLITS
 from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from space_usage_heatmaps.evaluation.infrastructure.track_cache import CachedTrackSource
+from space_usage_heatmaps.floorplan.domain.foot_point import FOOT_POINTS
 from space_usage_heatmaps.occupancy.domain.grid import GridSpec
 
 LAYERS = ["dwell", "passage"]
@@ -69,6 +70,9 @@ def _write_report(r):
         "visibility_cells": r.visibility_cells,
         "samples": r.samples,
         "outside_grid": r.dropped,
+        "foot_point": r.foot_point,
+        "head_samples": r.head_samples,
+        "position_error_m": r.position_error.as_dict(),
         "results": {
             truth: {
                 layer: {k: _json_value(v) for k, v in m.as_dict().items()}
@@ -77,17 +81,32 @@ def _write_report(r):
             for truth, layers in r.results.items()
         },
     }
-    path = Path("reports") / f"oracle-{r.source}-s{r.scene}-c{r.camera}-{r.cell_m}m.json"
+    source = r.source if r.foot_point is None else f"{r.source}-{r.foot_point}"
+    path = Path("reports") / f"oracle-{source}-s{r.scene}-c{r.camera}-{r.cell_m}m.json"
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     return path
 
 
+def _source(r):
+    return r.source if r.foot_point is None else f"{r.source}  foot point {r.foot_point}"
+
+
+def _position(e):
+    return f"{_cell(e.median, 0)} m median, {_cell(e.p90, 0)} m p90 over {e.matched} samples"
+
+
 def _print_camera(r, path):
-    print(f"{r.dataset}  scene {r.scene}  camera {r.camera}  source {r.source}  cell {r.cell_m} m")
+    print(
+        f"{r.dataset}  scene {r.scene}  camera {r.camera}  source {_source(r)}  cell {r.cell_m} m"
+    )
     print(
         f"samples {r.samples}  outside grid {r.dropped}  coverage cells {r.coverage_cells}  "
         f"visibility cells {r.visibility_cells}  occlusion fraction {r.occlusion_fraction:.4f}"
+    )
+    print(
+        f"position error against the 2025 JSON truth: {_position(r.position_error)} "
+        f"({r.position_error.unmatched} unmatched); from the box top: {r.head_samples} samples"
     )
     for truth in TRUTHS:
         print(f"\n{truth}: {TRUTH_TITLES[truth]}")
@@ -111,9 +130,11 @@ ALL_METRICS = [
     ("full@coverage", "dwell", "tvd"),
     ("visible@visibility", "dwell", "tvd"),
 ]
-ALL_HEADER = ["coverage", "visibility", "occlusion"] + [
-    f"{SHORT[t]}.{layer[0]}.{m[:4].rstrip('_')}" for t, layer, m in ALL_METRICS
-]
+ALL_HEADER = (
+    ["coverage", "visibility", "occlusion"]
+    + [f"{SHORT[t]}.{layer[0]}.{m[:4].rstrip('_')}" for t, layer, m in ALL_METRICS]
+    + ["pos.med", "pos.p90"]
+)
 
 
 # Per-camera failures of --camera all: domain errors (ValueError) and missing
@@ -126,6 +147,7 @@ def _all_row(r):
     cells = "".join(f"{v:>12}" for v in values) + _cell(r.occlusion_fraction, 12)
     for t, layer, m in ALL_METRICS:
         cells += _metric(r.results[t][layer], m)
+    cells += _cell(r.position_error.median) + _cell(r.position_error.p90)
     return f"{r.camera:<8}{cells}"
 
 
@@ -135,22 +157,28 @@ def run_eval(args):
     if not (args.scene and args.camera):
         print("space-usage: error: --source needs --scene and --camera", file=sys.stderr)
         return 2
+    if args.foot_point and args.source != "gt-boxes":
+        print("space-usage: error: --foot-point applies to --source gt-boxes", file=sys.stderr)
+        return 2
+    foot = args.foot_point or "bottom"
     reader = NvidiaMtmcReader(data_dir())
     if args.camera != "all":
-        r = evaluate_oracle(reader, args.source, args.scene, args.camera, args.cell)
+        r = evaluate_oracle(reader, args.source, args.scene, args.camera, args.cell, foot)
         _print_camera(r, _write_report(r))
         return 0
 
-    print(f"{reader.name}  scene {args.scene}  source {args.source}  cell {args.cell} m")
+    shown = args.source if args.source == "gt-world" else f"{args.source}  foot point {foot}"
+    print(f"{reader.name}  scene {args.scene}  source {shown}  cell {args.cell} m")
     print(
         "columns: vcov = visible@coverage (E1 primary), fcov = full@coverage (E2a target), "
-        "vvis = visible@visibility (diagnostic); d/p = dwell/passage"
+        "vvis = visible@visibility (diagnostic); d/p = dwell/passage; "
+        "pos = per-sample ground position error in m"
     )
     print(f"{'camera':<8}" + "".join(f"{name:>12}" for name in ALL_HEADER))
     code = 0
     for camera in reader.cameras(args.scene):
         try:
-            r = evaluate_oracle(reader, args.source, args.scene, camera, args.cell)
+            r = evaluate_oracle(reader, args.source, args.scene, camera, args.cell, foot)
         except CAMERA_ERRORS as e:
             print(f"{camera:<8}error: {type(e).__name__}: {e}")
             code = 1
@@ -339,9 +367,8 @@ def run_bench(args):
     result = bench(
         config,
         reader.video(BENCH_SCENE, BENCH_CAMERA),
-        cam.world_to_image,
+        cam,
         spec,
-        cam.fps,
         args.minutes,
         data_dir() / "models",
     )
@@ -358,6 +385,9 @@ def main(argv=None):
     how.add_argument("--config", help="run configuration, e.g. configs/iter0.yaml")
     ev.add_argument("--scene", help="with --source: scene id, e.g. 071")
     ev.add_argument("--camera", help="with --source: camera id, e.g. 645, or all")
+    ev.add_argument(
+        "--foot-point", choices=FOOT_POINTS, help="with --source gt-boxes: default bottom"
+    )
     ev.add_argument("--split", choices=sorted(SPLITS), help="with --config: scenes to score")
     ev.add_argument("--compare", help="with --config: second configuration, paired difference")
     ev.add_argument("--resamples", type=int, default=1000, help=argparse.SUPPRESS)

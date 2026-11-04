@@ -33,6 +33,25 @@ def test_eval_prints_both_truths_and_writes_the_report(tmp_path, rows, monkeypat
     assert "dwell" in visible["passage"]["wape_zone_reason"]
 
 
+def test_gt_boxes_takes_a_foot_point_and_reports_the_position_error(
+    tmp_path, rows, monkeypatch, capsys
+):
+    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(write_scene(tmp_path / "data", rows)))
+    monkeypatch.chdir(tmp_path)
+
+    args = ["eval", "--source", "gt-boxes", "--scene", "001", "--camera", "7"]
+    code = main([*args, "--foot-point", "centroid"])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "foot point centroid" in out and "position error" in out
+    path = tmp_path / "reports" / "oracle-gt-boxes-centroid-s001-c7-0.5m.json"
+    report = json.loads(path.read_text())
+    assert report["foot_point"] == "centroid" and report["head_samples"] == 0
+    assert report["position_error_m"]["matched"] == 15
+    assert report["position_error_m"]["median"] > 0.1
+
+
 def test_all_cameras_prints_one_row_per_calibrated_camera(tmp_path, rows, monkeypatch, capsys):
     monkeypatch.setenv(
         "SPACE_USAGE_DATA_DIR", str(write_scene(tmp_path / "data", rows, cameras=(7, 8)))
@@ -47,6 +66,7 @@ def test_all_cameras_prints_one_row_per_calibrated_camera(tmp_path, rows, monkey
     header = next(ln.split() for ln in lines if ln.startswith("camera"))
     tvd = [h for h in header if h.endswith("d.tvd")]
     assert tvd == ["vcov.d.tvd", "fcov.d.tvd", "vvis.d.tvd"]
+    assert header[-2:] == ["pos.med", "pos.p90"]
     assert (tmp_path / "reports" / "oracle-gt-world-s001-c8-0.5m.json").exists()
 
 

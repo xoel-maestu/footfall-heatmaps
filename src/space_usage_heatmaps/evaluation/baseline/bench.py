@@ -17,13 +17,12 @@ import numpy as np
 import pynvml
 import torch
 
+from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
 from space_usage_heatmaps.evaluation.baseline.ultralytics_tracks import (
     load_model,
     track_frames,
     video_frames,
 )
-from space_usage_heatmaps.floorplan.domain.foot_point import image_points
-from space_usage_heatmaps.floorplan.domain.homography import Homography
 
 VRAM_EVERY = 30  # frames between two NVML samples
 
@@ -37,25 +36,27 @@ def process_vram_mb(handle):
     return sum(used) / 2**20
 
 
-def bench(config, video, world_to_image, spec, fps, minutes, weights_dir):
+def bench(config, video, cam, spec, minutes, weights_dir):
     pynvml.nvmlInit()
     try:
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        return _run(config, video, world_to_image, spec, fps, minutes, weights_dir, handle)
+        return _run(config, video, cam, spec, minutes, weights_dir, handle)
     finally:
         pynvml.nvmlShutdown()
 
 
-def _run(config, video, world_to_image, spec, fps, minutes, weights_dir, handle):
+def _run(config, video, cam, spec, minutes, weights_dir, handle):
     model = load_model(config, weights_dir)
-    homography = Homography(world_to_image)
+    fps = cam.fps
     dwell = np.zeros(spec.ny * spec.nx)
     passage = set()  # (track id, cell)
     rates, peak, frames = [], 0.0, 0
     start = window = None
     in_window = 0
     for _, ids, boxes in track_frames(model, config, video_frames(video, config.stride, True)):
-        xs, ys = homography.to_world(*image_points(boxes, config.foot_point))
+        xs, ys, _ = camera_floor_points(
+            cam, boxes, config.foot_point, config.person_height_m, config.min_implied_height_m
+        )
         col = np.floor((xs - spec.origin_x) / spec.cell_m).astype(int)
         row = np.floor((ys - spec.origin_y) / spec.cell_m).astype(int)
         inside = (col >= 0) & (col < spec.nx) & (row >= 0) & (row < spec.ny)

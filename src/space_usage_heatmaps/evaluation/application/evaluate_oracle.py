@@ -11,8 +11,11 @@ Three blocks, from the dataset's per-frame floor positions of every person:
 
 gt-world puts the camera's own ground-truth floor points on the grid (a
 separate file from the truths: must score exact zeros on both visible blocks);
-gt-boxes projects each true box's bottom-centre through the homography, the
-geometry ceiling of foot point + homography.
+gt-boxes places each true box with a foot point (floorplan.domain.foot_point:
+bottom-centre by default, head or auto), the geometry ceiling of foot point +
+calibration. Both report the per-sample ground position error against the
+2025 JSON truth, matched by track id and frame (for gt-world: how far the two
+truth files disagree).
 """
 
 from dataclasses import dataclass
@@ -20,6 +23,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from space_usage_heatmaps.evaluation.domain.metrics import LayerMetrics, compare_grids
+from space_usage_heatmaps.evaluation.domain.position_error import PositionError, position_error
+from space_usage_heatmaps.floorplan.domain.foot_point import (
+    MIN_IMPLIED_HEIGHT_M,
+    PERSON_HEIGHT_M,
+    floor_points,
+)
 from space_usage_heatmaps.floorplan.domain.homography import Homography
 from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec
 
@@ -48,6 +57,9 @@ class OracleReport:
     dropped: int  # prediction samples that fell outside the grid
     coverage_cells: int
     visibility_cells: int
+    position_error: PositionError  # per sample, metres, against the 2025 JSON truth
+    foot_point: str | None = None  # gt-boxes only
+    head_samples: int = 0  # gt-boxes samples placed from the box top
 
 
 def build_ground_truth_grid(reader, scene, camera, cell):
@@ -73,18 +85,54 @@ def build_ground_truth_grid(reader, scene, camera, cell):
     return GroundTruth(full, visible, coverage, visibility)
 
 
-def evaluate_oracle(reader, source, scene, camera, cell):
+def camera_floor_points(
+    cam,
+    boxes,
+    foot_point,
+    person_height_m=PERSON_HEIGHT_M,
+    min_implied_height_m=MIN_IMPLIED_HEIGHT_M,
+):
+    """floor_points of x1, y1, x2, y2 boxes with one camera's calibration; the
+    image points (centroid, bottom) need only its ground homography."""
+    projection = cam.projection
+    if projection is None:
+        if foot_point not in ("centroid", "bottom"):
+            raise ValueError(f"foot point {foot_point!r} needs the 3x4 camera matrix")
+        projection = np.insert(cam.world_to_image, 2, 0.0, axis=1)
+    return floor_points(
+        boxes, projection, cam.height, foot_point, person_height_m, min_implied_height_m
+    )
+
+
+def evaluate_oracle(
+    reader,
+    source,
+    scene,
+    camera,
+    cell,
+    foot_point="bottom",
+    person_height_m=PERSON_HEIGHT_M,
+    min_implied_height_m=MIN_IMPLIED_HEIGHT_M,
+):
     if source not in SOURCES:
         raise ValueError(f"unknown source {source!r}, expected one of {SOURCES}")
     gt = build_ground_truth_grid(reader, scene, camera, cell)
     cam = reader.camera(scene, camera)
     s = reader.samples(scene, camera)
+    head = np.zeros(len(s.track_ids), dtype=bool)
     if source == "gt-world":
         xs, ys = s.world[:, 0], s.world[:, 1]
     else:
         x, y, w, h = s.boxes.T
-        xs, ys = Homography(cam.world_to_image).to_world(x + w / 2, y + h)
+        boxes = np.stack([x, y, x + w, y + h], axis=1)
+        xs, ys, head = camera_floor_points(
+            cam, boxes, foot_point, person_height_m, min_implied_height_m
+        )
     pred = Grid.from_samples(gt.full.spec, s.track_ids, xs, ys, cam.fps)
+    truth = reader.floor_truth(scene, camera)
+    error = position_error(
+        s.track_ids, s.frames, np.column_stack([xs, ys]), truth.track_ids, truth.frames, truth.world
+    )
     seen, total = gt.visible.dwell[gt.coverage].sum(), gt.full.dwell[gt.coverage].sum()
     return OracleReport(
         dataset=reader.name,
@@ -102,4 +150,7 @@ def evaluate_oracle(reader, source, scene, camera, cell):
         dropped=pred.dropped,
         coverage_cells=int(np.count_nonzero(gt.coverage)),
         visibility_cells=int(np.count_nonzero(gt.visibility)),
+        position_error=error,
+        foot_point=None if source == "gt-world" else foot_point,
+        head_samples=int(head.sum()),
     )
