@@ -85,3 +85,51 @@ def test_all_cameras_reports_a_failing_camera_and_scores_the_rest(
     assert lines[-2].split()[:2] == ["7", "error:"] and "fps" in lines[-2]
     assert lines[-1].split()[0] == "8" and "error" not in lines[-1]
     assert (tmp_path / "reports" / "oracle-gt-world-s001-c8-0.5m.json").exists()
+
+
+def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeypatch, capsys):
+    import numpy as np
+
+    from space_usage_heatmaps import cli
+
+    data = write_scene(tmp_path / "data", rows)
+    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    base = (
+        "detector: yolov8n\ntracker: bytetrack\ninput_size: 640\nengine: ultralytics\nstride: 1\n"
+    )
+    (configs / "foot.yaml").write_text(base + "foot_point: bottom-centre\n")
+    (configs / "centre.yaml").write_text(base + "foot_point: centroid\n")
+    # Tracks already cached: the detector never runs, the baseline is not needed.
+    r = np.array([row for row in rows if row[0] == 7])
+    x, y, w, h = r[:, 3:7].T
+    cache = data / "cache" / "tracks" / "yolov8n-bytetrack-640-ultralytics-stride1"
+    cache.mkdir(parents=True)
+    np.savez(
+        cache / "scene_001_camera_7.npz",
+        track_ids=r[:, 1].astype(int),
+        frames=r[:, 2].astype(int),
+        boxes=np.stack([x, y, x + w, y + h], 1),
+    )
+
+    code = main(
+        ["eval", "--config", str(configs / "foot.yaml"), "--split", "tiny",
+         "--compare", str(configs / "centre.yaml"), "--resamples", "20"]
+    )  # fmt: skip
+
+    assert code == 0
+    out = capsys.readouterr().out
+    blocks = ["visible@coverage", "full@coverage", "visible@visibility"]
+    assert [out.index(b) for b in blocks] == sorted(out.index(b) for b in blocks)
+    rows_out = [ln.split() for ln in out.splitlines()]
+    pooled = [ln for ln in rows_out if ln[:3] == ["foot", "pooled", "dwell"]]
+    assert pooled[0][3:6] == ["0.000", "[0.000,", "0.000]"]  # mass error with its CI
+    assert any(ln[:3] == ["delta", "001/7", "dwell"] for ln in rows_out)
+    report = json.loads((tmp_path / "reports" / "eval-foot-vs-centre-tiny-0.5m.json").read_text())
+    vc = report["results"]["visible@coverage"]
+    assert vc["pooled"]["foot"]["dwell"]["tvd"] == {"value": 0.0, "lo": 0.0, "hi": 0.0}
+    assert vc["delta"]["of"] == ["foot", "centre"]
+    assert set(vc["scenes"]["001/7"]) == {"foot", "centre"}
