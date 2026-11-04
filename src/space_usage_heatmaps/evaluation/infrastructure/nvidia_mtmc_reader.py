@@ -82,6 +82,9 @@ class NvidiaMtmcReader:
             sign = np.sign(np.median(h[2] @ np.vstack([w.T, np.ones(len(w))]))) if len(w) else 1
         return h * (sign or 1)
 
+    def video(self, scene, camera):
+        return self._scene(scene) / f"camera_{int(camera):04d}" / "video.mp4"
+
     def samples(self, scene, camera):
         r = self._rows(scene)
         r = r[r[:, 0] == int(camera)]
