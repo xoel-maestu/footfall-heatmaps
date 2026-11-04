@@ -91,6 +91,7 @@ def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeyp
     import numpy as np
 
     from space_usage_heatmaps import cli
+    from space_usage_heatmaps.evaluation.baseline.recipe import recipe_metadata
 
     data = write_scene(tmp_path / "data", rows)
     monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
@@ -113,6 +114,7 @@ def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeyp
         track_ids=r[:, 1].astype(int),
         frames=r[:, 2].astype(int),
         boxes=np.stack([x, y, x + w, y + h], 1),
+        meta=np.array(json.dumps(recipe_metadata(cli.load_config(configs / "foot.yaml")))),
     )
 
     code = main(

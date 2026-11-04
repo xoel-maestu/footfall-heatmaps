@@ -170,7 +170,8 @@ def load_config(path):
 
 
 def cache_key(c):
-    """Cached tracks depend on everything but the foot point, applied when scoring."""
+    """Directory of a config's cached tracks; each file also stores the recipe
+    metadata and is recomputed when it no longer matches (track_cache)."""
     return f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
 
 
@@ -184,7 +185,10 @@ def track_source(config, reader):
             raise OSError(BASELINE_MISSING) from e
         return UltralyticsTrackSource(config, reader.video, data_dir() / "models")
 
-    return CachedTrackSource(make, data_dir() / "cache" / "tracks" / cache_key(config))
+    from space_usage_heatmaps.evaluation.baseline.recipe import recipe_metadata
+
+    directory = data_dir() / "cache" / "tracks" / cache_key(config)
+    return CachedTrackSource(make, directory, recipe_metadata(config))
 
 
 def config_name(path):

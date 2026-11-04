@@ -18,11 +18,13 @@ import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 from ultralytics import YOLO  # noqa: E402
 
+from space_usage_heatmaps.evaluation.baseline.recipe import (  # noqa: E402
+    CLASSES,
+    CONF,
+    TRACKERS,
+    WEIGHTS,
+)
 from space_usage_heatmaps.evaluation.domain.tracks import Tracks  # noqa: E402
-
-WEIGHTS = {"yolov8n": "yolov8n.pt"}  # official COCO weights, ultralytics/assets release
-TRACKERS = {"bytetrack": "bytetrack.yaml"}  # built into the ultralytics package
-PERSON = 0  # COCO class id
 
 
 def load_model(config, weights_dir):
@@ -67,7 +69,8 @@ def track_frames(model, config, frames):
             image,
             persist=True,
             tracker=TRACKERS[config.tracker],
-            classes=[PERSON],
+            classes=CLASSES,
+            conf=CONF,
             imgsz=config.input_size,
             verbose=False,
         )[0]
