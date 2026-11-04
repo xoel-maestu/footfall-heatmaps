@@ -55,7 +55,12 @@ def _run(config, video, cam, spec, minutes, weights_dir, handle):
     in_window = 0
     for _, ids, boxes in track_frames(model, config, video_frames(video, config.stride, True)):
         xs, ys, _ = camera_floor_points(
-            cam, boxes, config.foot_point, config.person_height_m, config.min_implied_height_m
+            cam,
+            boxes,
+            config.foot_point,
+            config.person_height_m,
+            config.min_implied_height_m,
+            ids,  # auto-track: heights from this frame only; the timing is what counts here
         )
         col = np.floor((xs - spec.origin_x) / spec.cell_m).astype(int)
         row = np.floor((ys - spec.origin_y) / spec.cell_m).astype(int)

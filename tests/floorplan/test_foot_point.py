@@ -136,3 +136,31 @@ def test_bottom_and_centroid_go_through_the_ground_homography():
 def test_an_unknown_mode_is_an_error():
     with pytest.raises(ValueError, match="foot point"):
         floor_points(BOXES, P, H_IMG, "knees")
+
+
+def test_auto_track_keeps_the_bottom_of_a_short_person_seen_whole():
+    # A 1.20 m child: every box is whole, so its implied height is its height.
+    boxes = np.vstack([_person_box(0.0, y, height=1.20) for y in (2.0, 3.0, 4.0)])
+    ids = np.array([5, 5, 5])
+
+    _, _, head_auto = floor_points(boxes, P, H_IMG, "auto")
+    _, _, head_track = floor_points(boxes, P, H_IMG, "auto-track", track_ids=ids)
+
+    assert head_auto.all() and not head_track.any()
+
+
+def test_auto_track_places_a_hidden_box_with_the_height_of_its_track():
+    # A 1.85 m adult seen whole in four frames, cut at the knees in the fifth.
+    whole = [_person_box(0.0, y, height=1.85) for y in (1.0, 2.0, 3.0, 4.0)]
+    boxes = np.vstack([*whole, _person_box(0.0, 5.0, height=1.85, cut_m=0.6)])
+    ids = np.full(5, 3)
+
+    xs, ys, head = floor_points(boxes, P, H_IMG, "auto-track", track_ids=ids)
+
+    assert head.tolist() == [False] * 4 + [True]
+    np.testing.assert_allclose([xs[4], ys[4]], [0.0, 5.0], atol=1e-6)
+
+
+def test_auto_track_needs_track_ids():
+    with pytest.raises(ValueError, match="track ids"):
+        floor_points(_person_box(0.0, 3.0), P, H_IMG, "auto-track")

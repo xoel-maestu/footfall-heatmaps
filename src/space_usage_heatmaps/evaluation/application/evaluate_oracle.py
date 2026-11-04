@@ -91,6 +91,7 @@ def camera_floor_points(
     foot_point,
     person_height_m=PERSON_HEIGHT_M,
     min_implied_height_m=MIN_IMPLIED_HEIGHT_M,
+    track_ids=None,
 ):
     """floor_points of x1, y1, x2, y2 boxes with one camera's calibration; the
     image points (centroid, bottom) need only its ground homography."""
@@ -100,7 +101,13 @@ def camera_floor_points(
             raise ValueError(f"foot point {foot_point!r} needs the 3x4 camera matrix")
         projection = np.insert(cam.world_to_image, 2, 0.0, axis=1)
     return floor_points(
-        boxes, projection, cam.height, foot_point, person_height_m, min_implied_height_m
+        boxes,
+        projection,
+        cam.height,
+        foot_point,
+        person_height_m,
+        min_implied_height_m,
+        track_ids,
     )
 
 
@@ -126,7 +133,7 @@ def evaluate_oracle(
         x, y, w, h = s.boxes.T
         boxes = np.stack([x, y, x + w, y + h], axis=1)
         xs, ys, head = camera_floor_points(
-            cam, boxes, foot_point, person_height_m, min_implied_height_m
+            cam, boxes, foot_point, person_height_m, min_implied_height_m, s.track_ids
         )
     pred = Grid.from_samples(gt.full.spec, s.track_ids, xs, ys, cam.fps)
     truth = reader.floor_truth(scene, camera)
