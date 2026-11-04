@@ -4,8 +4,9 @@ import numpy as np
 
 
 def image_points(boxes, foot_point):
-    """(us, vs) of each x1, y1, x2, y2 box: its centre ("centroid", the point
-    Ultralytics' heatmap solution accumulates) or the middle of its lower edge
+    """(us, vs) of each x1, y1, x2, y2 box: its centre ("centroid", the centre
+    of the disc Ultralytics' heatmap solution accumulates; the disc is a render
+    kernel, we project its centre) or the middle of its lower edge
     ("bottom-centre", where the feet touch the floor when the box is whole)."""
     b = np.asarray(boxes, dtype=float).reshape(-1, 4)
     us = (b[:, 0] + b[:, 2]) / 2
