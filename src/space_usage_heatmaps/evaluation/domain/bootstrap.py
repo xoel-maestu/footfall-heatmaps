@@ -6,6 +6,12 @@ draws each scene's blocks with replacement, the same draw for every
 prediction: differences between two predictions are paired. Pooled values are
 the unweighted mean over scenes of the per-scene metric, with each scene's
 blocks resampled within that scene.
+
+TVD, WAPE, EMD and Pearson are not additive over blocks: a resample that
+repeats blocks scores worse than the whole run, so the raw percentile interval
+can sit entirely above the whole-run value (TVD 0.638 with [0.645, 0.708] on
+scene 071). Intervals are therefore bias-corrected percentile intervals: the
+percentiles of the draws minus their mean offset from the whole-run value.
 """
 
 import math
@@ -140,5 +146,6 @@ def _estimate(draws, alpha):
     rest = rest[np.isfinite(rest)]
     if not math.isfinite(value) or rest.size == 0:
         return Estimate(None if not math.isfinite(value) else float(value), None, None)
-    lo, hi = np.percentile(rest, [alpha, 100 - alpha])
+    bias = rest.mean() - value
+    lo, hi = np.percentile(rest - bias, [alpha, 100 - alpha])
     return Estimate(float(value), float(lo), float(hi))

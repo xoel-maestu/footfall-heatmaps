@@ -138,3 +138,16 @@ def test_the_same_seed_gives_the_same_intervals():
     b = block_bootstrap([scene(0, other_walk)], n_resamples=100, seed=3)
 
     assert a.scenes[0][0]["dwell"]["tvd"] == b.scenes[0][0]["dwell"]["tvd"]
+
+
+def test_intervals_are_centred_on_the_whole_run_value_despite_resampling_bias():
+    # The prediction is the truth with its blocks shifted by one: identical over
+    # the whole run (TVD 0), different in any resample that repeats blocks, so
+    # every resampled TVD is above 0. The interval is corrected by that bias.
+    def shifted(truth, layers):
+        return BlockLayers(np.roll(truth.dwell, 1, axis=0), np.roll(truth.passage, 1, axis=0))
+
+    e = block_bootstrap([scene(0, shifted)], n_resamples=300, seed=1).scenes[0][0]["dwell"]["tvd"]
+
+    assert e.value == pytest.approx(0, abs=1e-12)
+    assert e.lo < 0 < e.hi
