@@ -93,7 +93,8 @@ class UltralyticsTrackSource:
         model = load_model(self.config, self.weights_dir)
         ids, frames, boxes = [], [], []
         start = time.monotonic()
-        video = video_frames(self.video_of(scene, camera), self.config.stride)
+        path = self.video_of(scene, camera)
+        video = video_frames(path, self.config.stride)
         for n, (i, tid, xyxy) in enumerate(track_frames(model, self.config, video), 1):
             ids.append(tid)
             frames.append(np.full(len(tid), i))
@@ -101,6 +102,8 @@ class UltralyticsTrackSource:
             if n % 1000 == 0:
                 fps = n / (time.monotonic() - start)
                 print(f"scene {scene} camera {camera}: {n} frames, {fps:.1f} fps", file=sys.stderr)
+        if not ids:
+            raise OSError(f"no frames decoded from video {path}")
         return Tracks(
             np.concatenate(ids).astype(int),
             np.concatenate(frames).astype(int),
