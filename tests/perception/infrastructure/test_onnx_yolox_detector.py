@@ -110,3 +110,24 @@ def test_cuda_is_asked_first_and_a_cpu_fallback_is_logged(caplog):
     available = ["CUDAExecutionProvider", "CPUExecutionProvider"]
     assert engine_of(available) == "CUDAExecutionProvider"
     assert not caplog.text
+
+
+def test_the_release_model_loads_and_detects_with_onnx_runtime():
+    """Adapter against the real thing; needs the runtime group and the weights."""
+    import os
+    from pathlib import Path
+
+    pytest.importorskip("onnxruntime", reason="runtime group not installed")
+    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    path = data.expanduser() / "models" / "yolox_s.onnx"
+    if not path.exists():
+        pytest.skip(f"no YOLOX-s weights at {path}")
+
+    detector = OnnxYoloxDetector.load(path)
+    d = detector.detect(frame(1080, 1920))
+
+    assert detector.input_size == 640 and detector.engine in (
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider",
+    )
+    assert d.boxes.shape == (len(d.scores), 4)
