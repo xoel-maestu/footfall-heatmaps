@@ -110,6 +110,7 @@ class OnnxYoloxDetector:
         import onnxruntime
 
         onnxruntime.preload_dlls()  # the CUDA and cuDNN libraries of the nvidia-* wheels
+        onnxruntime.disable_telemetry_events()  # privacy R1: no usage events leave the process
         session = onnxruntime.InferenceSession(str(path), providers=[CUDA, CPU])
         return cls(
             session,
