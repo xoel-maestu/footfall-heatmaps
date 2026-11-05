@@ -14,6 +14,9 @@ class CameraCalibration:
     width: int
     height: int
     fps: float
+    # 3x4 camera matrix K [R | t], world metres with z up, scaled so that its
+    # columns 0, 1 and 3 are world_to_image; None without a 3D calibration.
+    projection: np.ndarray | None = None
 
 
 @dataclass(frozen=True)

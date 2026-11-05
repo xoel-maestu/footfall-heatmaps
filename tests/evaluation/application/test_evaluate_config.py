@@ -7,7 +7,7 @@ from space_usage_heatmaps.evaluation.domain.tracks import Tracks
 from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from tests.conftest import write_scene
 
-CFG = RunConfig("yolov8n", "bytetrack", 640, "bottom-centre", "ultralytics", 1)
+CFG = RunConfig("yolov8n", "bytetrack", 640, "bottom", "ultralytics", 1)
 
 
 class InMemoryTrackSource:
@@ -85,3 +85,14 @@ def test_predictions_outside_the_truth_frames_are_not_scored(reader, rows):
 
     assert report.scenes[0].samples == 15 and report.scenes[0].outside_truth_frames == 1
     assert report.results["visible@coverage"].scenes[0][0]["dwell"]["tvd"].value == 0
+
+
+def test_head_without_a_camera_matrix_is_an_error_and_bottom_still_works(tmp_path, rows):
+    reader = NvidiaMtmcReader(write_scene(tmp_path, rows, extrinsics=False))
+    source = InMemoryTrackSource({("001", "7"): tracks_from_rows(rows)})
+    head = RunConfig(**(vars(CFG) | {"foot_point": "head"}))
+
+    with pytest.raises(ValueError, match="camera matrix"):
+        evaluate_config(reader, [("001", "7")], [(head, source)], cell=0.5, n_resamples=5)
+    report = evaluate_config(reader, [("001", "7")], [(CFG, source)], cell=0.5, n_resamples=5)
+    assert report.results["visible@coverage"].pooled[0]["dwell"]["tvd"].value == 0

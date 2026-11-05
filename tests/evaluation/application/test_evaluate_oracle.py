@@ -103,3 +103,36 @@ def test_mass_where_nobody_is_visible_is_penalised_on_coverage_not_on_visibility
 
     assert report.results[VISIBLE]["dwell"].tvd == pytest.approx(0, abs=1e-9)
     assert report.results[PRIMARY]["dwell"].tvd == pytest.approx(0.5)
+
+
+def test_gt_boxes_reports_the_ground_position_error_against_the_json_truth(tmp_path, rows):
+    reader = NvidiaMtmcReader(write_scene(tmp_path, rows))
+
+    exact = evaluate_oracle(reader, "gt-boxes", "001", "7", 0.5)
+    centre = evaluate_oracle(reader, "gt-boxes", "001", "7", 0.5, foot_point="centroid")
+
+    assert exact.position_error.matched == 15
+    assert (exact.position_error.median, exact.position_error.p90) == pytest.approx(
+        (0, 0), abs=1e-6
+    )
+    assert centre.foot_point == "centroid" and centre.position_error.median > 0.1
+    assert exact.head_samples == 0
+
+
+def test_hidden_feet_show_as_position_error(tmp_path):
+    rows = [gt_row(7, 1, f, 0.1, 2.1, foot_shift_px=-20) for f in range(10)]
+    reader = NvidiaMtmcReader(write_scene(tmp_path, rows))
+
+    report = evaluate_oracle(reader, "gt-boxes", "001", "7", 0.25)
+
+    assert report.position_error.median > 1.0
+
+
+def test_gt_world_position_error_compares_the_two_truth_files(tmp_path, rows):
+    reader = NvidiaMtmcReader(write_scene(tmp_path, rows))
+
+    report = evaluate_oracle(reader, "gt-world", "001", "7", 0.5)
+
+    assert report.position_error.matched == 15 and report.position_error.p90 == pytest.approx(
+        0, abs=1e-9
+    )

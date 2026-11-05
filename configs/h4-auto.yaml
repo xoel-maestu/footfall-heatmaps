@@ -1,0 +1,10 @@
+# H4 (spec 8, hypothesis 4): iteration 0 with the floor point chosen per box.
+# Same detector, tracker and input as iter0.yaml, so its cached tracks are reused.
+detector: yolov8n      # Ultralytics YOLOv8n, COCO weights, class person only
+tracker: bytetrack     # Ultralytics built-in bytetrack.yaml, defaults
+input_size: 640        # Ultralytics default imgsz
+foot_point: auto       # bottom-centre, or the box top at person_height_m when the bottom is hidden
+person_height_m: 1.70  # height of the box top above the floor for the head estimate
+min_implied_height_m: 1.40  # a box shorter than this on its bottom-centre has hidden legs
+engine: ultralytics    # PyTorch through ultralytics (AGPL, evaluation only)
+stride: 1              # every frame

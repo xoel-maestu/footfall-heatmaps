@@ -1,0 +1,13 @@
+# H4, second rule: iteration 0 with the floor point chosen per box against the
+# height of its own track (floorplan.domain.foot_point, "auto-track"). Same
+# detector, tracker and input as iter0.yaml, so its cached tracks are reused.
+detector: yolov8n      # Ultralytics YOLOv8n, COCO weights, class person only
+tracker: bytetrack     # Ultralytics built-in bytetrack.yaml, defaults
+input_size: 640        # Ultralytics default imgsz
+foot_point: auto-track # bottom-centre, or the box top at the track's height when the box is clearly shorter than its track
+track_height_percentile: 0.9  # a track's height: this quantile of its implied heights so far (causal)
+hidden_ratio: 0.88            # a box below this share of its track's height has hidden legs
+track_height_min_m: 1.0       # a track's height is clipped to a person's range
+track_height_max_m: 2.0
+engine: ultralytics    # PyTorch through ultralytics (AGPL, evaluation only)
+stride: 1              # every frame

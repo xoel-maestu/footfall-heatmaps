@@ -1,7 +1,7 @@
 """Score the tracks of one or two configurations against the floor ground truth.
 
-Each tracked box becomes one image point (the config's foot point), projected
-to the floor with the camera's ground homography and accumulated in the floor
+Each tracked box becomes one floor point (the config's foot point, through the
+camera matrix; see floorplan.domain.foot_point) and is accumulated in the floor
 grid: dwell adds stride/fps person-seconds per sample, passage counts distinct
 track ids per cell. The three truth blocks of evaluate_oracle are scored with
 a paired block bootstrap over 30 s blocks.
@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from space_usage_heatmaps.evaluation.application.evaluate_oracle import (
     TRUTHS,
     build_ground_truth_grid,
+    camera_floor_points,
 )
 from space_usage_heatmaps.evaluation.domain.bootstrap import (
     BootstrapResult,
@@ -19,8 +20,6 @@ from space_usage_heatmaps.evaluation.domain.bootstrap import (
     block_bootstrap,
     block_layers,
 )
-from space_usage_heatmaps.floorplan.domain.foot_point import image_points
-from space_usage_heatmaps.floorplan.domain.homography import Homography
 
 BLOCK_S = 30.0
 
@@ -69,8 +68,19 @@ def evaluate_config(reader, scenes, runs, cell, n_resamples=1000, seed=0):
         for config, source in runs:
             t = source.tracks(scene, camera)
             keep = (t.frames >= first) & (t.frames <= last)
-            us, vs = image_points(t.boxes[keep], config.foot_point)
-            xs, ys = Homography(cam.world_to_image).to_world(us, vs)
+            # Floor points on every row, then keep the scored frames: the causal
+            # track height sees the same history as the live path (bench).
+            xs, ys, _ = camera_floor_points(
+                cam,
+                t.boxes,
+                config.foot_point,
+                config.person_height_m,
+                config.min_implied_height_m,
+                t.track_ids,
+                t.frames,
+                config.track_heights(),
+            )
+            xs, ys = xs[keep], ys[keep]
             fps = cam.fps / config.stride
             preds.append(layers(t.track_ids[keep], t.frames[keep], xs, ys, fps))
             counts.append((int(keep.sum()), preds[-1].dropped, int((~keep).sum())))
