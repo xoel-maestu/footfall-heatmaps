@@ -203,7 +203,37 @@ def cache_key(c):
     return f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
 
 
+def pipeline_of(config, reader, loop=False):
+    """(scene, camera) -> the perception pipeline of a config on that camera's video."""
+    from space_usage_heatmaps.perception.infrastructure.container import build_pipeline
+
+    def build(scene, camera):
+        return build_pipeline(
+            reader.video(scene, camera),
+            config.detector,
+            config.tracker,
+            config.input_size,
+            config.stride,
+            data_dir() / "models",
+            loop,
+        )
+
+    return build
+
+
 def track_source(config, reader):
+    directory = data_dir() / "cache" / "tracks" / cache_key(config)
+    if config.engine == "onnx-cuda":
+        from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
+            PipelineTrackSource,
+        )
+        from space_usage_heatmaps.perception.infrastructure.container import pipeline_metadata
+
+        meta = pipeline_metadata(config.detector, config.tracker, config.input_size, config.stride)
+        return CachedTrackSource(
+            lambda: PipelineTrackSource(pipeline_of(config, reader)), directory, meta
+        )
+
     def make():
         try:
             from space_usage_heatmaps.evaluation.baseline.ultralytics_tracks import (
@@ -215,7 +245,6 @@ def track_source(config, reader):
 
     from space_usage_heatmaps.evaluation.baseline.recipe import recipe_metadata
 
-    directory = data_dir() / "cache" / "tracks" / cache_key(config)
     return CachedTrackSource(make, directory, recipe_metadata(config))
 
 
@@ -354,12 +383,39 @@ def run_eval_config(args):
 BENCH_SCENE, BENCH_CAMERA, BENCH_CELL = "071", "645", 0.25
 
 
+RUNTIME_MISSING = "the perception pipeline needs the runtime group: uv sync --group runtime"
+
+
+def bench_pipeline(config, reader, cam, spec, minutes):
+    from importlib import metadata
+
+    from space_usage_heatmaps.perception.application.track_video import track_video
+
+    try:
+        from space_usage_heatmaps.evaluation.infrastructure import bench as sustained
+
+        ort = metadata.version("onnxruntime-gpu")
+    except (ImportError, metadata.PackageNotFoundError) as e:
+        raise OSError(RUNTIME_MISSING) from e
+    source, detector, tracker = pipeline_of(config, reader, loop=True)(BENCH_SCENE, BENCH_CAMERA)
+    tracked = (
+        (t.frame_index, t.track_ids, t.boxes) for t in track_video(source, detector, tracker)
+    )
+    result = sustained.bench(tracked, config, cam, spec, minutes)
+    engine = f"{config.engine} (ONNX Runtime {ort}, {detector.engine}, fp32)"
+    return {"engine": engine} | result
+
+
 def run_bench(args):
     """End to end on scene 071's 1080p video, looped for --minutes."""
     config = load_config(args.config)
     reader = NvidiaMtmcReader(data_dir())
     cam = reader.camera(BENCH_SCENE, BENCH_CAMERA)
     spec = GridSpec.covering(*reader.scene_extent(BENCH_SCENE), cell_m=BENCH_CELL)
+    if config.engine == "onnx-cuda":
+        result = bench_pipeline(config, reader, cam, spec, args.minutes)
+        print(json.dumps(result))
+        return 0
     try:
         from space_usage_heatmaps.evaluation.baseline.bench import bench
     except ImportError as e:

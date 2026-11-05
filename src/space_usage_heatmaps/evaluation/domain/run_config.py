@@ -13,7 +13,7 @@ from space_usage_heatmaps.floorplan.domain.foot_point import (
     TrackHeights,
 )
 
-ENGINES = ("ultralytics",)
+ENGINES = ("ultralytics", "onnx-cuda")  # the baseline; the perception pipeline
 HEIGHTS_M = ("person_height_m", "min_implied_height_m", "track_height_min_m", "track_height_max_m")
 FRACTIONS = ("track_height_percentile", "hidden_ratio")
 # The optional keys each foot point reads; any other one in a file is an error.
