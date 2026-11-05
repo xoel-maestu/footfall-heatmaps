@@ -23,6 +23,7 @@ from space_usage_heatmaps.evaluation.baseline.ultralytics_tracks import (
     track_frames,
     video_frames,
 )
+from space_usage_heatmaps.floorplan.domain.foot_point import TrackHeights
 
 VRAM_EVERY = 30  # frames between two NVML samples
 
@@ -53,14 +54,17 @@ def _run(config, video, cam, spec, minutes, weights_dir, handle):
     rates, peak, frames = [], 0.0, 0
     start = window = None
     in_window = 0
-    for _, ids, boxes in track_frames(model, config, video_frames(video, config.stride, True)):
+    heights = TrackHeights()  # auto-track: each track's height so far, the scored rule
+    for i, ids, boxes in track_frames(model, config, video_frames(video, config.stride, True)):
         xs, ys, _ = camera_floor_points(
             cam,
             boxes,
             config.foot_point,
             config.person_height_m,
             config.min_implied_height_m,
-            ids,  # auto-track: heights from this frame only; the timing is what counts here
+            ids,
+            np.full(len(ids), i),
+            heights,
         )
         col = np.floor((xs - spec.origin_x) / spec.cell_m).astype(int)
         row = np.floor((ys - spec.origin_y) / spec.cell_m).astype(int)

@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from space_usage_heatmaps.floorplan.domain.foot_point import (
+    TrackHeights,
     floor_points,
     image_points,
     implied_heights,
@@ -144,7 +145,9 @@ def test_auto_track_keeps_the_bottom_of_a_short_person_seen_whole():
     ids = np.array([5, 5, 5])
 
     _, _, head_auto = floor_points(boxes, P, H_IMG, "auto")
-    _, _, head_track = floor_points(boxes, P, H_IMG, "auto-track", track_ids=ids)
+    _, _, head_track = floor_points(
+        boxes, P, H_IMG, "auto-track", track_ids=ids, frames=np.arange(3)
+    )
 
     assert head_auto.all() and not head_track.any()
 
@@ -155,12 +158,83 @@ def test_auto_track_places_a_hidden_box_with_the_height_of_its_track():
     boxes = np.vstack([*whole, _person_box(0.0, 5.0, height=1.85, cut_m=0.6)])
     ids = np.full(5, 3)
 
-    xs, ys, head = floor_points(boxes, P, H_IMG, "auto-track", track_ids=ids)
+    xs, ys, head = floor_points(boxes, P, H_IMG, "auto-track", track_ids=ids, frames=np.arange(5))
 
     assert head.tolist() == [False] * 4 + [True]
     np.testing.assert_allclose([xs[4], ys[4]], [0.0, 5.0], atol=1e-6)
 
 
-def test_auto_track_needs_track_ids():
+def test_auto_track_needs_track_ids_and_frames():
     with pytest.raises(ValueError, match="track ids"):
         floor_points(_person_box(0.0, 3.0), P, H_IMG, "auto-track")
+    with pytest.raises(ValueError, match="frames"):
+        floor_points(_person_box(0.0, 3.0), P, H_IMG, "auto-track", track_ids=[1])
+
+
+def test_auto_track_is_causal_a_box_is_judged_on_its_track_so_far():
+    # Cut at the knees in the first frame, whole afterwards: the first box only
+    # knows itself, so it keeps its bottom; the later frames do not reach back.
+    cut = _person_box(0.0, 1.0, height=1.85, cut_m=0.6)
+    whole = [_person_box(0.0, y, height=1.85) for y in (2.0, 3.0, 4.0)]
+    boxes = np.vstack([cut, *whole, cut])
+    ids = np.full(5, 3)
+
+    _, _, head = floor_points(boxes, P, H_IMG, "auto-track", track_ids=ids, frames=np.arange(5))
+
+    assert head.tolist() == [False, False, False, False, True]
+
+
+def test_track_heights_are_the_exact_prefix_percentile_in_frame_order():
+    rng = np.random.default_rng(1)
+    n = 400
+    implied = rng.uniform(0.5, 2.5, n)
+    ids = rng.integers(0, 6, n)
+    frames = rng.permutation(n)  # rows in any order; the frame decides the prefix
+    usable = rng.random(n) > 0.2
+
+    got = TrackHeights(0.9, 0.88, 1.0, 2.0).heights(implied, ids, frames, usable)
+
+    for i in range(n):
+        prefix = (ids == ids[i]) & (frames <= frames[i]) & usable
+        if prefix.any():
+            want = np.clip(np.percentile(implied[prefix], 90), 1.0, 2.0)
+            np.testing.assert_allclose(got[i], want, atol=1e-12)
+        else:
+            assert np.isnan(got[i])
+
+
+def test_track_heights_fed_frame_by_frame_match_one_batch():
+    rng = np.random.default_rng(2)
+    frames = np.repeat(np.arange(50), 3)
+    ids = np.tile([1, 2, 3], 50)
+    implied = rng.uniform(1.0, 2.0, frames.size)
+    usable = np.ones(frames.size, dtype=bool)
+
+    batch = TrackHeights().heights(implied, ids, frames, usable)
+    live = TrackHeights()
+    stream = np.concatenate(
+        [
+            live.heights(implied[f], ids[f], frames[f], usable[f])
+            for f in np.split(np.arange(150), 50)
+        ]
+    )
+
+    np.testing.assert_allclose(stream, batch)
+
+
+def test_a_box_cut_by_the_top_border_stays_out_of_its_track_height():
+    # A 1.85 m adult whose head is cut (top edge within 1 px of the first row)
+    # in most frames: those short boxes must not pull the track height down.
+    whole = _person_box(0.0, 4.0, height=1.85)
+    cut = _person_box(0.0, 3.0, height=1.85, cut_m=0.6)
+    cut[0, 1] = 0.8
+    hidden = _person_box(0.0, 5.0, height=1.85, cut_m=0.6)
+    boxes = np.vstack([*[whole] * 3, *[cut] * 20, hidden])
+    ids = np.full(len(boxes), 7)
+
+    xs, ys, head = floor_points(
+        boxes, P, H_IMG, "auto-track", track_ids=ids, frames=np.arange(len(boxes))
+    )
+
+    assert not head[:-1].any() and head[-1]  # head-cut boxes keep their bottom
+    np.testing.assert_allclose([xs[-1], ys[-1]], [0.0, 5.0], atol=1e-6)
