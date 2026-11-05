@@ -91,6 +91,22 @@ def engine_of(providers):
     return providers[0]
 
 
+def recipe():
+    """What the boxes depend on besides the model file, for the track cache."""
+    return {
+        "preprocess": "yolox letterbox, top-left, pad 114, BGR 0-255",
+        "postprocess": "boxes clipped to the image",
+        "score_thr": SCORE_THR,
+        "nms_thr": NMS_THR,
+        "nms": "class-agnostic",
+        "classes": [PERSON],
+    }
+
+
+def load(path):
+    return OnnxYoloxDetector.load(path)
+
+
 class OnnxYoloxDetector:
     def __init__(self, session, cpu_session=None, engine=None):
         """session: an onnxruntime.InferenceSession of a YOLOX model, or a test double.

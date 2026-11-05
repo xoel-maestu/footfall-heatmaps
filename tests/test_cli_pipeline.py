@@ -27,7 +27,9 @@ def test_eval_config_runs_the_pipeline_and_caches_its_recipe(tmp_path, rows, mon
     loaded = []
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
     monkeypatch.setattr(
-        container, "load_detector", lambda path: loaded.append(path) or GroundTruthDetector(rows)
+        container,
+        "load_detector",
+        lambda path, *_: loaded.append(path) or GroundTruthDetector(rows),
     )
     config = tmp_path / "h1.yaml"
     config.write_text(CONFIG)
@@ -67,7 +69,7 @@ def test_the_cache_records_the_provider_each_video_ran_on(tmp_path, rows, monkey
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
-    monkeypatch.setattr(container, "load_detector", lambda path: OnCpuAfterOom(rows))
+    monkeypatch.setattr(container, "load_detector", lambda path, *_: OnCpuAfterOom(rows))
     (tmp_path / "h1.yaml").write_text(CONFIG)
 
     assert cli.main(["eval", "--config", "h1.yaml", "--split", "tiny", "--resamples", "5"]) == 0

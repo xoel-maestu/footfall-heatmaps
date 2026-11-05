@@ -1,4 +1,7 @@
-"""Wiring of the perception pipeline: video file -> YOLOX-s on ONNX Runtime -> ByteTrack.
+"""Wiring of the perception pipeline: video file -> a detector on ONNX Runtime -> ByteTrack.
+
+The config's detector and input_size pick the model file (MODELS); the
+detector's family picks the adapter, with its own pre- and post-processing.
 
 pipeline_metadata names everything the tracks depend on, for the track cache;
 it reads package metadata only, so it works without the runtime group.
@@ -16,6 +19,13 @@ from space_usage_heatmaps.perception.infrastructure.opencv_file_source import Op
 
 TRACKERS = ("bytetrack",)
 ENGINE = "onnx-cuda"
+# (config detector, input size) -> model file (model_weights.WEIGHTS key)
+MODELS = {
+    ("yolox-s", 640): "yolox-s",
+    ("yolox-s", 960): "yolox-s-960",
+}
+# config detector -> adapter module: Detector.load(path) and recipe()
+FAMILIES = {"yolox-s": yolox}
 
 
 def _version(dist):
@@ -26,29 +36,25 @@ def _version(dist):
 
 
 def check(detector, tracker, input_size):
-    if detector not in WEIGHTS:
-        raise ValueError(f"engine {ENGINE} runs detectors {sorted(WEIGHTS)}, not {detector!r}")
+    """The model file's WEIGHTS key."""
     if tracker not in TRACKERS:
         raise ValueError(f"engine {ENGINE} runs trackers {list(TRACKERS)}, not {tracker!r}")
-    if input_size != 640:
-        raise ValueError("the YOLOX release models take a 640 x 640 input only")
+    if (detector, input_size) not in MODELS:
+        known = ", ".join(f"{d} at {s}" for d, s in MODELS)
+        raise ValueError(f"engine {ENGINE} runs {known}; not {detector} at {input_size}")
+    return MODELS[detector, input_size]
 
 
 def pipeline_metadata(detector, tracker, input_size, stride):
-    check(detector, tracker, input_size)
+    model = check(detector, tracker, input_size)
     return {
         "detector": detector,
-        "weights": WEIGHTS[detector].file,
-        "weights_sha256": WEIGHTS[detector].sha256,
+        "weights": WEIGHTS[model].file,
+        "weights_sha256": WEIGHTS[model].sha256,
         "engine": ENGINE,
         "onnxruntime": _version("onnxruntime-gpu"),
-        "opencv": _version("opencv-python-headless"),  # decoding and the letterbox resize
-        "preprocess": "yolox letterbox, top-left, pad 114, BGR 0-255",
-        "postprocess": "boxes clipped to the image",
-        "score_thr": yolox.SCORE_THR,
-        "nms_thr": yolox.NMS_THR,
-        "nms": "class-agnostic",
-        "classes": [yolox.PERSON],
+        "opencv": _version("opencv-python-headless"),  # decoding and the resize
+        **FAMILIES[detector].recipe(),
         "input_size": input_size,
         "tracker": "trackers.ByteTrackTracker",
         "trackers": _version("trackers"),
@@ -57,13 +63,13 @@ def pipeline_metadata(detector, tracker, input_size, stride):
     }
 
 
-def load_detector(path):
-    return yolox.OnnxYoloxDetector.load(path)
+def load_detector(path, detector):
+    return FAMILIES[detector].load(path)
 
 
 def build_pipeline(video, detector, tracker, input_size, stride, models_dir, loop=False):
     """(frame source, person detector, tracker) for one video; a fresh tracker each time."""
-    check(detector, tracker, input_size)
+    weights = check(detector, tracker, input_size)
     source = OpenCvFileSource(video, stride, loop)
-    model = load_detector(ensure_weights(models_dir, detector))
+    model = load_detector(ensure_weights(models_dir, weights), detector)
     return source, model, ByteTrackTracker(frame_rate=source.fps / stride)
