@@ -55,6 +55,14 @@ WEIGHTS = {
         "95316ad4705db4dff9d77c22238514d685c86c3cb6a7b9ceb46879bedc84e73b",
         "Apache-2.0",
     ),
+    # D-FINE-S trained on Objects365 then COCO (Peterande/D-FINE release
+    # dfinev1.0, Apache-2.0), exported by D-FINE's tools/deployment/export_onnx.py.
+    "dfine-s": Weights(
+        "dfine_s_obj2coco.onnx",
+        None,
+        "f29f9569ef1d089dce6b392aef886fe4afd15e6193838bedae6e2ee4830b6ddd",
+        "Apache-2.0",
+    ),
 }
 _YOLOX = (
     "https://github.com/Megvii-BaseDetection/YOLOX.git",
@@ -67,6 +75,16 @@ _YOLOX = (
 )
 EXPORTS = {
     "yolox-s-960": Export(*_YOLOX, ("960",)),
+    "dfine-s": Export(
+        "https://github.com/Peterande/D-FINE.git",
+        "956d1709314c2c6a4df6f34de232054578a7449f",  # master, 2026-08-19
+        "D-FINE",
+        "dfine_s_obj2coco.pth",
+        "https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth",
+        "75bedc333cdf665f9cddd2c6a2a9baa34e0e5e9a38db7bb8e6110edc3b4ba8eb",
+        "dfine.py",
+        ("configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml",),
+    ),
 }
 HOSTS = {"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
 

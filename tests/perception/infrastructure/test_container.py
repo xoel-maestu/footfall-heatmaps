@@ -31,3 +31,11 @@ def test_the_yolox_640_recipe_is_unchanged_so_its_cached_tracks_stay_valid():
         "classes": [0],
     }
     assert meta["weights"] == "yolox_s.onnx"
+
+
+def test_dfine_has_its_own_recipe():
+    meta = container.pipeline_metadata("dfine-s", "bytetrack", 640, 1)
+
+    assert meta["weights"] == "dfine_s_obj2coco.onnx"
+    assert meta["nms"] == "none" and meta["classes"] == [0]
+    assert meta["preprocess"].startswith("dfine letterbox")
