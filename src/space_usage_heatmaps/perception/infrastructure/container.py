@@ -10,6 +10,7 @@ it reads package metadata only, so it works without the runtime group.
 from importlib import metadata
 
 from space_usage_heatmaps.perception.infrastructure import onnx_dfine_detector as dfine
+from space_usage_heatmaps.perception.infrastructure import onnx_rfdetr_detector as rfdetr
 from space_usage_heatmaps.perception.infrastructure import onnx_yolox_detector as yolox
 from space_usage_heatmaps.perception.infrastructure.bytetrack_tracker import (
     DEFAULTS as BYTETRACK_DEFAULTS,
@@ -25,9 +26,10 @@ MODELS = {
     ("yolox-s", 640): "yolox-s",
     ("yolox-s", 960): "yolox-s-960",
     ("dfine-s", 640): "dfine-s",
+    ("rfdetr-n", 384): "rfdetr-n",
 }
 # config detector -> adapter module: Detector.load(path) and recipe()
-FAMILIES = {"yolox-s": yolox, "dfine-s": dfine}
+FAMILIES = {"yolox-s": yolox, "dfine-s": dfine, "rfdetr-n": rfdetr}
 
 
 def _version(dist):

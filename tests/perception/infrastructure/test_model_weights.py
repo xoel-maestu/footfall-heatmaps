@@ -100,5 +100,12 @@ def test_every_exported_model_says_how_to_export_it():
 
     assert exported <= set(model_weights.EXPORTS)
     for e in model_weights.EXPORTS.values():
-        assert len(e.commit) == 40 and len(e.checkpoint_sha256) == 64
-        check_url(e.checkpoint_url)
+        assert (e.repo is None) == (e.commit is None) == (e.project is not None)
+        assert e.commit is None or len(e.commit) == 40
+        assert len(e.checkpoint_sha256) == 64
+        check_url(e.checkpoint_url, model_weights.EXPORT_HOSTS)
+
+
+def test_the_run_path_does_not_download_from_the_export_only_hosts():
+    with pytest.raises(OSError, match="refusing"):
+        check_url("https://storage.googleapis.com/rfdetr/nano_coco/checkpoint_best_regular.pth")

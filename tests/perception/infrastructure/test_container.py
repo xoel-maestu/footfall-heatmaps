@@ -39,3 +39,17 @@ def test_dfine_has_its_own_recipe():
     assert meta["weights"] == "dfine_s_obj2coco.onnx"
     assert meta["nms"] == "none" and meta["classes"] == [0]
     assert meta["preprocess"].startswith("dfine letterbox")
+
+
+def test_rfdetr_nano_runs_at_its_384_input():
+    meta = container.pipeline_metadata("rfdetr-n", "bytetrack", 384, 1)
+
+    assert meta["weights"] == "rf_detr_nano.onnx" and meta["classes"] == [1]
+    with pytest.raises(ValueError):
+        container.check("rfdetr-n", "bytetrack", 640)
+
+
+def test_every_model_file_is_registered_with_an_adapter():
+    for detector, _ in container.MODELS:
+        assert detector in container.FAMILIES
+    assert set(container.MODELS.values()) <= set(container.WEIGHTS)

@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from space_usage_heatmaps.perception.infrastructure.model_weights import (
+    EXPORT_HOSTS,
     EXPORTS,
     WEIGHTS,
     _sha256,
@@ -47,7 +48,7 @@ def checkpoint(url, sha256, dest):
     if not dest.exists():
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_name(dest.name + ".part")
-        https_get(url, tmp)
+        https_get(url, tmp, EXPORT_HOSTS)
         tmp.replace(dest)
     if _sha256(dest) != sha256:
         raise SystemExit(f"{dest}: sha256 differs from the recorded {sha256}; delete it")
@@ -60,7 +61,9 @@ def main(name):
     e, w = EXPORTS[name], WEIGHTS[name]
     root = data_dir().expanduser()
     src = root / "export" / "src" / e.repo_dir
-    checkout(e.repo, e.commit, src)
+    src.mkdir(parents=True, exist_ok=True)
+    if e.repo:
+        checkout(e.repo, e.commit, src)
     ckpt = checkpoint(
         e.checkpoint_url, e.checkpoint_sha256, root / "export" / "checkpoints" / e.checkpoint
     )
@@ -68,7 +71,11 @@ def main(name):
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(out.stem + ".part.onnx")
     env = os.environ | {"CUDA_VISIBLE_DEVICES": ""}  # export on CPU
-    cmd = [sys.executable, str(HERE / e.script), str(src), str(ckpt), str(tmp), *e.args]
+    env.pop("VIRTUAL_ENV", None)  # a project of its own uses its own environment
+    python = [sys.executable]
+    if e.project:  # its own locked environment
+        python = ["uv", "run", "--locked", "--project", str(HERE / e.project), "python"]
+    cmd = [*python, "-I", str(HERE / e.script), str(src), str(ckpt), str(tmp), *e.args]
     subprocess.run(cmd, check=True, cwd=src, env=env)
     tmp.replace(out)
     print(f"{out}  sha256 {_sha256(out)}  (recorded: {w.sha256})")

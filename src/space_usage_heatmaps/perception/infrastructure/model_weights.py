@@ -29,14 +29,15 @@ class Export:
     """How scripts/export-detector.py makes a model: the official exporter of
     repo at commit, run on the release checkpoint (checked by its sha256)."""
 
-    repo: str
-    commit: str
-    repo_dir: str
+    repo: str | None  # None: the exporter is a package of its own environment
+    commit: str | None
+    repo_dir: str  # work directory under export/src
     checkpoint: str
     checkpoint_url: str
     checkpoint_sha256: str
     script: str  # under scripts/export/
     args: tuple[str, ...] = ()
+    project: str | None = None  # its own uv project under scripts/export/, else the export group
 
 
 WEIGHTS = {
@@ -57,6 +58,14 @@ WEIGHTS = {
     ),
     # D-FINE-S trained on Objects365 then COCO (Peterande/D-FINE release
     # dfinev1.0, Apache-2.0), exported by D-FINE's tools/deployment/export_onnx.py.
+    # RF-DETR Nano COCO (Roboflow, rfdetr 1.11.2's Apache-2.0 Nano checkpoint),
+    # exported by the rfdetr package's own ONNX exporter.
+    "rfdetr-n": Weights(
+        "rf_detr_nano.onnx",
+        None,
+        "d217512443ea74ca6f025e9d9239cfd7650de318664c6fc26ee81ae705e4baac",
+        "Apache-2.0",
+    ),
     "dfine-s": Weights(
         "dfine_s_obj2coco.onnx",
         None,
@@ -85,25 +94,42 @@ EXPORTS = {
         "dfine.py",
         ("configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml",),
     ),
+    "rfdetr-n": Export(
+        None,
+        None,
+        "rfdetr",
+        "rf-detr-nano.pth",
+        "https://storage.googleapis.com/rfdetr/nano_coco/checkpoint_best_regular.pth",
+        # md5 fb6504cce7fbdc783f7a46991f07639f, as rfdetr 1.11.2 records it
+        "d8d6b9ee57d4d0ed2b1f305163624712a0532cb7bce0c747317984fc5457440d",
+        "rfdetr.py",
+        project="rfdetr",
+    ),
 }
 HOSTS = {"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
+# The export step also fetches checkpoints from the vendor's public bucket
+# (RF-DETR's), never the run path.
+EXPORT_HOSTS = HOSTS | {"storage.googleapis.com"}
 
 
-def check_url(url):
+def check_url(url, hosts=HOSTS):
     u = urlsplit(url)
-    if u.scheme != "https" or u.hostname not in HOSTS or u.username or u.password:
+    if u.scheme != "https" or u.hostname not in hosts or u.username or u.password:
         raise OSError(f"refusing to download from {u.scheme}://{u.hostname}")
 
 
-class _AllowlistRedirects(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        check_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+def _allowlist_redirects(hosts):
+    class AllowlistRedirects(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            check_url(newurl, hosts)
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    return AllowlistRedirects
 
 
-def https_get(url, dest):
-    check_url(url)
-    opener = urllib.request.build_opener(_AllowlistRedirects)
+def https_get(url, dest, hosts=HOSTS):
+    check_url(url, hosts)
+    opener = urllib.request.build_opener(_allowlist_redirects(hosts))
     with opener.open(urllib.request.Request(url), timeout=60) as r, dest.open("wb") as f:
         while chunk := r.read(1 << 20):
             f.write(chunk)

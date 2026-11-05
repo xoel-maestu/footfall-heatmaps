@@ -1,6 +1,7 @@
 # dependencies
 /node_modules
 /.venv
+/scripts/export/rfdetr/.venv
 __pycache__/
 
 # build output
