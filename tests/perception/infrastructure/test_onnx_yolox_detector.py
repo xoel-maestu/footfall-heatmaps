@@ -1,0 +1,112 @@
+import logging
+
+import numpy as np
+import pytest
+
+from space_usage_heatmaps.perception.domain.frame import Frame
+from space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector import (
+    NMS_THR,
+    SCORE_THR,
+    OnnxYoloxDetector,
+    decode,
+    engine_of,
+    nms,
+    preprocess,
+)
+
+
+def test_preprocess_letterboxes_top_left_on_114_and_keeps_bgr():
+    image = np.zeros((100, 200, 3), np.uint8)
+    image[..., 0] = 10  # blue channel first, as OpenCV decodes
+
+    x, ratio = preprocess(image, 64)
+
+    assert ratio == pytest.approx(0.32)
+    assert x.shape == (3, 64, 64) and x.dtype == np.float32
+    assert x[0, 0, 0] == 10 and x[1, 0, 0] == 0  # not normalised, not swapped to RGB
+    assert (x[:, 32:, :] == 114).all()  # 100 * 0.32 = 32 rows of image, then padding
+
+
+def test_decode_adds_the_grid_and_scales_by_the_stride():
+    out = np.zeros((1, 8 * 8 + 4 * 4 + 2 * 2, 85), np.float32)
+    # Cell (x=3, y=1) of the stride-8 grid: offset (0.5, 0.5), log size 0 -> 8 px.
+    out[0, 1 * 8 + 3, :4] = [0.5, 0.5, 0.0, 0.0]
+    out[0, 1 * 8 + 3, 4] = 0.8  # objectness
+    out[0, 1 * 8 + 3, 5] = 0.5  # person
+
+    boxes, scores = decode(out, 64)
+
+    np.testing.assert_allclose(boxes[1 * 8 + 3], [24, 8, 32, 16])
+    assert scores[1 * 8 + 3, 0] == pytest.approx(0.4)
+
+
+def test_nms_suppresses_overlaps_above_the_threshold_keeping_the_best():
+    boxes = np.array([[0, 0, 10, 10], [1, 0, 11, 10], [50, 50, 60, 60]], float)
+
+    assert nms(boxes, np.array([0.5, 0.9, 0.3]), 0.45) == [1, 2]
+
+
+class FakeSession:
+    """An ONNX session whose output puts one box at a given cell of the stride-8 grid."""
+
+    def __init__(self, cells, size=64):
+        self.cells, self.size, self.inputs = cells, size, []
+
+    def get_inputs(self):
+        return [type("I", (), {"name": "images", "shape": [1, 3, self.size, self.size]})]
+
+    def run(self, _, feed):
+        self.inputs.append(feed["images"])
+        n = sum((self.size // s) ** 2 for s in (8, 16, 32))
+        out = np.zeros((1, n, 85), np.float32)
+        out[0, :, 4] = 1.0
+        for cell, cls, score in self.cells:
+            out[0, cell, :4] = [0.5, 0.5, np.log(2), np.log(2)]  # 16 px box
+            out[0, cell, 5 + cls] = score
+        return [out]
+
+
+def frame(h=128, w=128):
+    return Frame(0, 0.0, np.zeros((h, w, 3), np.uint8))
+
+
+def test_detect_keeps_person_boxes_in_source_pixels():
+    session = FakeSession([(1 * 8 + 3, 0, 0.9)])  # centre (28, 12) in the 64 px input
+
+    d = OnnxYoloxDetector(session).detect(frame())  # 128 px source: ratio 0.5
+
+    np.testing.assert_allclose(d.boxes, [[40, 8, 72, 40]])
+    np.testing.assert_allclose(d.scores, [0.9])
+    assert session.inputs[0].shape == (1, 3, 64, 64)
+
+
+def test_detect_drops_other_classes_and_scores_at_or_below_the_threshold():
+    session = FakeSession([(3, 2, 0.9), (20, 0, SCORE_THR), (40, 0, 0.5)])
+
+    d = OnnxYoloxDetector(session).detect(frame())
+
+    assert d.scores.tolist() == [0.5]
+
+
+def test_nms_is_class_agnostic_as_the_official_demo():
+    # A car (class 2) box over a weaker person box at the same cell suppresses it.
+    session = FakeSession([(9, 2, 0.9), (9, 0, 0.5)])
+
+    d = OnnxYoloxDetector(session).detect(frame())
+
+    assert len(d.scores) == 0
+
+
+def test_thresholds_are_the_official_onnx_demos():
+    assert (SCORE_THR, NMS_THR) == (0.1, 0.45)
+
+
+def test_cuda_is_asked_first_and_a_cpu_fallback_is_logged(caplog):
+    with caplog.at_level(logging.WARNING):
+        assert engine_of(["CPUExecutionProvider"]) == "CPUExecutionProvider"
+    assert "CPU" in caplog.text
+
+    caplog.clear()
+    available = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    assert engine_of(available) == "CUDAExecutionProvider"
+    assert not caplog.text
