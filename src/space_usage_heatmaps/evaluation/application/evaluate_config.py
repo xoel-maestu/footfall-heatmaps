@@ -68,16 +68,19 @@ def evaluate_config(reader, scenes, runs, cell, n_resamples=1000, seed=0):
         for config, source in runs:
             t = source.tracks(scene, camera)
             keep = (t.frames >= first) & (t.frames <= last)
+            # Floor points on every row, then keep the scored frames: the causal
+            # track height sees the same history as the live path (bench).
             xs, ys, _ = camera_floor_points(
                 cam,
-                t.boxes[keep],
+                t.boxes,
                 config.foot_point,
                 config.person_height_m,
                 config.min_implied_height_m,
-                t.track_ids[keep],
-                t.frames[keep],
+                t.track_ids,
+                t.frames,
                 config.track_heights(),
             )
+            xs, ys = xs[keep], ys[keep]
             fps = cam.fps / config.stride
             preds.append(layers(t.track_ids[keep], t.frames[keep], xs, ys, fps))
             counts.append((int(keep.sum()), preds[-1].dropped, int((~keep).sum())))
