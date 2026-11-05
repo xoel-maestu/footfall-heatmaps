@@ -2,10 +2,19 @@
 
 The real eval path (video decoding, ByteTrack, track cache, report) runs in a
 subprocess with HOME, TMPDIR, the data dir and the working directory pointed
-at temp dirs, a fake detector that letterboxes each image as YOLOX does and
-returns the scene's ground-truth boxes. Afterwards every file the run created
-or changed is audited: no image or video by extension or by magic bytes, and
-no NumPy array shaped like an image.
+at temp dirs. An audit hook (sys.addaudithook) inside it records every file
+opened for writing (any path), every os.rename and os.replace target and
+every socket.connect. The hook sees Python-level I/O only; native code
+(OpenCV, ONNX Runtime) is covered by the snapshot of those dirs, which catches
+for example the device id and onnxruntime.db that ONNX Runtime keeps under
+~/.cache/Microsoft. Afterwards every recorded path, and every file the run
+created or changed under those dirs, is audited: no image or video by
+extension or by magic bytes, and no NumPy array shaped like an image; no
+connection at all; stdout and stderr are plain text.
+
+The detector is a fake that letterboxes each image as YOLOX does and returns
+the scene's ground-truth boxes (CI); a second run uses the real YOLOX-s on
+ONNX Runtime when the runtime group and the weights are there.
 """
 
 import io
@@ -18,6 +27,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 from tests.conftest import write_scene
 from tests.perception.synthetic_video import write_video
@@ -95,8 +105,47 @@ def test_the_audit_catches_frames_in_any_form(tmp_path):
     assert flagged == {"a.png", "frame.bin", "frame.npy", "crops.npz", "clip.data"}
 
 
+AUDIT = """
+import atexit, json, os, sys
+
+WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
+LOG = os.environ.pop("AUDIT_LOG")
+written, connects, done = [], [], []
+
+
+def _path(p):
+    return os.path.abspath(os.fsdecode(p)) if isinstance(p, (str, bytes, os.PathLike)) else None
+
+
+def hook(event, args):
+    if done:
+        return
+    if event == "open":
+        path, mode, flags = args
+        if (isinstance(mode, str) and set(mode) & set("wax+")) or (flags or 0) & WRITE_FLAGS:
+            if (p := _path(path)) is not None:
+                written.append(p)
+    elif event in ("os.rename", "os.replace"):
+        if (p := _path(args[1])) is not None:
+            written.append(p)
+    elif event == "socket.connect":
+        connects.append(repr(args[1]))
+
+
+def dump():
+    done.append(True)
+    with open(LOG, "w") as f:
+        json.dump({"written": written, "connects": connects}, f)
+
+
+sys.addaudithook(hook)
+atexit.register(dump)
+"""
+
 RUN = """
 import json
+import os
+from pathlib import Path
 
 from space_usage_heatmaps import cli
 from space_usage_heatmaps.perception.domain.frame import Detections
@@ -108,11 +157,27 @@ class LetterboxingDetector(GroundTruthDetector):
     def detect(self, frame):
         x, _ = preprocess(frame.image, 640)  # the image handling a real detector does
         assert x.shape == (3, 640, 640)
+        if leak := os.environ.get("LEAK_TO"):  # the audit's own check: a leaking detector
+            import cv2
+            jpeg = cv2.imencode(".jpg", frame.image)[1].tobytes()
+            for path in (leak, leak + ".tmp"):
+                with open(path, "wb") as f:
+                    f.write(jpeg)
+            os.replace(leak + ".tmp", leak + ".png")
+            import socket
+            try:
+                socket.create_connection(("127.0.0.1", 9), timeout=0.1)
+            except OSError:
+                pass
         return super().detect(frame)
 
-container.ensure_weights = lambda d, name: d / name
-rows = json.load(open("rows.json"))
-container.load_detector = lambda path: LetterboxingDetector(rows)
+if real := os.environ.pop("REAL_MODELS", None):  # the real YOLOX-s, weights checked
+    ensure = container.ensure_weights
+    container.ensure_weights = lambda d, name: ensure(Path(real), name)
+else:
+    container.ensure_weights = lambda d, name: d / name
+    rows = json.load(open("rows.json"))
+    container.load_detector = lambda path: LetterboxingDetector(rows)
 cli.SPLITS["tiny"] = (("001", "7"),)
 raise SystemExit(cli.main(["eval", "--config", "h1.yaml", "--split", "tiny", "--resamples", "5"]))
 """
@@ -122,7 +187,33 @@ CONFIG = (
 )
 
 
-def test_a_pipeline_run_writes_no_frame(tmp_path, rows):
+def _plain_text(data):
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return all(c.isprintable() or c in "\n\r\t" for c in text)
+
+
+def test_the_output_check_rejects_image_bytes():
+    png = cv2.imencode(".png", np.zeros((20, 20, 3), np.uint8))[1].tobytes()
+
+    assert _plain_text(b"scene 001 7 pooled 0.355\n")
+    assert not _plain_text(b"log line " + png)
+
+
+def real_models():
+    """The real weights' directory, or a skip when the runtime or the weights are missing."""
+    pytest.importorskip("onnxruntime", reason="runtime group not installed")
+    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    models = data.expanduser() / "models"
+    if not (models / "yolox_s.onnx").exists():
+        pytest.skip(f"no YOLOX-s weights in {models}")
+    return models
+
+
+def run_audited(tmp_path, rows, extra):
+    """(subprocess result, audit log, flagged paths) of one eval run under the hook."""
     home, tmp, data, work = (tmp_path / d for d in ("home", "tmp", "data", "work"))
     for d in (home, tmp, work):
         d.mkdir()
@@ -132,6 +223,7 @@ def test_a_pipeline_run_writes_no_frame(tmp_path, rows):
     (work / "rows.json").write_text(json.dumps(rows))
     roots = (home, tmp, data, work)
     before = snapshot(roots)
+    log = tmp_path / "audit.json"
     env = {
         "PATH": os.environ["PATH"],
         "HOME": str(home),
@@ -139,15 +231,45 @@ def test_a_pipeline_run_writes_no_frame(tmp_path, rows):
         "LC_ALL": "C.UTF-8",
         "SPACE_USAGE_DATA_DIR": str(data),
         "PYTHONPATH": str(REPO),
-    }
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "AUDIT_LOG": str(log),
+    } | extra
 
     out = subprocess.run(
-        [sys.executable, "-c", RUN], cwd=work, env=env, capture_output=True, text=True
+        [sys.executable, "-c", AUDIT + RUN], cwd=work, env=env, capture_output=True
     )
 
-    assert out.returncode == 0, out.stderr
+    assert out.returncode == 0, out.stderr.decode(errors="replace")
+    audit = json.loads(log.read_text())
     after = snapshot(roots)
-    written = sorted(p for p, t in after.items() if before.get(p) != t)
-    names = {p.suffix for p in written}
-    assert {".npz", ".json"} <= names  # the run did write: tracks cache and report
-    assert {str(p.relative_to(tmp_path)): offences(p) for p in written if offences(p)} == {}
+    changed = {p for p, t in after.items() if before.get(p) != t}
+    recorded = {Path(p) for p in audit["written"]}
+    assert {".npz", ".json"} <= {p.suffix for p in recorded}  # the run did write
+    flagged = {}
+    for p in sorted(recorded | changed):
+        if {s.lower() for s in p.suffixes} & EXTENSIONS:
+            flagged[str(p)] = ["extension"]
+        elif p.is_file() and (why := offences(p)):
+            flagged[str(p)] = why
+    return out, audit, flagged
+
+
+def test_the_hook_catches_writes_renames_and_connections_anywhere(tmp_path, rows):
+    elsewhere = tmp_path / "elsewhere"  # outside every snapshotted dir
+    elsewhere.mkdir()
+
+    _, audit, flagged = run_audited(tmp_path, rows, {"LEAK_TO": str(elsewhere / "f")})
+
+    assert set(flagged) == {str(elsewhere / "f"), str(elsewhere / "f.png")}
+    assert audit["connects"] == ["('127.0.0.1', 9)"] * 12  # one per frame
+
+
+@pytest.mark.parametrize("detector", ["fake", "real"])
+def test_a_pipeline_run_writes_no_frame_and_connects_nowhere(tmp_path, rows, detector):
+    extra = {"REAL_MODELS": str(real_models())} if detector == "real" else {}
+
+    out, audit, flagged = run_audited(tmp_path, rows, extra)
+
+    assert audit["connects"] == []
+    assert flagged == {}
+    assert _plain_text(out.stdout) and _plain_text(out.stderr)
