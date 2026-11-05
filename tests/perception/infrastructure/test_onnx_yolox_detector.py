@@ -5,6 +5,8 @@ import pytest
 
 from space_usage_heatmaps.perception.domain.frame import Frame
 from space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector import (
+    CPU,
+    CUDA,
     NMS_THR,
     SCORE_THR,
     OnnxYoloxDetector,
@@ -131,3 +133,58 @@ def test_the_release_model_loads_and_detects_with_onnx_runtime():
         "CPUExecutionProvider",
     )
     assert d.boxes.shape == (len(d.scores), 4)
+
+
+ORT_OOM = (
+    "[ONNXRuntimeError] : 6 : RUNTIME_EXCEPTION : Non-zero status code returned while running "
+    "Conv node. Name:'/backbone/Conv' Status Message: /onnxruntime_src/onnxruntime/core/"
+    "framework/bfc_arena.cc:359 void* onnxruntime::BFCArena::AllocateRawInternal(size_t, bool, "
+    "onnxruntime::Stream*) Failed to allocate memory for requested buffer of size 52428800"
+)
+
+
+class OutOfMemorySession(FakeSession):
+    def run(self, _, feed):
+        raise RuntimeError(ORT_OOM)
+
+
+def test_out_of_memory_on_cuda_retries_once_on_cpu_and_says_so(caplog):
+    cpu = FakeSession([(1 * 8 + 3, 0, 0.9)])
+    built = []
+    detector = OnnxYoloxDetector(
+        OutOfMemorySession([]), cpu_session=lambda: built.append(1) or cpu, engine=CUDA
+    )
+
+    with caplog.at_level(logging.WARNING):
+        first = detector.detect(frame())
+        second = detector.detect(frame())
+
+    assert len(first.scores) == len(second.scores) == 1
+    assert built == [1] and len(cpu.inputs) == 2
+    assert detector.engine == CPU and detector.providers == [CUDA, CPU]
+    assert len(caplog.records) == 1 and "CPU" in caplog.text and "memory" in caplog.text
+
+
+def test_other_runtime_errors_are_not_retried():
+    class Broken(FakeSession):
+        def run(self, _, feed):
+            raise RuntimeError("[ONNXRuntimeError] : 2 : INVALID_ARGUMENT : wrong input")
+
+    detector = OnnxYoloxDetector(Broken([]), cpu_session=lambda: FakeSession([]), engine=CUDA)
+
+    with pytest.raises(RuntimeError, match="INVALID_ARGUMENT"):
+        detector.detect(frame())
+
+
+def test_out_of_memory_on_cpu_is_raised():
+    detector = OnnxYoloxDetector(
+        OutOfMemorySession([]), cpu_session=lambda: FakeSession([]), engine=CPU
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to allocate"):
+        detector.detect(frame())
+
+
+def test_a_session_without_a_cpu_fallback_raises_out_of_memory():
+    with pytest.raises(RuntimeError, match="Failed to allocate"):
+        OnnxYoloxDetector(OutOfMemorySession([])).detect(frame())

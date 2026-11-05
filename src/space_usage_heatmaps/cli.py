@@ -402,7 +402,7 @@ def bench_pipeline(config, reader, cam, spec, minutes):
         (t.frame_index, t.track_ids, t.boxes) for t in track_video(source, detector, tracker)
     )
     result = sustained.bench(tracked, config, cam, spec, minutes)
-    engine = f"{config.engine} (ONNX Runtime {ort}, {detector.engine}, fp32)"
+    engine = f"{config.engine} (ONNX Runtime {ort}, {' then '.join(detector.providers)}, fp32)"
     return {"engine": engine} | result
 
 

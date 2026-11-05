@@ -41,12 +41,16 @@ class CachedTrackSource:
         if self._source is None:
             self._source = self._make()
         t = self._source.tracks(scene, camera)
+        # How this computation went (the source's last_run, e.g. the provider the
+        # detector ran on): stored and reported, not part of the recipe check.
+        run = getattr(self._source, "last_run", None)
+        stored = self.metadata | ({"run": run} if run else {})
         self.directory.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp.npz")
-        meta = np.array(json.dumps(self.metadata, sort_keys=True))
+        meta = np.array(json.dumps(stored, sort_keys=True))
         np.savez(tmp, track_ids=t.track_ids, frames=t.frames, boxes=t.boxes, meta=meta)
         tmp.replace(path)
-        self.provenance[f"{scene}/{camera}"] = {"stored": self.metadata, "unverified": []}
+        self.provenance[f"{scene}/{camera}"] = {"stored": stored, "unverified": []}
         return t
 
     def _stale(self, stored):

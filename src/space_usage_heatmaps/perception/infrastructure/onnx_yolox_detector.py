@@ -19,6 +19,7 @@ Only the model file goes through ONNX Runtime; nothing else in it is run.
 """
 
 import logging
+import re
 
 import cv2
 import numpy as np
@@ -30,6 +31,9 @@ NMS_THR = 0.45  # and its nms_thr
 PERSON = 0  # COCO class id
 STRIDES = (8, 16, 32)
 CUDA, CPU = "CUDAExecutionProvider", "CPUExecutionProvider"
+# What ONNX Runtime's messages say when the GPU runs out of memory during run:
+# the BFC arena, a CUDA allocation, cuDNN or cuBLAS workspaces.
+OUT_OF_MEMORY = re.compile(r"Failed to allocate memory|out of memory|_ALLOC_FAILED")
 
 log = logging.getLogger(__name__)
 
@@ -87,27 +91,46 @@ def engine_of(providers):
 
 
 class OnnxYoloxDetector:
-    def __init__(self, session):
-        """session: an onnxruntime.InferenceSession of a YOLOX model, or a test double."""
-        self._session = session
+    def __init__(self, session, cpu_session=None, engine=None):
+        """session: an onnxruntime.InferenceSession of a YOLOX model, or a test double.
+        cpu_session(): the same model on CPUExecutionProvider, built only if the
+        GPU runs out of memory during a run (spec 4). engine: session's provider.
+        providers: every provider this detector has run on, in order."""
+        self._session, self._cpu_session = session, cpu_session
+        self.engine = engine
+        self.providers = [engine] if engine else []
         inp = session.get_inputs()[0]
         self._input, self.input_size = inp.name, int(inp.shape[-1])
         self._grids = _grids(self.input_size)
 
     @classmethod
     def load(cls, path):
-        """ONNX Runtime on CUDA, falling back to CPU (logged)."""
+        """ONNX Runtime on CUDA, falling back to CPU (logged), at load or on out of memory."""
         import onnxruntime
 
         onnxruntime.preload_dlls()  # the CUDA and cuDNN libraries of the nvidia-* wheels
         session = onnxruntime.InferenceSession(str(path), providers=[CUDA, CPU])
-        detector = cls(session)
-        detector.engine = engine_of(session.get_providers())
-        return detector
+        return cls(
+            session,
+            cpu_session=lambda: onnxruntime.InferenceSession(str(path), providers=[CPU]),
+            engine=engine_of(session.get_providers()),
+        )
+
+    def _run(self, x):
+        feed = {self._input: x[None]}
+        try:
+            return self._session.run(None, feed)[0]
+        except Exception as e:  # onnxruntime's RuntimeException is not a RuntimeError
+            if self.engine == CPU or self._cpu_session is None or not OUT_OF_MEMORY.search(str(e)):
+                raise
+        log.warning("ONNX Runtime ran out of GPU memory on %s; retrying on CPU: slow", self.engine)
+        self._session, self.engine = self._cpu_session(), CPU
+        self.providers.append(CPU)
+        return self._session.run(None, feed)[0]
 
     def detect(self, frame):
         x, r = preprocess(frame.image, self.input_size)
-        out = self._session.run(None, {self._input: x[None]})[0]
+        out = self._run(x)
         boxes, scores = decode(out, self.input_size, self._grids)
         boxes = boxes / r  # to source pixels before NMS, as the demo
         cls = scores.argmax(1)

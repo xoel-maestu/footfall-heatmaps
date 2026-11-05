@@ -55,3 +55,27 @@ def test_the_h1_config_parses():
     assert (c.detector, c.engine, c.tracker, c.input_size, c.foot_point) == (
         "yolox-s", "onnx-cuda", "bytetrack", 640, "auto-track",
     )  # fmt: skip
+
+
+def test_the_cache_records_the_provider_each_video_ran_on(tmp_path, rows, monkeypatch):
+    class OnCpuAfterOom(GroundTruthDetector):
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+    data = write_scene(tmp_path / "data", rows)
+    write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4", n=12)
+    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
+    monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
+    monkeypatch.setattr(container, "load_detector", lambda path: OnCpuAfterOom(rows))
+    (tmp_path / "h1.yaml").write_text(CONFIG)
+
+    assert cli.main(["eval", "--config", "h1.yaml", "--split", "tiny", "--resamples", "5"]) == 0
+
+    path = data / "cache/tracks/yolox-s-bytetrack-640-onnx-cuda-stride1/scene_001_camera_7.npz"
+    with np.load(path) as f:
+        meta = json.loads(str(f["meta"]))
+    assert meta["run"] == {"providers": OnCpuAfterOom.providers}
+    (report,) = (tmp_path / "reports").rglob("*.json")
+    provenance = json.loads(report.read_text())["tracks_provenance"]["h1"]["001/7"]
+    assert provenance["stored"]["run"] == {"providers": OnCpuAfterOom.providers}
