@@ -8,6 +8,9 @@ dependencies = [
     "numpy>=2.1",
     "pot>=0.9.5",
     "pyyaml>=6.0",
+    # perception: video decoding (OpenCvFileSource) and ByteTrack (ByteTrackTracker)
+    "opencv-python-headless>=4.10",
+    "trackers==2.6.1",
 ]
 
 [project.scripts]
@@ -30,6 +33,28 @@ baseline = [
     "torchvision>=0.29",
     "nvidia-ml-py>=13.0",
     "lap>=0.5.12",
+]
+
+# Model runtime of the perception pipeline (ONNX Runtime on CUDA, with the
+# CUDA 13 and cuDNN 9 libraries as wheels; NVML for the bench's VRAM). Heavy
+# and GPU-only, so not a default group: CI's tests use a fake detector.
+# Install locally with: uv sync --group runtime
+runtime = [
+    "onnxruntime-gpu[cuda,cudnn]>=1.31",
+    "nvidia-ml-py>=13.0",
+]
+
+[tool.uv]
+# trackers (and ultralytics) require opencv-python, the GUI build; it ships the
+# same cv2 module as opencv-python-headless and the two overwrite each other.
+# Only the headless build is installed: nothing here opens a window.
+# av (PyAV), required by supervision, is excluded too: its wheels bundle an
+# LGPL-3.0+ FFmpeg linked with GPL-2.0+ libx264 and libx265, and supervision
+# imports it only inside its video helpers, which nothing here calls
+# (tests/perception/infrastructure/test_dependencies.py).
+override-dependencies = [
+    "opencv-python; sys_platform == 'never'",
+    "av; sys_platform == 'never'",
 ]
 
 [tool.uv.sources]
@@ -79,19 +104,26 @@ source_modules = [
     "space_usage_heatmaps.evaluation.domain",
     "space_usage_heatmaps.floorplan.domain",
     "space_usage_heatmaps.occupancy.domain",
+    "space_usage_heatmaps.perception.domain",
 ]
 forbidden_modules = [
     "space_usage_heatmaps.evaluation.application",
     "space_usage_heatmaps.evaluation.infrastructure",
+    "space_usage_heatmaps.perception.application",
+    "space_usage_heatmaps.perception.infrastructure",
     "space_usage_heatmaps.cli",
 ]
 
 [[tool.importlinter.contracts]]
 name = "application imports only domain and application"
 type = "forbidden"
-source_modules = ["space_usage_heatmaps.evaluation.application"]
+source_modules = [
+    "space_usage_heatmaps.evaluation.application",
+    "space_usage_heatmaps.perception.application",
+]
 forbidden_modules = [
     "space_usage_heatmaps.evaluation.infrastructure",
+    "space_usage_heatmaps.perception.infrastructure",
     "space_usage_heatmaps.cli",
 ]
 
@@ -102,7 +134,9 @@ source_modules = [
     "space_usage_heatmaps.evaluation.domain",
     "space_usage_heatmaps.floorplan.domain",
     "space_usage_heatmaps.occupancy.domain",
+    "space_usage_heatmaps.perception.domain",
     "space_usage_heatmaps.evaluation.application",
+    "space_usage_heatmaps.perception.application",
 ]
 forbidden_modules = [
     "click", "grimp", "importlinter", "iniconfig", "markdown_it", "mdurl",
@@ -116,4 +150,8 @@ forbidden_modules = [
     "matplotlib", "mpl_toolkits", "mpmath", "networkx", "nvidia", "polars", "psutil",
     "pylab", "pynvml", "pyparsing", "requests", "setuptools", "sympy", "thop",
     "torchgen", "torchvision", "triton", "tzdata", "ultralytics_platform", "urllib3",
+    # perception: the default dependencies opencv-python-headless and trackers.
+    "av", "defusedxml", "deprecate", "supervision", "tqdm", "trackers",
+    # The optional runtime group (uv sync --group runtime).
+    "flatbuffers", "google",
 ]

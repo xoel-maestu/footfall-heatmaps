@@ -108,3 +108,29 @@ def test_provenance_records_the_stored_metadata_and_what_was_not_checked(tmp_pat
             "unverified": ["ultralytics"],
         }
     }
+
+
+class RunRecordingSource(CountingSource):
+    """A source that says how each computation ran (the provider of the detector)."""
+
+    def tracks(self, scene, camera):
+        self.last_run = {"providers": ["CUDAExecutionProvider", "CPUExecutionProvider"]}
+        return TRACKS
+
+
+def test_how_a_run_went_is_stored_and_reported_but_not_checked(tmp_path, capsys):
+    import json
+
+    meta = {"engine": "onnx-cuda"}
+    first = CachedTrackSource(RunRecordingSource, tmp_path, meta)
+    first.tracks("071", "645")
+    again = CachedTrackSource(CountingSource, tmp_path, meta)
+    CountingSource.made = 0
+    again.tracks("071", "645")
+
+    run = {"providers": ["CUDAExecutionProvider", "CPUExecutionProvider"]}
+    with np.load(tmp_path / "scene_071_camera_645.npz") as f:
+        assert json.loads(str(f["meta"])) == meta | {"run": run}
+    assert CountingSource.made == 0  # "run" is not part of the recipe: still a hit
+    assert first.provenance["071/645"]["stored"]["run"] == run
+    assert again.provenance["071/645"]["stored"]["run"] == run
