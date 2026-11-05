@@ -76,6 +76,7 @@ def evaluate_config(reader, scenes, runs, cell, n_resamples=1000, seed=0):
                 config.min_implied_height_m,
                 t.track_ids[keep],
                 t.frames[keep],
+                config.track_heights(),
             )
             fps = cam.fps / config.stride
             preds.append(layers(t.track_ids[keep], t.frames[keep], xs, ys, fps))
