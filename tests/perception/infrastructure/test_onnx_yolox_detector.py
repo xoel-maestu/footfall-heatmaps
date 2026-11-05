@@ -199,3 +199,42 @@ def test_boxes_are_clipped_to_the_image():
     d = OnnxYoloxDetector(session).detect(frame(h=110, w=128))
 
     np.testing.assert_allclose(d.boxes, [[0, 0, 24, 24], [104, 104, 128, 110]])
+
+
+def test_the_release_model_is_invariant_to_grey_padding_below_a_real_frame():
+    """Padding at the bottom with the letterbox's own 114 grey, by a multiple of
+    the resize step (1080p: 3 rows per input row), leaves the letterboxed input
+    unchanged where the image is: the same people, boxes and scores. Fails if
+    the boxes are not mapped back with the ratio, or the padding is not 114 at
+    the bottom. Needs the runtime group, the weights and scene 071's video."""
+    import os
+    from pathlib import Path
+
+    import cv2
+
+    from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
+        NvidiaMtmcReader,
+    )
+
+    pytest.importorskip("onnxruntime", reason="runtime group not installed")
+    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    data = data.expanduser()
+    weights = data / "models" / "yolox_s.onnx"
+    video = NvidiaMtmcReader(data).video("071", "645")
+    if not weights.exists() or not video.exists():
+        pytest.skip("no YOLOX-s weights or no scene 071 video")
+    cap = cv2.VideoCapture(str(video))
+    ok, image = cap.read()  # in memory only
+    cap.release()
+    assert ok and image.shape == (1080, 1920, 3)
+    padded = np.full((1080 + 210, 1920, 3), 114, np.uint8)
+    padded[:1080] = image
+    detector = OnnxYoloxDetector.load(weights)
+
+    a = detector.detect(Frame(0, 0.0, image))
+    b = detector.detect(Frame(0, 0.0, padded))
+
+    assert (a.scores > 0.5).sum() >= 3  # people in the first frame of scene 071
+    order_a, order_b = np.lexsort(a.boxes.T[::-1]), np.lexsort(b.boxes.T[::-1])
+    np.testing.assert_allclose(b.boxes[order_b], a.boxes[order_a], atol=0.5)
+    np.testing.assert_allclose(b.scores[order_b], a.scores[order_a], atol=1e-3)
