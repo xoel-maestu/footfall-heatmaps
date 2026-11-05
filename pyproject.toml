@@ -48,7 +48,14 @@ runtime = [
 # trackers (and ultralytics) require opencv-python, the GUI build; it ships the
 # same cv2 module as opencv-python-headless and the two overwrite each other.
 # Only the headless build is installed: nothing here opens a window.
-override-dependencies = ["opencv-python; sys_platform == 'never'"]
+# av (PyAV), required by supervision, is excluded too: its wheels bundle an
+# LGPL-3.0+ FFmpeg linked with GPL-2.0+ libx264 and libx265, and supervision
+# imports it only inside its video helpers, which nothing here calls
+# (tests/perception/infrastructure/test_dependencies.py).
+override-dependencies = [
+    "opencv-python; sys_platform == 'never'",
+    "av; sys_platform == 'never'",
+]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cu130", group = "baseline" }]

@@ -28,7 +28,6 @@ Transitive, pulled by the ones above:
 |---|---|---|
 | supervision | MIT | trackers (its `Detections` type) |
 | scipy | BSD-3-Clause | pot, trackers (Hungarian assignment) |
-| av | BSD-3-Clause (bundles FFmpeg, LGPL-2.1) | supervision; not called here |
 | matplotlib, contourpy, cycler, kiwisolver, fonttools, pyparsing, python-dateutil, pillow | PSF-based (matplotlib), BSD, MIT, MIT-CMU (pillow) | supervision; not called here |
 | requests, urllib3, idna, charset-normalizer, certifi | Apache-2.0, MIT, BSD-3-Clause, MIT, MPL-2.0 | supervision, trackers; not called here |
 | tqdm | MPL-2.0 AND MIT | supervision |
@@ -45,13 +44,20 @@ Notes:
 
 - MPL-2.0 (certifi, tqdm) is file-level copyleft: it applies to changes of
   those files, which are used unmodified.
-- The FFmpeg inside the OpenCV and PyAV wheels is LGPL-2.1, dynamically
-  linked by those wheels and used unmodified.
+- The FFmpeg inside the OpenCV wheel is LGPL-2.1, dynamically linked by that
+  wheel and used unmodified.
 - The CUDA and cuDNN libraries are NVIDIA's runtime for the GPU, like the
   driver: not Apache, MIT or BSD, and not replaceable on an NVIDIA card. The
   CPU fallback of ONNX Runtime runs without them.
 - `opencv-python` (the GUI build that trackers and ultralytics require) is
   overridden in `pyproject.toml` and never installed.
+- `av` (PyAV), which supervision requires, is overridden the same way and
+  never installed. PyAV itself is BSD-3-Clause, but its wheels bundle an
+  FFmpeg (libavcodec and the rest) under LGPL-3.0+ that links libx264 and
+  libx265, both GPL-2.0+. supervision imports it only inside its video
+  helpers, which nothing here calls;
+  `tests/perception/infrastructure/test_dependencies.py` checks that the
+  perception adapters never import it and that the lock never installs it.
 
 ## Model weights
 
