@@ -13,7 +13,8 @@ a dependency:
   (source pixels, before NMS);
 - class-agnostic NMS (the demo's default): each box takes its best class,
   score > 0.1, IoU > 0.45 suppressed (areas with the demo's +1); then only
-  boxes whose best class is person (COCO 0) are kept.
+  boxes whose best class is person (COCO 0) are kept;
+- then clipped to the image (not in the demo, which draws them unclipped).
 
 Only the model file goes through ONNX Runtime; nothing else in it is run.
 """
@@ -138,4 +139,7 @@ class OnnxYoloxDetector:
         valid = best > SCORE_THR
         boxes, best, cls = boxes[valid], best[valid], cls[valid]
         keep = [i for i in nms(boxes, best, NMS_THR) if cls[i] == PERSON]
-        return Detections(boxes[keep].reshape(-1, 4), best[keep].astype(float))
+        h, w = frame.image.shape[:2]
+        # Clipped after NMS, so the NMS stays the demo's.
+        kept = np.clip(boxes[keep].reshape(-1, 4), 0, [w, h, w, h])
+        return Detections(kept, best[keep].astype(float))

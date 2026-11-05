@@ -79,3 +79,11 @@ def test_the_cache_records_the_provider_each_video_ran_on(tmp_path, rows, monkey
     (report,) = (tmp_path / "reports").rglob("*.json")
     provenance = json.loads(report.read_text())["tracks_provenance"]["h1"]["001/7"]
     assert provenance["stored"]["run"] == {"providers": OnCpuAfterOom.providers}
+
+
+def test_the_recipe_names_the_opencv_build_that_decodes_and_resizes():
+    from importlib import metadata
+
+    meta = container.pipeline_metadata("yolox-s", "bytetrack", 640, 1)
+
+    assert meta["opencv"] == metadata.version("opencv-python-headless")

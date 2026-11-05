@@ -42,7 +42,9 @@ def pipeline_metadata(detector, tracker, input_size, stride):
         "weights_sha256": WEIGHTS[detector].sha256,
         "engine": ENGINE,
         "onnxruntime": _version("onnxruntime-gpu"),
+        "opencv": _version("opencv-python-headless"),  # decoding and the letterbox resize
         "preprocess": "yolox letterbox, top-left, pad 114, BGR 0-255",
+        "postprocess": "boxes clipped to the image",
         "score_thr": yolox.SCORE_THR,
         "nms_thr": yolox.NMS_THR,
         "nms": "class-agnostic",

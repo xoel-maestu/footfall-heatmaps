@@ -188,3 +188,14 @@ def test_out_of_memory_on_cpu_is_raised():
 def test_a_session_without_a_cpu_fallback_raises_out_of_memory():
     with pytest.raises(RuntimeError, match="Failed to allocate"):
         OnnxYoloxDetector(OutOfMemorySession([])).detect(frame())
+
+
+def test_boxes_are_clipped_to_the_image():
+    # Cell (0, 0): centre (4, 4), 16 px in the 64 px input -> (-8, -8, 24, 24) in source px;
+    # on a 110 x 128 image (ratio 0.5) the last cell reaches past its bottom right.
+    last = 8 * 8 - 1  # cell (7, 7): centre (60, 60) -> (104, 104, 136, 136)
+    session = FakeSession([(0, 0, 0.9), (last, 0, 0.8)])
+
+    d = OnnxYoloxDetector(session).detect(frame(h=110, w=128))
+
+    np.testing.assert_allclose(d.boxes, [[0, 0, 24, 24], [104, 104, 128, 110]])
