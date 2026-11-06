@@ -62,7 +62,7 @@ def test_live_has_the_contract_shape(serve):
 
     assert status == 200 and kind.startswith("application/json")
     d = json.loads(body)
-    assert set(d) == {"cell_m", "origin", "shape", "dwell", "passage", "t"}
+    assert set(d) == {"cell_m", "origin", "shape", "dwell", "passage", "t", "ended"}
     assert d["cell_m"] == 0.5 and d["origin"] == [-1.0, 2.0] and d["shape"] == [2, 4]
     assert np.asarray(d["dwell"]).shape == (2, 4) and np.asarray(d["passage"]).shape == (2, 4)
     assert d["dwell"][0][0] > 0 and d["passage"][0][0] > 0
@@ -183,3 +183,36 @@ def test_reading_live_writes_nothing_to_disk(serve, tmp_path):
     get(server, "/api/live?camera=645")
 
     assert list(tmp_path.iterdir()) == []
+
+
+def test_live_says_when_the_source_ended(serve):
+    recorder, live = recording()
+    recorder.add(T0, np.arange(5), np.full(5, -0.9), np.full(5, 2.1), 1.0)
+    server = serve(live)
+    assert json.loads(get(server, "/api/live?camera=645")[2])["ended"] is None
+
+    live.end(T0 + 30)
+    status, _, body = get(server, "/api/live?camera=645")
+
+    assert status == 200 and json.loads(body)["ended"] == T0 + 30
+
+
+def test_latest_slot_is_the_newest_start_of_this_camera(serve, tmp_path):
+    server = serve()
+    assert json.loads(get(server, "/api/slots/latest?camera=645")[2]) == {"start": None}
+
+    store = SqliteSlotStore(tmp_path / "x.db")
+    grid = np.zeros((2, 4))
+    store.write(
+        [
+            SlotGrid("645", T0 - 3 * 86400, 0.5, "dwell", grid, 0, False),
+            SlotGrid("645", T0, 0.5, "dwell", grid, 0, False),
+            SlotGrid("071", T0 + 86400, 0.5, "dwell", grid, 0, False),
+        ]
+    )
+    store.close()
+
+    status, _, body = get(server, "/api/slots/latest?camera=645")
+
+    assert status == 200 and json.loads(body) == {"start": "2026-11-06T09:00:00Z"}
+    assert get(server, "/api/slots/latest?camera=071")[0] == 404

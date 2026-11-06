@@ -3,11 +3,14 @@
 GET /                  the static page (web/static/index.html)
 GET /api/live?camera=  the live layer of the recorder running in this process, decayed
                        to now and k-suppressed (R5); memory only, never written
-                       anywhere; 503 once the recorder has failed
+                       anywhere; "ended" is when a file source was read to its
+                       end (epoch seconds) or null; 503 once the recorder has failed
 GET /api/slots?camera=&from=&to=
                        persisted 15-min slots starting in [from, to), read through
                        read_slots (k-suppressed, R5); times are ISO 8601 with a zone
                        or epoch seconds, clamped to [0, END_OF_TIME]
+GET /api/slots/latest?camera=
+                       {"start": the newest persisted slot start, or null}
 """
 
 import html
@@ -36,6 +39,7 @@ class LiveSource:
         self._lock = threading.Lock()
         self._recorder = None
         self.error = None  # set by fail(): the recorder thread is gone
+        self.ended = None  # set by end(): the file source was read to its end
 
     def attach(self, recorder):
         self._recorder = recorder
@@ -45,6 +49,10 @@ class LiveSource:
         """The recorder stopped on error: the layer would only decay from here.
         Only the exception's type is kept: its message may hold the source URL."""
         self.error = type(error).__name__
+
+    def end(self, t):
+        """The file source ended normally at wall time t: the layer only decays from here."""
+        self.ended = t
 
     def at(self, t):
         """(dwell, passage) at t, or None before a recorder is attached."""
@@ -101,13 +109,14 @@ def _frame(spec):
     return {"cell_m": spec.cell_m, "origin": [spec.origin_x, spec.origin_y]}
 
 
-def live_payload(spec, dwell, passage, t):
+def live_payload(spec, dwell, passage, t, ended=None):
     return {
         **_frame(spec),
         "shape": [spec.ny, spec.nx],
         "dwell": _grid(dwell),
         "passage": _grid(passage),
         "t": t,
+        "ended": ended,
     }
 
 
@@ -142,12 +151,14 @@ def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time
             query = {k: v[-1] for k, v in parse_qs(url.query).items()}
             if url.path in ("/", "/index.html"):
                 return self._send(200, "text/html; charset=utf-8", page)
-            if url.path not in ("/api/live", "/api/slots"):
+            if url.path not in ("/api/live", "/api/slots", "/api/slots/latest"):
                 return self._json(404, {"error": "not found"})
             if query.get("camera") != camera_id:
                 return self._json(404, {"error": f"unknown camera; this server has {camera_id}"})
             if url.path == "/api/live":
                 return self._live()
+            if url.path == "/api/slots/latest":
+                return self._latest()
             return self._slots(query)
 
         def _live(self):
@@ -158,7 +169,15 @@ def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time
             layers = None if live is None else live.at(t)
             if layers is None:
                 return self._json(404, {"error": "no live source in this process"})
-            return self._json(200, live_payload(spec, *layers, t))
+            return self._json(200, live_payload(spec, *layers, t, live.ended))
+
+        def _latest(self):
+            store = SqliteSlotStore(db_path)
+            try:
+                start = store.latest_start(camera_id)
+            finally:
+                store.close()
+            return self._json(200, {"start": None if start is None else _iso(start)})
 
         def _slots(self, query):
             try:

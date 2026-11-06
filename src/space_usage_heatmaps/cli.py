@@ -378,6 +378,8 @@ def start_serve(args):
         def record():
             try:
                 run_record(args, live, stop)
+                if not args.source.startswith("rtsp://") and not stop.is_set():
+                    live.end(time.time())
             except CAMERA_ERRORS as e:
                 live.fail(e)
                 print(f"space-usage: error: {e}", file=sys.stderr)
