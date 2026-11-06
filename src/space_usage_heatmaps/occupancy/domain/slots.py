@@ -2,7 +2,7 @@
 
 A slot is one floor grid per layer over a UTC wall-clock quarter: dwell in
 person-seconds, passage in distinct ephemeral ids per cell, and n_unique, the
-distinct ids of the whole slot. Nothing per track outlives the slot.
+distinct ids of the whole slot, 0 below k. Nothing per track outlives the slot.
 """
 
 from collections.abc import Sequence
@@ -28,7 +28,7 @@ class SlotGrid:
     cell_m: float
     layer: str  # one of LAYERS
     grid: np.ndarray  # (ny, nx) floats
-    n_unique: int  # distinct ids in the slot
+    n_unique: int  # distinct ids in the slot; 0 below k (R5)
     incomplete: bool  # the source did not cover the whole slot
 
 
@@ -38,9 +38,15 @@ def suppress(dwell, passage, k=K_MIN_PEOPLE):
     return np.where(hidden, 0.0, dwell), np.where(hidden, 0.0, passage)
 
 
+def suppress_count(n, k=K_MIN_PEOPLE):
+    """R5: a slot's count of distinct people reads as 0 below k."""
+    return n if n >= k else 0
+
+
 class SlotStore(Protocol):
     def write(self, slots: Sequence[SlotGrid]) -> None:
-        """Insert, or replace a slot with the same camera, start, cell and layer."""
+        """Insert, or replace a slot with the same camera, start, cell and layer,
+        unless the stored one is complete and the new one is not."""
         ...
 
     def read(self, camera_id: str, start_utc: int, end_utc: int) -> list[SlotGrid]:
@@ -82,7 +88,7 @@ class SlotAccumulator:
                 self.spec.cell_m,
                 layer,
                 grid,
-                len(self.ids),
+                suppress_count(len(self.ids), k),
                 self.incomplete,
             )
             for layer, grid in zip(LAYERS, (dwell, passage), strict=True)

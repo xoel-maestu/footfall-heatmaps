@@ -87,11 +87,12 @@ def test_n_unique_counts_distinct_ids_over_the_slot():
     store = SqliteSlotStore(":memory:")
     r = recorder(store)
 
-    for _ in range(10):  # the same three ids, frame after frame
-        r.add(T0, np.array([1, 2, 3]), np.array([0.1, 0.6, 1.1]), np.full(3, 0.1), seconds=0.1)
+    ids, xs = np.array([1, 2, 3, 4, 5, 6]), np.array([0.1, 0.6, 1.1, 0.1, 0.6, 1.1])
+    for _ in range(10):  # the same six ids, frame after frame
+        r.add(T0, ids, xs, np.full(6, 0.1), seconds=0.1)
     r.close()
 
-    assert {s.n_unique for s in store.read("cam", T0, T0 + SLOT_S)} == {3}
+    assert {s.n_unique for s in store.read("cam", T0, T0 + SLOT_S)} == {6}
 
 
 def test_live_layer_halves_every_60_seconds():

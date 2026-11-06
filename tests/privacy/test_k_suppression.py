@@ -77,3 +77,35 @@ def test_a_dwell_row_without_its_passage_row_reads_empty():
     (out,) = read_slots(store, "cam", T0, T0 + 900)
 
     assert not out.grid.any()
+
+
+def test_n_unique_below_k_is_written_as_zero():
+    """A slot with four people would otherwise say "four people were here" beside empty grids."""
+    store = SqliteSlotStore(":memory:")
+    r = RecordSlots(store, "cam", SPEC, retention_days=90, now=lambda: T0)
+    r.add(T0, np.arange(4), np.full(4, 0.1), np.full(4, 0.1), seconds=1.0)
+    r.close()
+
+    assert {s.n_unique for s in store.read("cam", T0, T0 + 900)} == {0}
+
+
+def test_n_unique_at_k_is_written():
+    store = SqliteSlotStore(":memory:")
+    r = RecordSlots(store, "cam", SPEC, retention_days=90, now=lambda: T0)
+    r.add(T0, np.arange(5), np.full(5, 0.1), np.full(5, 0.1), seconds=1.0)
+    r.close()
+
+    assert {s.n_unique for s in store.read("cam", T0, T0 + 900)} == {5}
+
+
+def test_the_read_path_empties_n_unique_below_k_even_if_stored():
+    store = SqliteSlotStore(":memory:")
+    empty = np.zeros((2, 4))
+    store.write(
+        [
+            SlotGrid("cam", T0, 0.5, "dwell", empty, 3, False),
+            SlotGrid("cam", T0, 0.5, "passage", empty, 3, False),
+        ]
+    )
+
+    assert {s.n_unique for s in read_slots(store, "cam", T0, T0 + 900)} == {0}
