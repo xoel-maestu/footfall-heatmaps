@@ -119,6 +119,52 @@ def test_slots_filter_by_time_and_reject_a_bad_time(serve, tmp_path):
     assert get(server, "/api/slots?camera=999")[0] == 404
 
 
+@pytest.mark.parametrize("q", ["from=inf", "from=-inf", "to=nan"])
+def test_a_time_that_is_not_finite_is_a_400(serve, q):
+    """Regression: these dropped the connection (OverflowError in int(float(...)))."""
+    assert get(serve(), f"/api/slots?camera=645&{q}")[0] == 400
+
+
+@pytest.mark.parametrize(
+    "q, n",
+    [("from=1e30", 0), ("to=99999999999999999999", 1), ("from=-1e30", 1), ("to=-1e30", 0)],
+)
+def test_a_time_out_of_range_is_clamped_not_a_dropped_connection(serve, tmp_path, q, n):
+    """Regression: these dropped the connection (OverflowError in the store's _iso)."""
+    store = SqliteSlotStore(tmp_path / "x.db")
+    store.write(
+        [
+            SlotGrid("645", T0, 0.5, layer, np.zeros((2, 4)), 0, False)
+            for layer in ("dwell", "passage")
+        ]
+    )
+    store.close()
+
+    status, _, body = get(serve(), f"/api/slots?camera=645&{q}")
+
+    assert status == 200 and len(json.loads(body)["slots"]) == n
+
+
+def test_live_is_503_once_the_recorder_failed(serve):
+    recorder, live = recording()
+    recorder.add(T0, np.arange(5), np.full(5, -0.9), np.full(5, 2.1), 1.0)
+    server = serve(live)
+    assert get(server, "/api/live?camera=645")[0] == 200
+
+    live.fail(RuntimeError("boom"))
+    status, kind, body = get(server, "/api/live?camera=645")
+
+    assert status == 503 and kind.startswith("application/json")
+    assert "recorder stopped" in json.loads(body)["error"]
+
+
+def test_live_is_503_when_the_recorder_failed_before_attaching(serve):
+    live = LiveSource()
+    live.fail(OSError("cannot open the source"))
+
+    assert get(serve(live), "/api/live?camera=645")[0] == 503
+
+
 def test_the_page_is_served_with_the_layer_names(serve):
     status, kind, body = get(serve(), "/")
 

@@ -2,15 +2,17 @@
 
 GET /                  the static page (web/static/index.html)
 GET /api/live?camera=  the live layer of the recorder running in this process, decayed
-                       to now; memory only, never written anywhere
+                       to now and k-suppressed (R5); memory only, never written
+                       anywhere; 503 once the recorder has failed
 GET /api/slots?camera=&from=&to=
                        persisted 15-min slots starting in [from, to), read through
                        read_slots (k-suppressed, R5); times are ISO 8601 with a zone
-                       or epoch seconds
+                       or epoch seconds, clamped to [0, END_OF_TIME]
 """
 
 import html
 import json
+import math
 import threading
 import time
 from datetime import UTC, datetime
@@ -33,10 +35,16 @@ class LiveSource:
     def __init__(self):
         self._lock = threading.Lock()
         self._recorder = None
+        self.error = None  # set by fail(): the recorder thread is gone
 
     def attach(self, recorder):
         self._recorder = recorder
         return _Locked(recorder, self._lock)
+
+    def fail(self, error):
+        """The recorder stopped on error: the layer would only decay from here.
+        Only the exception's type is kept: its message may hold the source URL."""
+        self.error = type(error).__name__
 
     def at(self, t):
         """(dwell, passage) at t, or None before a recorder is attached."""
@@ -71,15 +79,18 @@ def _iso(t):
 
 
 def parse_time(value):
-    """Epoch seconds of an ISO 8601 time with a zone, or of epoch seconds."""
+    """Epoch seconds of an ISO 8601 time with a zone, or of epoch seconds,
+    clamped to [0, END_OF_TIME]; ValueError if it is neither or not finite."""
     try:
-        return int(float(value))
+        t = float(value)
     except ValueError:
-        pass
-    t = datetime.fromisoformat(value.replace("Z", "+00:00"))  # ValueError if not a time
-    if t.tzinfo is None:
-        raise ValueError(f"time {value!r} needs a zone")
-    return int(t.timestamp())
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))  # ValueError if not a time
+        if when.tzinfo is None:
+            raise ValueError(f"time {value!r} needs a zone") from None
+        t = when.timestamp()
+    if not math.isfinite(t):
+        raise ValueError(f"time {value!r} is not finite")
+    return int(min(max(t, 0), END_OF_TIME))
 
 
 def _grid(a):
@@ -141,6 +152,9 @@ def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time
 
         def _live(self):
             t = clock()
+            if live is not None and live.error is not None:
+                error = f"the recorder stopped ({live.error}); see the server log"
+                return self._json(503, {"error": error})
             layers = None if live is None else live.at(t)
             if layers is None:
                 return self._json(404, {"error": "no live source in this process"})
