@@ -13,27 +13,29 @@ dwell maps on 0.5 m cells, the people the camera can see, 5 scenes per split,
 95 % paired block-bootstrap CI. Every parameter was chosen on the tune scenes
 (071 to 075). The sealed scenes (076 to 080) were scored once, at the end.
 
-| Metric | Tune | Sealed | Sealed vs tune | Target | Sealed meets it |
+| Metric | Tune | Sealed | Degradation (positive = worse) | Target | Sealed meets it |
 |---|---|---|---|---|---|
 | TVD | 0.308 [0.294, 0.324] | 0.419 [0.402, 0.436] | +36 % | ≤ 0.30 | no |
 | Mass error | 0.154 [0.142, 0.166] | 0.297 [0.284, 0.310] | +92 % | ≤ 0.10 | no |
 | Zone WAPE (2 m) | 0.231 [0.211, 0.252] | 0.380 [0.351, 0.412] | +65 % | ≤ 0.30 | no |
 | EMD | 1.50 m [1.37, 1.64] | 3.19 m [3.03, 3.36] | +113 % | ≤ 1.2 m | no |
-| HOTA / IDF1 | 0.237 / 0.182 | 0.218 / 0.189 | +8 % / −4 % | guard only | – |
+| HOTA / IDF1 | 0.237 / 0.182 | 0.218 / 0.189 | +8 % / −4 % | information only | – |
 
 E1 is not accepted. The sealed scenes miss the targets and the rule that
 sealed stays within 20 % of tune. The sealed scenes are harder for every
 configuration, not only the tuned one: the iteration 0 baseline also degrades,
 from TVD 0.629 to 0.671 and mass error 0.273 to 0.458. Two scenes carry most of
 the gap: 078 (TVD 0.602) and 080 (0.477). Each step accepted on tune keeps its
-effect on sealed:
+effect on sealed, and none of them lowers HOTA or IDF1 on sealed by more than
+1 point against the config it replaced (ΔHOTA / ΔIDF1 in points, positive is
+better):
 
-| Step | ΔTVD tune | ΔTVD sealed |
-|---|---|---|
-| Auto-track foot point vs box centre (iteration 0) | −0.248 [−0.264, −0.232] | −0.191 [−0.203, −0.180] |
-| YOLOX-s detector | −0.026 [−0.034, −0.018] | −0.023 [−0.029, −0.016] |
-| Input 640 → 960 | −0.047 [−0.056, −0.038] | −0.038 [−0.045, −0.031] |
-| TensorRT fp16 (speed, no accuracy loss) | −0.001 [−0.002, 0.000] | −0.001 [−0.003, −0.000] |
+| Step | ΔTVD tune | ΔTVD sealed | ΔHOTA / ΔIDF1 sealed | Tracking guard |
+|---|---|---|---|---|
+| Auto-track foot point vs box centre (iteration 0) | −0.248 [−0.264, −0.232] | −0.191 [−0.203, −0.180] | +0.0 / +0.0 | holds |
+| YOLOX-s detector | −0.026 [−0.034, −0.018] | −0.023 [−0.029, −0.016] | +3.3 / +3.6 | holds |
+| Input 640 → 960 | −0.047 [−0.056, −0.038] | −0.038 [−0.045, −0.031] | +2.0 / +1.6 | holds |
+| TensorRT fp16 (speed, no accuracy loss) | −0.001 [−0.002, 0.000] | −0.001 [−0.003, −0.000] | +0.1 / +0.0 | holds |
 
 What remains is mostly occlusion. One camera does not see people behind
 shelves: against every person on the floor, TVD is 0.450 on tune and 0.557 on
