@@ -27,6 +27,7 @@ from space_usage_heatmaps.perception.infrastructure.onnx_session import (  # noq
     CPU,
     CUDA,
     OnnxDetector,
+    clip_to_image,
     engine_of,
 )
 
@@ -112,7 +113,5 @@ class OnnxYoloxDetector(OnnxDetector):
         valid = best > SCORE_THR
         boxes, best, cls = boxes[valid], best[valid], cls[valid]
         keep = [i for i in nms(boxes, best, NMS_THR) if cls[i] == PERSON]
-        h, w = frame.image.shape[:2]
         # Clipped after NMS, so the NMS stays the demo's.
-        kept = np.clip(boxes[keep].reshape(-1, 4), 0, [w, h, w, h])
-        return Detections(kept, best[keep].astype(float))
+        return Detections(clip_to_image(boxes[keep], frame.image.shape), best[keep].astype(float))

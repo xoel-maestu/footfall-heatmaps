@@ -6,6 +6,8 @@ Only the model file goes through ONNX Runtime; nothing else in it is run.
 import logging
 import re
 
+import numpy as np
+
 CUDA, CPU = "CUDAExecutionProvider", "CPUExecutionProvider"
 # What ONNX Runtime's messages say when the GPU runs out of memory during run:
 # the BFC arena, a CUDA allocation, cuDNN or cuBLAS workspaces.
@@ -19,6 +21,12 @@ def engine_of(providers):
     if providers[0] != CUDA:
         log.warning("ONNX Runtime is running the detector on %s, not CUDA: slow", providers[0])
     return providers[0]
+
+
+def clip_to_image(boxes, shape):
+    """(N, 4) x1 y1 x2 y2 boxes clipped to an image of shape (h, w, ...)."""
+    h, w = shape[:2]
+    return np.clip(np.reshape(boxes, (-1, 4)), 0, [w, h, w, h])
 
 
 class OnnxDetector:
@@ -47,14 +55,15 @@ class OnnxDetector:
             engine=engine_of(session.get_providers()),
         )
 
-    def _run(self, feed):
-        """Every output of the model for feed (input name -> array)."""
+    def _run(self, feed, outputs=None):
+        """The model's outputs named in outputs (all, in graph order, if None)
+        for feed (input name -> array)."""
         try:
-            return self._session.run(None, feed)
+            return self._session.run(outputs, feed)
         except Exception as e:  # onnxruntime's RuntimeException is not a RuntimeError
             if self.engine == CPU or self._cpu_session is None or not OUT_OF_MEMORY.search(str(e)):
                 raise
         log.warning("ONNX Runtime ran out of GPU memory on %s; retrying on CPU: slow", self.engine)
         self._session, self.engine = self._cpu_session(), CPU
         self.providers.append(CPU)
-        return self._session.run(None, feed)
+        return self._session.run(outputs, feed)

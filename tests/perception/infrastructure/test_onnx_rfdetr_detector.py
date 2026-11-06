@@ -84,11 +84,13 @@ class FakeSession:
     def get_inputs(self):
         return [type("I", (), {"name": "input", "shape": [1, 3, self.size, self.size]})]
 
-    def run(self, _, feed):
+    def run(self, names, feed):
         self.feeds.append(feed)
         logits = np.full((1, 1, 91), -20.0, np.float32)
         logits[0, 0, PERSON] = 3.0
-        return [np.array([[[0.5, 0.5, 0.5, 0.5]]], np.float32), logits]
+        # Graph order differs from the order asked for: outputs are read by name.
+        outputs = {"labels": logits, "dets": np.array([[[0.5, 0.5, 0.5, 0.5]]], np.float32)}
+        return [outputs[n] for n in names or outputs]
 
 
 def test_detect_maps_normalised_boxes_to_source_pixels():

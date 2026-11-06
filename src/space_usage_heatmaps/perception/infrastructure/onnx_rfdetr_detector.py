@@ -22,9 +22,10 @@ import cv2
 import numpy as np
 
 from space_usage_heatmaps.perception.domain.frame import Detections
-from space_usage_heatmaps.perception.infrastructure.onnx_session import OnnxDetector
+from space_usage_heatmaps.perception.infrastructure.onnx_session import OnnxDetector, clip_to_image
 
 SCORE_THR = 0.1
+OUTPUTS = ["dets", "labels"]  # the names rfdetr's exporter gives the graph's outputs
 PERSON = 1  # COCO category id: the checkpoint's 91 slots are the sparse ids
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 STD = np.array([0.229, 0.224, 0.225], np.float32)
@@ -43,13 +44,15 @@ def postprocess(dets, logits, shape):
     q, c = logits.shape
     scores = 1 / (1 + np.exp(-logits.clip(-88, 88)))
     flat = scores.reshape(-1)
+    # Top Q pairs: the helpers' num_select=None caps at the model's query count
+    # (rfdetr's num_queries, 300 for Nano), which is also predict()'s num_select (300).
     top = np.lexsort((np.arange(flat.size), -flat))[:q]  # by score, ties by index
     top = top[(flat[top] > SCORE_THR) & (top % c == PERSON)]
     cx, cy, w, h = boxes[top // c].T
     hh, ww = shape[:2]
     scale = np.array([ww, hh, ww, hh], float)
     xyxy = np.stack([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], axis=1) * scale
-    return Detections(np.clip(xyxy, 0, scale).reshape(-1, 4), flat[top].astype(float))
+    return Detections(clip_to_image(xyxy, shape), flat[top].astype(float))
 
 
 def recipe():
@@ -70,5 +73,5 @@ def load(path):
 class OnnxRfdetrDetector(OnnxDetector):
     def detect(self, frame):
         x = preprocess(frame.image, self.input_size)
-        dets, logits = self._run({self._input: x[None]})[:2]
+        dets, logits = self._run({self._input: x[None]}, OUTPUTS)
         return postprocess(dets, logits, frame.image.shape)

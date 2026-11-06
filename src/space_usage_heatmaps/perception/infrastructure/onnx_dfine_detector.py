@@ -22,7 +22,7 @@ import numpy as np
 from PIL import Image
 
 from space_usage_heatmaps.perception.domain.frame import Detections
-from space_usage_heatmaps.perception.infrastructure.onnx_session import OnnxDetector
+from space_usage_heatmaps.perception.infrastructure.onnx_session import OnnxDetector, clip_to_image
 
 SCORE_THR = 0.1  # the YOLOX recipe's: low boxes feed ByteTrack's second association
 PERSON = 0  # COCO contiguous index
@@ -47,8 +47,7 @@ def postprocess(labels, boxes, scores, ratio, pad, shape):
     keep = (labels == PERSON) & (scores > SCORE_THR)
     pad_w, pad_h = pad
     out = (boxes[keep].astype(float) - [pad_w, pad_h, pad_w, pad_h]) / ratio
-    h, w = shape[:2]
-    return Detections(np.clip(out, 0, [w, h, w, h]).reshape(-1, 4), scores[keep].astype(float))
+    return Detections(clip_to_image(out, shape), scores[keep].astype(float))
 
 
 def recipe():
