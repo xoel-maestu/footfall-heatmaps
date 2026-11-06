@@ -19,7 +19,7 @@ Default dependencies (`uv sync`) and the `runtime` group (`uv sync --group runti
 | pyyaml | 6.0.3 | MIT | `configs/*.yaml` |
 | opencv-python-headless | 5.0.0.93 | Apache-2.0 (bundles FFmpeg, LGPL-2.1) | video decoding, letterbox resize |
 | trackers | 2.6.1 | Apache-2.0 | ByteTrack (`ByteTrackTracker`) |
-| onnxruntime-gpu | 1.31.1 | MIT | runs the YOLOX ONNX model (`runtime` group) |
+| onnxruntime-gpu | 1.31.1 | MIT | runs the YOLOX, D-FINE and RF-DETR ONNX models (`runtime` group) |
 | nvidia-ml-py | 13.615.71 | BSD | VRAM in `space-usage bench` (`runtime` group) |
 | pillow | 13.0.0 | MIT-CMU | D-FINE's letterbox resize, its official bilinear filter (`runtime` group; also pulled by matplotlib) |
 
@@ -103,8 +103,10 @@ RF-DETR's exporter has its own locked environment, `scripts/export/rfdetr`
 trackers dependency): rfdetr 1.11.2 (Apache-2.0) with transformers 5.22.1,
 huggingface-hub, tokenizers, safetensors (Apache-2.0), pydantic and
 supervision (MIT), torch and torchvision as above. Its checkpoint download is
-the only one from outside GitHub (`EXPORT_HOSTS`); the run path's allowlist
-stays GitHub's release hosts.
+the only weights download from outside GitHub (`EXPORT_HOSTS`); the run path's
+allowlist stays GitHub's release hosts. Installing that environment (`uv run
+--project scripts/export/rfdetr`) fetches packages from PyPI and torch and
+torchvision from `download.pytorch.org`, as the `export` group does.
 
 ## Evaluation only
 
