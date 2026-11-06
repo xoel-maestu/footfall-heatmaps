@@ -165,14 +165,19 @@ def build_detection(
     video, detector, input_size, stride, models_dir, loop=False, params=None, engine=ENGINE
 ):
     """(frame source, person detector) for one video."""
-    weights = model_file(detector, input_size)
     source = OpenCvFileSource(video, stride, loop)
+    return source, build_detector(detector, input_size, models_dir, params, engine)
+
+
+def build_detector(detector, input_size, models_dir, params=None, engine=ENGINE):
+    """The person detector of a config, its weights fetched and checked."""
+    weights = model_file(detector, input_size)
     model = load_detector(ensure_weights(models_dir, weights), detector, params, engine)
     if model.input_size != input_size:
         raise ValueError(
             f"config input_size {input_size}, but {WEIGHTS[weights].file} takes {model.input_size}"
         )
-    return source, model
+    return model
 
 
 def build_tracker(tracker, frame_rate, world_to_image=None, params=None):

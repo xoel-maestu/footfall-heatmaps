@@ -6,6 +6,9 @@ import json
 import math
 import os
 import sys
+import time
+from dataclasses import dataclass, field, fields, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -21,7 +24,14 @@ from space_usage_heatmaps.evaluation.domain.splits import SPLITS
 from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from space_usage_heatmaps.evaluation.infrastructure.track_cache import CachedTrackSource
 from space_usage_heatmaps.floorplan.domain.foot_point import FOOT_POINTS
+from space_usage_heatmaps.occupancy.application.purge_slots import RETENTION_DAYS, purge_slots
+from space_usage_heatmaps.occupancy.application.record_camera import record_camera
+from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
 from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from space_usage_heatmaps.perception.application.reconnect import reconnecting_frames
+from space_usage_heatmaps.perception.domain.privacy_mask import PrivacyMask
+from space_usage_heatmaps.perception.infrastructure.opencv_file_source import OpenCvFileSource
 
 LAYERS = ["dwell", "passage"]
 METRICS = ["mass_error", "tvd", "wape_zone", "emd_m", "pearson"]
@@ -195,7 +205,127 @@ BASELINE_MISSING = (
 
 
 def load_config(path):
-    return RunConfig.from_mapping(yaml.safe_load(Path(path).read_text()))
+    """The pipeline recipe of a config; its run section is space-usage run's."""
+    d = yaml.safe_load(Path(path).read_text())
+    return RunConfig.from_mapping({k: v for k, v in d.items() if k != "run"})
+
+
+@dataclass(frozen=True)
+class RunSettings:
+    """A config's run section: the one camera space-usage run records."""
+
+    camera_id: str
+    calibration: str  # nvidia-mtmc/<scene>/<camera>, under the data dir
+    extent_m: tuple  # floor grid: xmin, ymin, xmax, ymax in metres
+    cell_m: float = 0.5
+    retention_days: float = RETENTION_DAYS
+    masks: dict = field(default_factory=dict)  # image and floor polygons (R6)
+    start_utc: object = None  # a video file's start; --start overrides
+
+
+def load_run_settings(path):
+    d = (yaml.safe_load(Path(path).read_text()) or {}).get("run")
+    if not isinstance(d, dict):
+        raise ValueError(f"config {path}: no run section (camera_id, calibration, extent_m)")
+    names = {f.name for f in fields(RunSettings)}
+    if unknown := sorted(set(d) - names):
+        raise ValueError(f"config {path}: unknown run keys {unknown}")
+    s = RunSettings(**d)
+    if not isinstance(s.extent_m, list | tuple) or len(s.extent_m) != 4:
+        raise ValueError(f"config {path}: run.extent_m must be [xmin, ymin, xmax, ymax]")
+    if unknown := sorted(set(s.masks) - {"image", "floor"}):
+        raise ValueError(f"config {path}: run.masks takes image and floor, not {unknown}")
+    if not s.retention_days > 0:
+        raise ValueError(f"config {path}: run.retention_days must be positive")
+    return replace(s, camera_id=str(s.camera_id))
+
+
+def utc_epoch(value):
+    """Epoch seconds of an ISO 8601 time with a zone (or a YAML timestamp, which is UTC)."""
+    if isinstance(value, datetime):
+        t = value if value.tzinfo else value.replace(tzinfo=UTC)
+    else:
+        t = datetime.fromisoformat(str(value))
+        if t.tzinfo is None:
+            raise ValueError(f"start {value!r} needs a time zone, e.g. 2026-11-06T09:00:00Z")
+    return t.timestamp()
+
+
+def calibration_of(spec):
+    dataset, scene, camera = (spec.split("/") + ["", ""])[:3]
+    if dataset != "nvidia-mtmc" or not scene or not camera:
+        raise ValueError(f"calibration {spec!r}: expected nvidia-mtmc/<scene>/<camera>")
+    return NvidiaMtmcReader(data_dir()).camera(scene, camera)
+
+
+def run_record(args):
+    """space-usage run: one camera into 15-min slots in SQLite, with the live layer
+    in memory. A video file is read once from --start (or run.start_utc, or now);
+    a stream (rtsp://) is timed by the wall clock and reconnects when it drops."""
+    from space_usage_heatmaps.perception.infrastructure import container
+    from space_usage_heatmaps.perception.infrastructure.opencv_stream_source import (
+        OpenCvStreamSource,
+    )
+
+    config, settings = load_config(args.config), load_run_settings(args.config)
+    cam = calibration_of(settings.calibration)
+    spec = GridSpec.covering(*settings.extent_m, cell_m=settings.cell_m)
+    mask = PrivacyMask(
+        settings.masks.get("image") or (),
+        settings.masks.get("floor") or (),
+        cam.world_to_image,
+    )
+    store = SqliteSlotStore(args.db)
+    recorder = RecordSlots(store, settings.camera_id, spec, settings.retention_days, time.time)
+    purge_slots(store, time.time(), settings.retention_days)
+    detector = container.build_detector(
+        config.detector,
+        config.input_size,
+        data_dir() / "models",
+        config.detector_params,
+        config.engine,
+    )
+    if args.source.startswith("rtsp://"):
+        first = [OpenCvStreamSource(args.source, config.stride)]
+        fps = first[0].fps
+
+        def open_stream():
+            return first.pop() if first else OpenCvStreamSource(args.source, config.stride)
+
+        def time_of(frame):
+            return time.time()
+
+        frames = reconnecting_frames(open_stream, time.sleep, recorder.mark_incomplete)
+    else:
+        source = OpenCvFileSource(args.source, config.stride)
+        fps, frames = source.fps, source.frames()
+        start = args.start or settings.start_utc
+        t0 = time.time() if start is None else utc_epoch(start)
+
+        def time_of(frame):
+            return t0 + frame.timestamp
+
+    tracker = container.build_tracker(
+        config.tracker, fps / config.stride, cam.world_to_image, config.tracker_params
+    )
+    try:
+        n = record_camera(
+            frames, detector, mask, tracker, cam, config, recorder, time_of, config.stride / fps
+        )
+    finally:
+        store.close()
+    print(
+        f"camera {settings.camera_id}: {n} frames, {recorder.written} slots "
+        f"({spec.ny}x{spec.nx} cells of {settings.cell_m} m) in {args.db}"
+    )
+    if recorder.past_retention:
+        print(
+            f"camera {settings.camera_id}: {recorder.past_retention} slots past retention "
+            f"({settings.retention_days} days) were not written; check --start",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 def _params_suffix(params):
@@ -622,9 +752,15 @@ def main(argv=None):
     be = sub.add_parser("bench", help="sustained end-to-end fps and peak VRAM on one video")
     be.add_argument("--config", required=True, help="run configuration, e.g. configs/iter0.yaml")
     be.add_argument("--minutes", type=float, default=30.0)
+    ru = sub.add_parser("run", help="record a camera into persistent 15-min slots")
+    ru.add_argument("--config", required=True, help="configuration with a run section")
+    ru.add_argument("--source", required=True, help="video file or rtsp:// stream")
+    ru.add_argument("--db", required=True, help="SQLite file of the slots")
+    ru.add_argument("--start", help="video file: UTC start, e.g. 2026-11-06T09:10:00Z")
     args = parser.parse_args(argv)
+    commands = {"bench": run_bench, "eval": run_eval, "run": run_record}
     try:
-        return run_bench(args) if args.command == "bench" else run_eval(args)
+        return commands[args.command](args)
     except CAMERA_ERRORS as e:
         print(f"space-usage: error: {e}", file=sys.stderr)
         return 1

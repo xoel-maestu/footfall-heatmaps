@@ -36,6 +36,13 @@ class GridSpec:
         rows = self.origin_y + (np.arange(self.ny) + 0.5) * self.cell_m
         return np.meshgrid(cols, rows)
 
+    def cell_index(self, xs, ys):
+        """(flat cell index of the points inside, which points are inside)."""
+        col = np.floor((np.asarray(xs, float) - self.origin_x) / self.cell_m).astype(int)
+        row = np.floor((np.asarray(ys, float) - self.origin_y) / self.cell_m).astype(int)
+        inside = (col >= 0) & (col < self.nx) & (row >= 0) & (row < self.ny)
+        return row[inside] * self.nx + col[inside], inside
+
 
 @dataclass(frozen=True)
 class Grid:
@@ -47,10 +54,7 @@ class Grid:
     @classmethod
     def from_samples(cls, spec, track_ids, xs, ys, fps):
         """One sample = one track seen at (x, y) in one frame."""
-        col = np.floor((np.asarray(xs) - spec.origin_x) / spec.cell_m).astype(int)
-        row = np.floor((np.asarray(ys) - spec.origin_y) / spec.cell_m).astype(int)
-        inside = (col >= 0) & (col < spec.nx) & (row >= 0) & (row < spec.ny)
-        cell = row[inside] * spec.nx + col[inside]
+        cell, inside = spec.cell_index(xs, ys)
         size = spec.ny * spec.nx
         dwell = np.bincount(cell, minlength=size) / fps
         pairs = np.unique(np.stack([cell, np.asarray(track_ids)[inside]]), axis=1)
