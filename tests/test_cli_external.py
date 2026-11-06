@@ -58,6 +58,12 @@ def test_wildtrack_reports_the_ground_error_of_the_most_oblique_camera(
     assert g["camera"] == "C5" and g["matched"] == 2 and g["recall"] == 1.0
     assert g["median_m"] < 0.05  # the truth boxes' bottoms sit on their positions
     assert g["target_m"] == 0.30 and g["meets_target"] is True
+    plane = report["ground_plane"]
+    assert plane["matched"] == 2 and plane["gate_m"] == 1.0 and plane["median_m"] < 0.05
+    # Both views print median, p90, recall and precision together.
+    for view in ("IoU >= 0.5", "within 1.0 m"):
+        line = next(x for x in out.splitlines() if view in x)
+        assert all(k in line for k in ("median", "p90", "recall", "precision"))
     assert report["tracking"]["pooled"]["configs_best"]["idf1"] == 1.0
 
 

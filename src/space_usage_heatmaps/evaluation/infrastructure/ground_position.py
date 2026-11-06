@@ -6,7 +6,12 @@ Tracked boxes and annotated boxes are paired per frame in image space
 pair's error is the floor distance between the tracked box's floor point and
 the annotated person's floor position. Missed people and spurious boxes are
 counted (recall, precision), not scored: the error measures where the
-pipeline puts the people it finds.
+pipeline puts the people it finds, and holds only at that recall.
+
+A second view pairs them on the floor instead (Hungarian on floor distance,
+within GROUND_GATE_M, a fixed protocol choice never tuned): a person boxed
+badly but placed well counts, and a systematic offset beyond the gate shows
+as lost recall rather than as large errors.
 """
 
 import numpy as np
@@ -14,6 +19,7 @@ from scipy.optimize import linear_sum_assignment
 from trackers.eval import box_iou
 
 MIN_IOU = 0.5
+GROUND_GATE_M = 1.0
 
 
 def _summary(e):
@@ -61,3 +67,33 @@ def matched_ground_error(samples, tracks, xy, min_iou=MIN_IOU, groups=None):
         "precision": len(e) / tracked if tracked else None,
         "min_iou": min_iou,
     } | ({"groups": split} if groups else {})
+
+
+def ground_plane_error(samples, tracks, xy, gate_m=GROUND_GATE_M):
+    """As matched_ground_error, but each frame's tracked floor points and
+    annotated positions are paired by floor distance (Hungarian), at most
+    gate_m apart; points that could not be placed (NaN) pair with nobody."""
+    xy = np.asarray(xy, float).reshape(-1, 2)
+    errors, tracked = [], 0
+    for frame in np.unique(samples.frames):
+        t = np.flatnonzero(samples.frames == frame)
+        p = np.flatnonzero(tracks.frames == frame)
+        tracked += len(p)
+        if not len(p):
+            continue
+        d = np.linalg.norm(samples.world[t][:, None, :] - xy[p][None, :, :], axis=2)
+        cost = np.where(d <= gate_m, d, gate_m * 1e3)  # NaN compares False: out
+        rows, cols = linear_sum_assignment(cost)
+        ok = d[rows, cols] <= gate_m
+        errors.extend(d[rows[ok], cols[ok]].tolist())
+    n = len(samples.frames)
+    e = np.array(errors)
+    return {
+        **_summary(e),
+        "mean_m": float(e.mean()) if len(e) else None,
+        "truth_boxes": n,
+        "tracked_boxes": tracked,
+        "recall": len(e) / n if n else None,
+        "precision": len(e) / tracked if tracked else None,
+        "gate_m": gate_m,
+    }

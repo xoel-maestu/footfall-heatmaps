@@ -803,6 +803,7 @@ def wildtrack_ground_error(reader, scene, camera, config, source):
 
     from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
     from space_usage_heatmaps.evaluation.infrastructure.ground_position import (
+        ground_plane_error,
         matched_ground_error,
     )
 
@@ -821,10 +822,11 @@ def wildtrack_ground_error(reader, scene, camera, config, source):
     # Diagnostic split: boxes placed from their bottom edge or, judged hidden,
     # from their top edge at the track's height (auto, auto-track).
     groups = {"bottom-placed": ~head, "head-placed": head}
-    e = matched_ground_error(
-        reader.samples(scene, camera), t, np.column_stack([xs, ys]), groups=groups
-    )
-    return {
+    samples = reader.samples(scene, camera)
+    xy = np.column_stack([xs, ys])
+    e = matched_ground_error(samples, t, xy, groups=groups)
+    plane = ground_plane_error(samples, t, xy)
+    return plane, {
         "camera": camera,
         "depression_deg": reader.depression_deg(scene, camera),
         "foot_point": config.foot_point,
@@ -833,6 +835,20 @@ def wildtrack_ground_error(reader, scene, camera, config, source):
         "target_m": GROUND_TARGET_M,
         "meets_target": e["median_m"] is not None and e["median_m"] <= GROUND_TARGET_M,
     }
+
+
+def _ground_cells(g):
+    def cm(v):
+        return "n/a" if v is None else f"{100 * v:.1f} cm"
+
+    def ratio(v):
+        return "n/a" if v is None else f"{v:.2f}"
+
+    return (
+        f"median {cm(g['median_m'])}, p90 {cm(g['p90_m'])}, "
+        f"recall {ratio(g['recall'])}, precision {ratio(g['precision'])} "
+        f"({g['matched']} pairs)"
+    )
 
 
 def run_eval_dataset(args):
@@ -853,20 +869,21 @@ def run_eval_dataset(args):
     }
     if args.dataset == "wildtrack":
         scene, camera = scenes[0]
-        g = wildtrack_ground_error(reader, scene, camera, config, source)
+        plane, g = wildtrack_ground_error(reader, scene, camera, config, source)
         report["ground_position"] = g
+        report["ground_plane"] = plane
         print(
             f"camera {camera} (most oblique, {g['depression_deg']:.1f} degrees below the horizon), "
-            f"foot point {g['foot_point']}: {g['matched']} of {g['truth_boxes']} annotated "
-            f"people paired at IoU >= {g['min_iou']} (recall {_cell(g['recall'], 0)}, "
-            f"precision {_cell(g['precision'], 0)})"
+            f"foot point {g['foot_point']}, {g['truth_boxes']} annotated people, "
+            f"{g['tracked_boxes']} tracked boxes"
         )
-        median = "n/a" if g["median_m"] is None else f"{100 * g['median_m']:.1f} cm"
-        p90 = "n/a" if g["p90_m"] is None else f"{100 * g['p90_m']:.1f} cm"
+        print("ground position error; it holds for the people each view pairs (recall):")
+        print(f"  paired in the image, IoU >= {g['min_iou']}:  {_ground_cells(g)}")
+        print(f"  paired on the floor, within {plane['gate_m']} m:  {_ground_cells(plane)}")
         verdict = "meets" if g["meets_target"] else "misses"
         print(
-            f"ground position error: median {median}, p90 {p90}; "
-            f"target median <= {100 * GROUND_TARGET_M:.0f} cm: {verdict}"
+            f"target median <= {100 * GROUND_TARGET_M:.0f} cm (image pairing, "
+            f"recall {'n/a' if g['recall'] is None else format(g['recall'], '.2f')}): {verdict}"
         )
         for group, m in g["groups"].items():
             if m["matched"]:
