@@ -907,9 +907,20 @@ def run_eval_fusion(args):
     names = [config_name(config_path), config_name(compare_path)]
     configs = [load_config(config_path), load_config(compare_path)]
     runs = [(c, track_source(c, reader)) for c in configs]
-    r = evaluate_fusion(
-        reader, scenes, runs[0], runs[1], args.cell, fusion, args.resamples, cameras=cameras
-    )
+    from concurrent.futures import ProcessPoolExecutor
+
+    with ProcessPoolExecutor(max(1, min(len(scenes), (os.cpu_count() or 2) // 2))) as pool:
+        r = evaluate_fusion(
+            reader,
+            scenes,
+            runs[0],
+            runs[1],
+            args.cell,
+            fusion,
+            args.resamples,
+            cameras=cameras,
+            map=pool.map,
+        )
     where = f"split {args.split}" if args.split else f"scene {args.scene}"
     print(
         f"{r.dataset}  {where}  cell {r.cell_m} m  fusion {_fusion_dict(fusion)}  "

@@ -1,0 +1,18 @@
+# Phase 9 (E2a): the per-camera recipe of configs/e2a-stride2.yaml on every
+# calibrated camera of a scene, fused on one floor grid (eval --cameras).
+detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960
+engine: onnx-trt       # ONNX Runtime, TensorRT execution provider, fp16
+tracker: bytetrack     # roboflow trackers 2.6.1 ByteTrackTracker, its defaults
+input_size: 960        # the exported model's fixed input
+foot_point: auto-track # as h1-yolox-s.yaml
+track_height_percentile: 0.9
+hidden_ratio: 0.88
+track_height_min_m: 1.0
+track_height_max_m: 2.0
+stride: 2
+
+# occupancy.domain.fusion: how covering cameras are weighed per cell.
+fusion:
+  weighting: visibility
+  power: 1
+  zone_m: null

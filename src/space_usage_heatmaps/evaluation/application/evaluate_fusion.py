@@ -99,10 +99,20 @@ def _camera_blocks(reader, scene, camera, config, source, spec, first, last, bf,
 
 
 def evaluate_fusion(
-    reader, scenes, fused_run, single_run, cell, fusion, n_resamples=1000, seed=0, cameras=None
+    reader,
+    scenes,
+    fused_run,
+    single_run,
+    cell,
+    fusion,
+    n_resamples=1000,
+    seed=0,
+    cameras=None,
+    map=map,
 ):
     """scenes: [(scene, anchor camera)]; fused_run, single_run: (RunConfig,
-    TrackSource); cameras: the cameras to fuse, default every calibrated one."""
+    TrackSource); cameras: the cameras to fuse, default every calibrated one;
+    map: how the bootstrap scores scenes (block_bootstrap)."""
     blocks = {truth: [] for truth in FUSION_TRUTHS}
     report_scenes, fused_grids = [], {}
     for scene, anchor in scenes:
@@ -190,7 +200,7 @@ def evaluate_fusion(
         fusion=fusion,
         scenes=report_scenes,
         results={
-            truth: block_bootstrap(b, n_resamples=n_resamples, seed=seed)
+            truth: block_bootstrap(b, n_resamples=n_resamples, seed=seed, map=map)
             for truth, b in blocks.items()
         },
         fused=fused_grids,

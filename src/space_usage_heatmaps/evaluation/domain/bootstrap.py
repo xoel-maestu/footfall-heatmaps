@@ -95,31 +95,25 @@ def block_layers(spec, track_ids, frames, xs, ys, fps, block_frames, n_blocks):
     return BlockLayers(dwell.reshape(shape), passage.astype(float).reshape(shape), dropped)
 
 
-def block_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95):
+def block_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95, map=map):
     """Estimates with recentred percentile intervals at `level` for every scene, prediction,
     layer and metric, pooled over scenes, and the paired difference of the first
-    two predictions."""
+    two predictions. map: how scenes are scored (e.g. a process pool's map); the
+    draws are made here first, so the result does not depend on it."""
     rng = np.random.default_rng(seed)
     n_preds = len(scenes[0].preds)
     if any(len(s.preds) != n_preds for s in scenes):
         raise ValueError("every scene needs the same predictions")
-    # values[draw, scene, pred, layer, metric]; draw 0 is the whole run.
-    values = np.full((n_resamples + 1, len(scenes), n_preds, len(LAYERS), len(METRICS)), np.nan)
-    for i, s in enumerate(scenes):
+    draws = []
+    for s in scenes:
         n_blocks = s.truth.dwell.shape[0]
         counts = np.zeros((n_resamples + 1, n_blocks))
         counts[0] = 1
-        draws = rng.integers(0, n_blocks, size=(n_resamples, n_blocks))
-        np.add.at(counts, (np.arange(1, n_resamples + 1)[:, None], draws), 1)
-        for r, c in enumerate(counts):
-            for li, layer in enumerate(LAYERS):
-                truth = np.tensordot(c, getattr(s.truth, layer), axes=1)
-                if not np.any(truth[s.mask]):
-                    continue  # nothing to score in this draw: NaN
-                for p, pred in enumerate(s.preds):
-                    grid = np.tensordot(c, getattr(pred, layer), axes=1)
-                    m = compare_layer(grid, truth, s.mask, s.cell_m, zones=layer == "dwell")
-                    values[r, i, p, li] = [_number(getattr(m, k)) for k in METRICS]
+        picks = rng.integers(0, n_blocks, size=(n_resamples, n_blocks))
+        np.add.at(counts, (np.arange(1, n_resamples + 1)[:, None], picks), 1)
+        draws.append(counts)
+    # values[draw, scene, pred, layer, metric]; draw 0 is the whole run.
+    values = np.stack(list(map(scene_values, scenes, draws)), axis=1)
     pooled = values.mean(axis=1)
     alpha = (1 - level) / 2 * 100
     result = BootstrapResult(
@@ -140,6 +134,21 @@ def block_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95):
         delta_scenes=[_table(delta[:, i], alpha, clip=False) for i in range(len(scenes))],
         delta_pooled=_table(delta.mean(axis=1), alpha, clip=False),
     )
+
+
+def scene_values(s, counts):
+    """values[draw, pred, layer, metric] of one scene for block counts[draw, block]."""
+    values = np.full((len(counts), len(s.preds), len(LAYERS), len(METRICS)), np.nan)
+    for r, c in enumerate(counts):
+        for li, layer in enumerate(LAYERS):
+            truth = np.tensordot(c, getattr(s.truth, layer), axes=1)
+            if not np.any(truth[s.mask]):
+                continue  # nothing to score in this draw: NaN
+            for p, pred in enumerate(s.preds):
+                grid = np.tensordot(c, getattr(pred, layer), axes=1)
+                m = compare_layer(grid, truth, s.mask, s.cell_m, zones=layer == "dwell")
+                values[r, p, li] = [_number(getattr(m, k)) for k in METRICS]
+    return values
 
 
 def _number(v):
