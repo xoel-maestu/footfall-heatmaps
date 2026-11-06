@@ -165,7 +165,14 @@ def _all_row(r):
     return f"{r.camera:<8}{cells}"
 
 
+SUITES = ("e1-final",)
+
+
 def run_eval(args):
+    if args.suite:
+        from space_usage_heatmaps.e1_final import run_e1_final
+
+        return run_e1_final(args)
     if args.dataset:
         if not args.config:
             print("space-usage: error: --dataset needs --config", file=sys.stderr)
@@ -669,60 +676,44 @@ def _estimates(table):
     return {layer: {m: vars(e) for m, e in metrics.items()} for layer, metrics in table.items()}
 
 
-def run_eval_config(args):
-    if not args.split:
-        print("space-usage: error: --config needs --split", file=sys.stderr)
-        return 2
-    reader = NvidiaMtmcReader(data_dir())
-    names = [config_name(args.config)] + ([config_name(args.compare)] if args.compare else [])
-    configs = [load_config(args.config)] + ([load_config(args.compare)] if args.compare else [])
-    runs = [(c, track_source(c, reader)) for c in configs]
-    r = evaluate_config(reader, SPLITS[args.split], runs, args.cell, n_resamples=args.resamples)
-    tracking = score_tracking(reader, SPLITS[args.split], names, runs)
-    tracking["guard_holds"] = guard_holds(tracking)
+def source_sha256():
+    """sha256 of the package's Python sources: a stored report made by other
+    code is not reused (space-usage eval --suite)."""
+    h = hashlib.sha256()
+    root = Path(__file__).parent
+    for path in sorted(root.rglob("*.py")):
+        h.update(str(path.relative_to(root)).encode() + b"\0" + path.read_bytes())
+    return h.hexdigest()
 
-    print(
-        f"{r.dataset}  split {args.split}  cell {r.cell_m} m  "
-        f"paired block bootstrap: {r.block_s:g} s blocks, {r.n_resamples} resamples, "
-        "95 % recentred percentile CI (clipped to the metric's domain; deltas not clipped)"
-    )
-    print(
-        "pooled = mean over scenes, blocks resampled within each scene"
-        + (f"; delta = {' - '.join(names)}, paired" if args.compare else "")
-    )
-    for run in r.scenes:
-        print(
-            f"scene {run.scene} camera {run.camera}: {run.samples} tracked boxes, "
-            f"{run.dropped} outside grid, {run.outside_truth_frames} outside truth frames, "
-            f"{run.blocks} blocks, occlusion fraction {run.occlusion_fraction:.4f}"
-        )
-    width = max(len(n) for n in [*names, "config"]) + 2
+
+def eval_report_path(names, split, cell):
+    return Path("reports") / f"eval-{'-vs-'.join(names)}-{split}-{cell}m.json"
+
+
+def config_eval(config, compare, split, cell, resamples):
+    """Score one config (and a second, paired) on a split from their tracks.
+    (report dict, ConfigReport, names)."""
+    reader = NvidiaMtmcReader(data_dir())
+    names = [config_name(config)] + ([config_name(compare)] if compare else [])
+    configs = [load_config(config)] + ([load_config(compare)] if compare else [])
+    runs = [(c, track_source(c, reader)) for c in configs]
+    r = evaluate_config(reader, SPLITS[split], runs, cell, n_resamples=resamples)
+    tracking = score_tracking(reader, SPLITS[split], names, runs)
+    tracking["guard_holds"] = guard_holds(tracking)
     n_blocks = {
         "scenes": {f"{run.scene}/{run.camera}": run.blocks for run in r.scenes},
         "pooled": sum(run.blocks for run in r.scenes),
     }
-    for truth in TRUTHS:
-        res = r.results[truth]
-        print(f"\n{truth}: {TRUTH_TITLES[truth]}")
-        print(
-            f"{'config':<{width}}{'scene':<10}{'layer':<9}{'blocks':>7}"
-            + "".join(f"{m:>22}" for m in METRICS)
-        )
-        for i, name in enumerate(names):
-            _rows(name, [s[i] for s in res.scenes], res.pooled[i], r.scenes, width)
-        if res.delta_pooled is not None:
-            _rows("delta", res.delta_scenes, res.delta_pooled, r.scenes, width)
-    _print_tracking(tracking, names, width)
-
     report = {
         "dataset": r.dataset,
-        "split": args.split,
+        "split": split,
         "cell_m": r.cell_m,
         "block_s": r.block_s,
         "n_resamples": r.n_resamples,
         "level": 0.95,
         "interval": INTERVAL,
         "pooled": "unweighted mean over scenes, blocks resampled within each scene",
+        "source_sha256": source_sha256(),
         "configs": {n: vars(c) for n, c in zip(names, configs, strict=True)},
         "scenes": [vars(run) for run in r.scenes],
         "tracking": tracking,
@@ -757,10 +748,52 @@ def run_eval_config(args):
             for truth, res in r.results.items()
         },
     }
-    name = "-vs-".join(names)
-    path = Path("reports") / f"eval-{name}-{args.split}-{r.cell_m}m.json"
+    return report, r, names
+
+
+def write_report(path, report):
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    return path
+
+
+def run_eval_config(args):
+    if not args.split:
+        print("space-usage: error: --config needs --split", file=sys.stderr)
+        return 2
+    report, r, names = config_eval(args.config, args.compare, args.split, args.cell, args.resamples)
+    tracking = report["tracking"]
+
+    print(
+        f"{r.dataset}  split {args.split}  cell {r.cell_m} m  "
+        f"paired block bootstrap: {r.block_s:g} s blocks, {r.n_resamples} resamples, "
+        "95 % recentred percentile CI (clipped to the metric's domain; deltas not clipped)"
+    )
+    print(
+        "pooled = mean over scenes, blocks resampled within each scene"
+        + (f"; delta = {' - '.join(names)}, paired" if args.compare else "")
+    )
+    for run in r.scenes:
+        print(
+            f"scene {run.scene} camera {run.camera}: {run.samples} tracked boxes, "
+            f"{run.dropped} outside grid, {run.outside_truth_frames} outside truth frames, "
+            f"{run.blocks} blocks, occlusion fraction {run.occlusion_fraction:.4f}"
+        )
+    width = max(len(n) for n in [*names, "config"]) + 2
+    for truth in TRUTHS:
+        res = r.results[truth]
+        print(f"\n{truth}: {TRUTH_TITLES[truth]}")
+        print(
+            f"{'config':<{width}}{'scene':<10}{'layer':<9}{'blocks':>7}"
+            + "".join(f"{m:>22}" for m in METRICS)
+        )
+        for i, name in enumerate(names):
+            _rows(name, [s[i] for s in res.scenes], res.pooled[i], r.scenes, width)
+        if res.delta_pooled is not None:
+            _rows("delta", res.delta_scenes, res.delta_pooled, r.scenes, width)
+    _print_tracking(tracking, names, width)
+
+    path = write_report(eval_report_path(names, args.split, r.cell_m), report)
     print(f"\nreport {path}")
     if tracking["guard_holds"] is False:
         print("space-usage: tracking guard broken", file=sys.stderr)
@@ -806,6 +839,7 @@ def wildtrack_ground_error(reader, scene, camera, config, source):
         ground_plane_error,
         matched_ground_error,
     )
+    from space_usage_heatmaps.floorplan.domain.foot_point import camera_height, head_rule_applies
 
     t = source.tracks(scene, camera)
     cam = reader.camera(scene, camera)
@@ -829,6 +863,13 @@ def wildtrack_ground_error(reader, scene, camera, config, source):
     return plane, {
         "camera": camera,
         "depression_deg": reader.depression_deg(scene, camera),
+        "camera_height_m": camera_height(cam.projection),
+        # auto-track's camera-height guard: whether its head rule may run here.
+        "head_rule": (
+            head_rule_applies(cam.projection, config.track_heights())
+            if config.foot_point == "auto-track"
+            else None
+        ),
         "foot_point": config.foot_point,
         "head_boxes": int(head.sum()),
         **e,
@@ -851,31 +892,45 @@ def _ground_cells(g):
     )
 
 
-def run_eval_dataset(args):
-    reader, scenes = external_dataset(args.dataset)
+def dataset_eval(dataset, config_path):
+    """The report of a config on an external dataset, or None when its data is missing."""
+    reader, scenes = external_dataset(dataset)
     if not scenes:
-        print(f"space-usage: error: no {args.dataset} data under {data_dir()}", file=sys.stderr)
-        return 1
-    name = config_name(args.config)
-    config = load_config(args.config)
+        return None
+    name = config_name(config_path)
+    config = load_config(config_path)
     source = track_source(config, reader)
-    runs = [(config, source)]
-    print(f"{reader.name}  config {name}  evaluation only, never tuned on")
     report = {
         "dataset": reader.name,
         "use": "evaluation only: never tuned on (spec 5); licence in docs/licenses.md",
+        "config_name": name,
         "config": vars(config),
         "scenes": [f"{scene}/{camera}" for scene, camera in scenes],
     }
-    if args.dataset == "wildtrack":
+    if dataset == "wildtrack":
         scene, camera = scenes[0]
         plane, g = wildtrack_ground_error(reader, scene, camera, config, source)
         report["ground_position"] = g
         report["ground_plane"] = plane
+    report["tracking"] = score_tracking(reader, scenes, [name], [(config, source)])
+    report["tracks_provenance"] = getattr(source, "provenance", None)
+    return report
+
+
+def run_eval_dataset(args):
+    report = dataset_eval(args.dataset, args.config)
+    if report is None:
+        print(f"space-usage: error: no {args.dataset} data under {data_dir()}", file=sys.stderr)
+        return 1
+    name = report["config_name"]
+    print(f"{report['dataset']}  config {name}  evaluation only, never tuned on")
+    if "ground_position" in report:
+        g, plane = report["ground_position"], report["ground_plane"]
         print(
-            f"camera {camera} (most oblique, {g['depression_deg']:.1f} degrees below the horizon), "
-            f"foot point {g['foot_point']}, {g['truth_boxes']} annotated people, "
-            f"{g['tracked_boxes']} tracked boxes"
+            f"camera {g['camera']} (most oblique, {g['depression_deg']:.1f} degrees below the "
+            f"horizon, {g['camera_height_m']:.2f} m high), foot point {g['foot_point']}"
+            + ("" if g["head_rule"] is not False else " (head rule off: camera below heads)")
+            + f", {g['truth_boxes']} annotated people, {g['tracked_boxes']} tracked boxes"
         )
         print("ground position error; it holds for the people each view pairs (recall):")
         print(f"  paired in the image, IoU >= {g['min_iou']}:  {_ground_cells(g)}")
@@ -891,13 +946,8 @@ def run_eval_dataset(args):
                     f"  {group}: {m['matched']} pairs, median {100 * m['median_m']:.1f} cm, "
                     f"p90 {100 * m['p90_m']:.1f} cm"
                 )
-    tracking = score_tracking(reader, scenes, [name], runs)
-    report["tracking"] = tracking
-    report["tracks_provenance"] = getattr(source, "provenance", None)
-    _print_tracking(tracking, [name], max(len(name), len("config")) + 2)
-    path = Path("reports") / f"external-{args.dataset}-{name}.json"
-    path.parent.mkdir(exist_ok=True)
-    path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    _print_tracking(report["tracking"], [name], max(len(name), len("config")) + 2)
+    path = write_report(Path("reports") / f"external-{args.dataset}-{name}.json", report)
     print(f"\nreport {path}")
     return 0
 
@@ -934,6 +984,22 @@ def bench_pipeline(config, reader, cam, spec, minutes):
     return {"engine": engine_label(config.engine, detector.providers, ort)} | result
 
 
+def bench_report_path(config):
+    return Path("reports") / f"bench-{config_name(config)}.json"
+
+
+def write_bench_report(config, minutes, result):
+    """The bench's result, read back by eval --suite e1-final."""
+    report = {
+        "config": config_name(config),
+        "minutes": minutes,
+        "measured_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "video": f"scene {BENCH_SCENE} camera {BENCH_CAMERA}",
+        **result,
+    }
+    return write_report(bench_report_path(config), report)
+
+
 def run_bench(args):
     """End to end on scene 071's 1080p video, looped for --minutes."""
     config = load_config(args.config)
@@ -943,6 +1009,7 @@ def run_bench(args):
     if config.engine != "ultralytics":
         result = bench_pipeline(config, reader, cam, spec, args.minutes)
         print(json.dumps(result))
+        write_bench_report(args.config, args.minutes, result)
         return 0
     try:
         from space_usage_heatmaps.evaluation.baseline.bench import bench
@@ -957,6 +1024,7 @@ def run_bench(args):
         data_dir() / "models",
     )
     print(json.dumps(result))
+    write_bench_report(args.config, args.minutes, result)
     return 0
 
 
@@ -967,6 +1035,11 @@ def main(argv=None):
     how = ev.add_mutually_exclusive_group(required=True)
     how.add_argument("--source", choices=SOURCES, help="oracle: ground truth as the prediction")
     how.add_argument("--config", help="run configuration, e.g. configs/iter0.yaml")
+    how.add_argument(
+        "--suite",
+        choices=SUITES,
+        help="e1-final: the E1 report of configs/h5-best.yaml, reports/e1-final.json and .md",
+    )
     ev.add_argument("--scene", help="with --source: scene id, e.g. 071")
     ev.add_argument("--camera", help="with --source: camera id, e.g. 645, or all")
     ev.add_argument(

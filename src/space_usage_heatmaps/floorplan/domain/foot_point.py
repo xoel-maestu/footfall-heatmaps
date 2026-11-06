@@ -11,7 +11,9 @@ person instead of assuming one: a track's height is a high percentile of its
 boxes' implied heights so far (occlusion only shortens a box), a box is hidden
 when it is clearly shorter than its track, and its head is placed at the
 track's height. It is causal (each box sees only its track's frames up to its
-own), so the same rule runs live, frame by frame.
+own), so the same rule runs live, frame by frame. Its head rule needs the
+camera clearly above the heads (head_rule_applies); on a lower camera every
+box keeps its bottom-centre.
 """
 
 import heapq
@@ -111,6 +113,32 @@ class TrackHeights:
         return np.clip(out, self.min_m, self.max_m)
 
 
+def camera_height(projection):
+    """Height in metres of the camera centre above the floor (z = 0): the null
+    vector C of the 3x4 matrix (P C = 0), in any scale or sign of P."""
+    _, _, vt = np.linalg.svd(np.asarray(projection, dtype=float))
+    c = vt[-1]
+    return math.inf if c[3] == 0 else float(c[2] / c[3])
+
+
+def head_rule_applies(projection, track_heights):
+    """Whether auto-track may place a box from its head: the camera stands at
+    least one clip span (max_m - min_m) above the tallest head plane (max_m).
+
+    Why that margin. The head rule meets the ray through the box top with the
+    plane z = h; at horizontal distance D from a camera at height Hc the ray
+    drops (Hc - h) over D, so a height error dh moves the floor point by
+    dh * D / (Hc - h), and at Hc <= h the plane is not met in front of the
+    camera at all (the point lands behind it or at infinity). The track height
+    is only known to lie in the clip [min_m, max_m], so dh can reach the span
+    s = max_m - min_m. With Hc - h >= s for every h <= max_m, the worst height
+    error moves the point by at most D: bounded and in front of the camera.
+    Below that the factor D / (Hc - h) grows without bound. The margin comes
+    from the configured clip, not from any dataset."""
+    span = track_heights.max_m - track_heights.min_m
+    return camera_height(projection) >= track_heights.max_m + span
+
+
 def implied_heights(boxes, projection):
     """Height above each box's bottom-centre floor point whose projection lies
     on the box's top edge (solved on the image row, v): about the person's
@@ -165,6 +193,8 @@ def floor_points(
             estimator = TrackHeights() if track_heights is None else track_heights
             height = estimator.heights(implied, track_ids, frames, whole_head)
             threshold = estimator.hidden_ratio * height
+            if not head_rule_applies(projection, estimator):
+                whole_head = np.zeros(len(b), dtype=bool)  # every box keeps its bottom
         truncated = b[:, 3] >= image_height - 1
         # A NaN height (no usable box yet) compares False: the box keeps its bottom.
         head = (truncated | (implied < threshold)) & whole_head

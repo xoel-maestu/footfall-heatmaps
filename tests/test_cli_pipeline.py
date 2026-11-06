@@ -361,3 +361,28 @@ def test_the_phase_5_configs_change_one_thing_of_h1_best():
         "input_size": 1280,
     }
     assert cli.load_config("configs/h5-best.yaml") == cli.load_config("configs/h5-trt.yaml")
+
+
+def test_the_bench_writes_its_result_for_the_e1_suite(tmp_path, monkeypatch, capsys):
+    class Reader:
+        def __init__(self, root):
+            pass
+
+        def camera(self, scene, camera):
+            return None
+
+        def scene_extent(self, scene):
+            return (0.0, 0.0, 4.0, 4.0)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "NvidiaMtmcReader", Reader)
+    result = {"fps_mean": 42.0, "fps_p5": 40.0, "vram_peak_mb": 174.0}
+    monkeypatch.setattr(cli, "bench_pipeline", lambda *a: dict(result))
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "trt.yaml").write_text(CONFIG.replace("onnx-cuda", "onnx-trt"))
+
+    assert cli.main(["bench", "--config", "configs/trt.yaml", "--minutes", "0.5"]) == 0
+
+    report = json.loads((tmp_path / "reports" / "bench-configs_trt.json").read_text())
+    assert report["minutes"] == 0.5 and report["fps_mean"] == 42.0
+    assert report["config"] == "configs_trt" and "measured_at" in report
