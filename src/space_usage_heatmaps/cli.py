@@ -403,7 +403,8 @@ def start_serve(args):
     settings = load_run_settings(args.config)
     spec = GridSpec.covering(*settings.extent_m, cell_m=settings.cell_m)
     live = LiveSource() if args.source else None
-    server = make_server(args.host, args.port, settings.camera_id, spec, args.db, live)
+    fused = json.loads(Path(args.fused).read_text()) if args.fused else None
+    server = make_server(args.host, args.port, settings.camera_id, spec, args.db, live, fused=fused)
     if not _is_loopback(args.host):
         print(
             f"space-usage serve: warning: --host {args.host} opens the page and the live layer "
@@ -1276,6 +1277,9 @@ def main(argv=None):
     se.add_argument("--db", required=True, help="SQLite file of the slots")
     se.add_argument("--source", help="video file or rtsp:// stream to record in this process")
     se.add_argument("--start", help="video file: UTC start, e.g. 2026-11-06T09:10:00Z")
+    se.add_argument(
+        "--fused", help="a fused scene map of eval --cameras (reports/fused-s<scene>-<config>.json)"
+    )
     se.add_argument("--host", default="127.0.0.1", help="address to bind (default 127.0.0.1)")
     se.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)

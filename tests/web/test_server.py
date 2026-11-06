@@ -216,3 +216,63 @@ def test_latest_slot_is_the_newest_start_of_this_camera(serve, tmp_path):
 
     assert status == 200 and json.loads(body) == {"start": "2026-11-06T09:00:00Z"}
     assert get(server, "/api/slots/latest?camera=071")[0] == 404
+
+
+def fused_export(dwell, passage):
+    return {
+        "scene": "071",
+        "cameras": ["635", "645"],
+        "config": "configs_e2a-fusion",
+        "fusion": {"weighting": "visibility", "power": 1.0, "zone_m": None},
+        "period": "the whole video",
+        "k": 5,
+        "cell_m": 0.5,
+        "origin": [-1.0, 2.0],
+        "shape": [2, 4],
+        "dwell": dwell,
+        "passage": passage,
+    }
+
+
+def test_fused_serves_the_export_k_suppressed_again(tmp_path):
+    # An export edited by hand to show 3 people in a cell still reads as empty there.
+    export = fused_export([[10, 0, 0, 0], [0, 0, 0, 8]], [[6, 0, 0, 0], [0, 0, 0, 3]])
+    server = make_server("127.0.0.1", 0, "645", SPEC, tmp_path / "x.db", fused=export)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        status, kind, body = get(server, "/api/fused")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    d = json.loads(body)
+    assert status == 200 and kind == "application/json"
+    assert d["dwell"] == [[10, 0, 0, 0], [0, 0, 0, 0]] and d["passage"][1][3] == 0
+    assert d["cameras"] == ["635", "645"] and d["scene"] == "071"
+
+
+def test_fused_without_an_export_is_not_found(serve):
+    status, _, body = get(serve(), "/api/fused")
+
+    assert status == 404 and "no fused map" in json.loads(body)["error"]
+
+
+def test_the_page_offers_the_fused_map_only_when_there_is_one(serve, tmp_path):
+    plain = get(serve(), "/")[2].decode()
+    server = make_server(
+        "127.0.0.1",
+        0,
+        "645",
+        SPEC,
+        tmp_path / "x.db",
+        fused=fused_export([[0] * 4] * 2, [[0] * 4] * 2),
+    )
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with_fused = get(server, "/")[2].decode()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert 'data-fused="0"' in plain and 'data-fused="1"' in with_fused
+    assert "Fused scene" in with_fused

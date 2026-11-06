@@ -190,3 +190,38 @@ def test_serve_warns_when_bound_beyond_this_machine(tmp_path, setup, capsys, hos
     server.server_close()
 
     assert ("warning" in capsys.readouterr().err) is warned
+
+
+def test_serve_shows_a_fused_export(tmp_path, setup):
+    config, _ = setup
+    export = tmp_path / "fused.json"
+    export.write_text(
+        json.dumps(
+            {
+                "scene": "001",
+                "cameras": ["7", "8"],
+                "fusion": {"weighting": "mean", "power": 0, "zone_m": None},
+                "period": "the whole video",
+                "cell_m": 0.5,
+                "origin": [0, 0],
+                "shape": [1, 2],
+                "dwell": [[3.0, 9.0]],
+                "passage": [[2.0, 7.0]],
+            }
+        )
+    )
+    args = parse(
+        ["serve", "--config", str(config), "--db", str(tmp_path / "x.db"), "--port", "0"]
+        + ["--fused", str(export)]
+    )
+
+    server, recording, _ = cli.start_serve(args)
+    serving(server)
+    try:
+        fused = get_json(server, "/api/fused")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert recording is None
+    assert fused["dwell"] == [[0.0, 9.0]] and fused["k"] == 5  # 2 people: suppressed

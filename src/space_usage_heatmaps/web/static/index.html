@@ -99,7 +99,7 @@ input[type="date"], select {
 input[type="date"]:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 select:disabled, input:disabled { opacity: 0.5; }
 #slot-picker { display: grid; gap: 8px; align-content: start; }
-#slot-picker[hidden] { display: none; }
+#slot-picker[hidden], #fused-choice[hidden], .fused-only[hidden] { display: none; }
 #legend-bar {
   height: 14px; border-radius: 4px; border: 1px solid var(--line);
   background: linear-gradient(to right, var(--ramp-0), var(--ramp-1), var(--ramp-2), var(--ramp-3));
@@ -116,9 +116,9 @@ dd { margin: 0; text-align: right; }
 .note { font-size: 13px; color: var(--muted); margin: 0; }
 </style>
 </head>
-<body data-camera="__CAMERA__">
+<body data-camera="__CAMERA__" data-fused="__FUSED__">
 <header>
-  <h1>Floor occupancy, camera <span id="camera"></span></h1>
+  <h1 id="title">Floor occupancy, camera <span id="camera"></span></h1>
   <p id="status" role="status" aria-live="polite">Loading…</p>
 </header>
 <main>
@@ -132,6 +132,7 @@ dd { margin: 0; text-align: right; }
       <div class="seg">
         <label><input type="radio" name="source" value="live" checked><span>Live</span></label>
         <label><input type="radio" name="source" value="slot"><span>15-min slot</span></label>
+        <label id="fused-choice" hidden><input type="radio" name="source" value="fused"><span>Fused scene</span></label>
       </div>
     </fieldset>
     <div id="slot-picker" hidden>
@@ -160,6 +161,8 @@ dd { margin: 0; text-align: right; }
       <dt>Highest cell</dt><dd id="sum-max">0</dd>
       <dt>Cell size</dt><dd id="sum-cell">0</dd>
       <dt>Data time</dt><dd id="sum-time">-</dd>
+      <dt class="fused-only" hidden>Cameras fused</dt><dd class="fused-only" id="sum-cameras" hidden>-</dd>
+      <dt class="fused-only" hidden>Overlap weighting</dt><dd class="fused-only" id="sum-fusion" hidden>-</dd>
     </dl>
     <p class="note" id="layer-note"></p>
   </aside>
@@ -167,22 +170,29 @@ dd { margin: 0; text-align: right; }
 <script>
 "use strict";
 const camera = document.body.dataset.camera;
+const hasFused = document.body.dataset.fused === "1";
 const UNITS = { dwell: "person-seconds", passage: "people" };
 const NOTES = {
   live: "Live layer: 60 s half-life, held in memory only and never stored. " +
     "Cells with fewer than 5 distinct people in the last 2 minutes read as empty.",
   slot: "Slot layer: cells with fewer than 5 distinct people read as empty.",
+  fused: "Fused scene layer: every camera's grid of this scene on one floor. Where cameras " +
+    "overlap, each cell is a weighted average of the cameras that cover it, so a person seen " +
+    "by several cameras is counted once. From an evaluation export of the whole video; cells " +
+    "with fewer than 5 distinct people read as empty.",
 };
 const EMPTY = {
   live: "No cell reached 5 distinct people in the last 2 minutes.",
   slot: "No cell reached 5 distinct people in this slot.",
+  fused: "No cell of the fused map reached 5 distinct people.",
 };
 const $ = (id) => document.getElementById(id);
 const desktop = window.matchMedia("(min-width: 960px)");
 const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false };
 const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 const timeFmt = (t) => new Date(t * 1000).toISOString().slice(11, 19) + " UTC";
-$("camera").textContent = camera;
+const cameraEl = $("camera");
+cameraEl.textContent = camera;
 
 function setStatus(text, error, quiet, kind) {
   // the live time changes every second: announced only on errors and source changes
@@ -354,11 +364,38 @@ function showSlot() {
   draw();
 }
 
+const WEIGHTING = {
+  visibility: (f) => `by visibility, power ${f.power}${f.zone_m ? `, on ${f.zone_m} m zones` : ""}`,
+  mean: () => "mean of the covering cameras",
+  sum: () => "none (cameras added)",
+};
+
+async function loadFused() {
+  try {
+    const d = await getJson("/api/fused");
+    if (state.source !== "fused") return;
+    state.data = { ...d, label: d.period };
+    $("sum-cameras").textContent = `${d.cameras.length} (${d.cameras.join(", ")})`;
+    $("sum-fusion").textContent = WEIGHTING[d.fusion.weighting](d.fusion);
+    setStatus(`Fused map of scene ${d.scene}, ${d.cameras.length} cameras, ${d.period}`);
+  } catch (e) {
+    state.data = null;
+    setStatus(`Fused map unavailable: ${e.message}`, true);
+  }
+  draw();
+}
+
 function setSource(source) {
   state.source = source;
   $("slot-picker").hidden = source !== "slot";
+  for (const el of document.querySelectorAll(".fused-only")) el.hidden = source !== "fused";
+  $("title").replaceChildren(
+    ...(source === "fused" ? ["Floor occupancy, fused scene"] : ["Floor occupancy, camera ", cameraEl]));
   clearInterval(state.timer);
-  if (source === "live") {
+  if (source === "fused") {
+    state.data = null; draw();
+    loadFused();
+  } else if (source === "live") {
     state.data = null; draw();
     setStatus("Live, connecting…");
     pollLive();
@@ -381,7 +418,13 @@ getJson(`/api/slots/latest?camera=${encodeURIComponent(camera)}`)
   .then((d) => { if (d.start) $("slot-day").value = d.start.slice(0, 10); })
   .catch(() => {})
   .finally(() => { if (state.source === "slot") loadSlots(); });
-setSource("live");
+$("fused-choice").hidden = !hasFused;
+if (hasFused) {
+  document.querySelector('input[name="source"][value="fused"]').checked = true;
+  setSource("fused");
+} else {
+  setSource("live");
+}
 </script>
 </body>
 </html>
