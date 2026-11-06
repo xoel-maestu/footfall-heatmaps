@@ -141,11 +141,13 @@ def test_a_stored_eval_report_is_reused_only_from_the_same_code(tmp_path, monkey
     cli.write_report(path, stored)
     computed = []
     monkeypatch.setattr(
-        cli, "config_eval", lambda *a: computed.append(a) or ({"fresh": True}, None, None)
+        cli, "config_eval", lambda *a: computed.append(a) or ({"fresh": True}, None, ["configs_a"])
     )
+    job = ("configs/a.yaml", None, "tune")
 
-    reused = e1_final.config_eval("configs/a.yaml", None, "tune", 0.5, 1000, print)
+    reused = e1_final.config_evals([job], 0.5, 1000, print)[job]
     cli.write_report(path, stored | {"source_sha256": "other"})
-    redone = e1_final.config_eval("configs/a.yaml", None, "tune", 0.5, 1000, print)
+    redone = e1_final.config_evals([job], 0.5, 1000, print)[job]
 
     assert reused == stored and redone == {"fresh": True} and len(computed) == 1
+    assert json.loads(path.read_text()) == {"fresh": True}  # the new report is stored

@@ -62,38 +62,61 @@ def _fresh(path, config_paths, resamples):
     return report
 
 
-def config_eval(config, compare, split, cell, resamples, log):
-    paths = [config] + ([compare] if compare else [])
-    names = [cli.config_name(p) for p in paths]
-    path = cli.eval_report_path(names, split, cell)
-    if (report := _fresh(path, paths, resamples)) is not None:
-        log(f"{path}: reused")
-        return report
-    log(f"{path}: scoring {' vs '.join(names)} on {split}")
-    report, _, _ = cli.config_eval(config, compare, split, cell, resamples)
-    cli.write_report(path, report)
+WORKERS = 4  # eval runs scored in parallel: CPU-bound bootstrap, about 1 GB each
+
+
+def _score(config, compare, split, cell, resamples):
+    """Score and store one eval run (a worker process's job)."""
+    report, _, names = cli.config_eval(config, compare, split, cell, resamples)
+    cli.write_report(cli.eval_report_path(names, split, cell), report)
     return report
 
 
-def gather(cell, resamples, log):
+def config_evals(jobs, cell, resamples, log, workers=WORKERS):
+    """{(config, compare, split): report}, reusing every fresh stored report and
+    scoring the rest, in parallel when workers > 1."""
+    out, todo = {}, []
+    for job in jobs:
+        config, compare, split = job
+        paths = [config] + ([compare] if compare else [])
+        path = cli.eval_report_path([cli.config_name(p) for p in paths], split, cell)
+        if (report := _fresh(path, paths, resamples)) is not None:
+            log(f"{path}: reused")
+            out[job] = report
+        else:
+            log(f"{path}: scoring")
+            todo.append(job)
+    if workers > 1 and len(todo) > 1:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(min(workers, len(todo))) as pool:
+            futures = {job: pool.submit(_score, *job, cell, resamples) for job in todo}
+            out |= {job: f.result() for job, f in futures.items()}
+    else:
+        out |= {job: _score(*job, cell, resamples) for job in todo}
+    return out
+
+
+def gather(cell, resamples, log, workers=WORKERS):
     """Every input of the E1 report, from caches and stored reports."""
     from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
         NvidiaMtmcReader,
     )
 
-    evals = {
-        split: config_eval(SUITE_CONFIG, None, split, cell, resamples, log) for split in SPLITS
-    }
+    jobs = [(SUITE_CONFIG, None, split) for split in SPLITS] + [
+        (config, baseline, split)
+        for _, config, baseline, _ in CONFIRMATIONS
+        for split in ("sealed", "tune")
+    ]
+    reports = config_evals(jobs, cell, resamples, log, workers)
+    evals = {split: reports[(SUITE_CONFIG, None, split)] for split in SPLITS}
     confirmations = [
         {
             "label": label,
             "config": cli.config_name(config),
             "baseline": cli.config_name(baseline),
             "kind": kind,
-            **{
-                split: config_eval(config, baseline, split, cell, resamples, log)
-                for split in ("sealed", "tune")
-            },
+            **{split: reports[(config, baseline, split)] for split in ("sealed", "tune")},
         }
         for label, config, baseline, kind in CONFIRMATIONS
     ]
