@@ -2,6 +2,7 @@
 video file with a ground-truth detector in place of YOLOX (as tests/test_cli_run.py)."""
 
 import argparse
+import functools
 import json
 import threading
 import urllib.error
@@ -88,6 +89,28 @@ def test_serve_records_in_process_and_serves_live_and_slots(tmp_path, setup):
     assert live["shape"] == [20, 20]
     assert np.asarray(live["dwell"]).sum() == 0  # 2 people on this video: under k (R5)
     assert slots["shape"] == [20, 20] and len(slots["slots"]) in (1, 2)  # 2 across a quarter
+    assert live["ended"] is not None  # the file was read to its end
+
+
+def test_serve_live_carries_the_recorded_people_with_k_1(tmp_path, setup, monkeypatch):
+    config, video = setup
+    monkeypatch.setattr(cli, "RecordSlots", functools.partial(cli.RecordSlots, k=1))
+    args = parse(
+        ["serve", "--config", str(config), "--db", str(tmp_path / "x.db"), "--source", str(video)]
+        + ["--port", "0"]
+    )
+
+    server, recording, stop = cli.start_serve(args)
+    serving(server)
+    try:
+        recording.join(timeout=30)
+        live = get_json(server, "/api/live?camera=7")
+    finally:
+        stop.set()
+        server.shutdown()
+        server.server_close()
+
+    assert np.asarray(live["dwell"]).sum() > 0 and np.asarray(live["passage"]).sum() > 0
 
 
 def test_serve_without_a_source_has_no_live_layer(tmp_path, setup):
