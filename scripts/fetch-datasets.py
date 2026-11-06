@@ -1,0 +1,162 @@
+"""Fetch the external evaluation-only datasets from their official sources.
+
+    uv run --no-sync python scripts/fetch-datasets.py wildtrack|caviar|mot17
+
+Only what `space-usage eval --dataset` reads, into SPACE_USAGE_DATA_DIR
+(default ~/datasets/space-usage-heatmaps), never into the repo:
+- wildtrack: calibrations, annotations and camera C5's frames, read by HTTP
+  range from the official 6.8 GB zip (whose offsets above 4 GiB wrap: it was
+  written without zip64);
+- caviar: the 26 corridor-view clips of the second set and their ground truth;
+- mot17: train sequences 02, 04 and 09 (FRCNN copy), by HTTP range from
+  the official 5.9 GB MOT17.zip.
+Anonymous HTTPS to the hosts below only, no redirects followed. Licences:
+docs/licenses.md. Files already present at their size are kept.
+"""
+
+import io
+import os
+import re
+import sys
+import urllib.request
+import zipfile
+from pathlib import Path
+
+from space_usage_heatmaps.perception.infrastructure.model_weights import check_url
+
+HOSTS = {"documents.epfl.ch", "homepages.inf.ed.ac.uk", "motchallenge.net"}
+WILDTRACK_ZIP = (
+    "https://documents.epfl.ch/groups/c/cv/cvlab-unit/www/data/Wildtrack/Wildtrack_dataset_full.zip"
+)
+WILDTRACK = ["calibrations/", "annotations_positions/", "Image_subsets/C5/"]
+CAVIAR_PAGE = "https://homepages.inf.ed.ac.uk/rbf/CAVIARDATA1/"
+CAVIAR_FILE = re.compile(r'href="\.\./(CAVIARDATA2/[A-Za-z0-9]+cor/[A-Za-z0-9]+\.(?:mpg|xml))"')
+MOT17_ZIP = "https://motchallenge.net/data/MOT17.zip"
+MOT17 = [
+    f"MOT17/train/MOT17-{n}-FRCNN/{part}"
+    for n in ("02", "04", "09")
+    for part in ("img1/", "gt/", "seqinfo.ini")
+]
+WRAP = 1 << 32
+
+
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise OSError(f"refusing redirect to {newurl}")
+
+
+_open = urllib.request.build_opener(_NoRedirects).open
+
+
+def _get(url, headers=None):
+    check_url(url, HOSTS)
+    with _open(urllib.request.Request(url, headers=headers or {}), timeout=120) as r:
+        return r.status, r.headers, r.read()
+
+
+class RemoteFile(io.RawIOBase):
+    """A remote file read by HTTP range requests."""
+
+    def __init__(self, url):
+        check_url(url, HOSTS)
+        self.url, self.pos = url, 0
+        with _open(urllib.request.Request(url, method="HEAD"), timeout=120) as r:
+            self.size = int(r.headers["Content-Length"])
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        return self.pos
+
+    def seek(self, offset, whence=0):
+        self.pos = {0: offset, 1: self.pos + offset, 2: self.size + offset}[whence]
+        return self.pos
+
+    def readinto(self, b):
+        if self.pos >= self.size or not len(b):
+            return 0
+        end = min(self.pos + len(b), self.size) - 1
+        status, _, data = _get(self.url, {"Range": f"bytes={self.pos}-{end}"})
+        if status != 206:
+            raise OSError(f"{self.url}: no range support (HTTP {status})")
+        b[: len(data)] = data
+        self.pos += len(data)
+        return len(data)
+
+
+def _open_member(archive, info, tries):
+    """The member's stream; an archive written without zip64 stores its local
+    header offsets modulo 4 GiB, so each candidate offset is tried, the last
+    one that worked first."""
+    base = info.header_offset % WRAP
+    for k in sorted(range(4), key=lambda k: k != tries[0]):
+        info.header_offset = base + k * WRAP
+        info._end_offset = None  # its overlap check reads the wrapped offsets
+        try:
+            stream = archive.open(info)
+        except zipfile.BadZipFile:
+            continue
+        tries[0] = k
+        return stream
+    raise OSError(f"cannot locate {info.filename} in the archive")
+
+
+def extract(archive, prefixes, out):
+    """Members of archive under any of prefixes into out, kept when present at
+    their size; names that would leave out are refused."""
+    out = Path(out).resolve()
+    tries, written = [0], 0
+    for info in archive.infolist():
+        if info.is_dir() or not info.filename.startswith(tuple(prefixes)):
+            continue
+        dest = (out / info.filename).resolve()
+        if not dest.is_relative_to(out):
+            raise OSError(f"refusing member outside {out}: {info.filename}")
+        if dest.exists() and dest.stat().st_size == info.file_size:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        part = dest.with_name(dest.name + ".part")
+        with _open_member(archive, info, tries) as src, part.open("wb") as f:
+            while chunk := src.read(1 << 22):
+                f.write(chunk)
+        part.replace(dest)
+        written += 1
+    return written
+
+
+def _remote_zip(url):
+    return zipfile.ZipFile(io.BufferedReader(RemoteFile(url), buffer_size=32 << 20))
+
+
+def fetch(name, data_dir):
+    if name == "wildtrack":
+        prefixes = [f"Wildtrack_dataset/{p}" for p in WILDTRACK]
+        return extract(_remote_zip(WILDTRACK_ZIP), prefixes, data_dir / "wildtrack")
+    if name == "mot17":
+        return extract(_remote_zip(MOT17_ZIP), MOT17, data_dir / "mot17")
+    _, _, page = _get(CAVIAR_PAGE)
+    written = 0
+    for path in sorted(set(CAVIAR_FILE.findall(page.decode("latin-1")))):
+        dest = data_dir / "caviar" / path.removeprefix("CAVIARDATA2/")
+        if dest.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        _, _, body = _get(f"https://homepages.inf.ed.ac.uk/rbf/{path}")
+        dest.write_bytes(body)
+        written += 1
+    return written
+
+
+def main(argv):
+    if len(argv) != 1 or argv[0] not in ("wildtrack", "caviar", "mot17"):
+        raise SystemExit(__doc__)
+    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    print(f"{argv[0]}: {fetch(argv[0], data.expanduser())} files written")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
