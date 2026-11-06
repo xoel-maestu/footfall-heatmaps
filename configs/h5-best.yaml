@@ -12,3 +12,14 @@ hidden_ratio: 0.88
 track_height_min_m: 1.0
 track_height_max_m: 2.0
 stride: 1
+
+# space-usage run: the camera this config records into 15-min slots (R4-R7).
+run:
+  camera_id: "645"
+  calibration: nvidia-mtmc/071/645  # scene 071's calibration under SPACE_USAGE_DATA_DIR
+  extent_m: [-17.8, -20.9, 18.3, 22.1]  # scene 071's floor; the grid snaps to 2 m blocks
+  cell_m: 0.5
+  retention_days: 90  # R7
+  masks:  # R6: a detection whose bottom-centre falls inside is dropped before the tracker
+    image: []  # polygons in source pixels, [[u, v], ...]
+    floor: []  # polygons in floor metres, [[x, y], ...]

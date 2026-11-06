@@ -22,6 +22,7 @@ class RecordSlots:
         self.store, self.camera_id, self.spec, self.k = store, camera_id, spec, k
         self.retention_days, self.now = retention_days, now
         self.slot = None
+        self.written = 0  # slots written so far
         self.live_layer = LiveLayer((spec.ny, spec.nx))
 
     def add(self, t, track_ids, xs, ys, seconds):
@@ -55,5 +56,6 @@ class RecordSlots:
     def _write(self):
         self.store.write(self.slot.grids(self.camera_id, self.k))
         self.slot = None
+        self.written += 1
         if self.now is not None:
             purge_slots(self.store, self.now(), self.retention_days)
