@@ -56,6 +56,12 @@ WEIGHTS = {
         "95316ad4705db4dff9d77c22238514d685c86c3cb6a7b9ceb46879bedc84e73b",
         "Apache-2.0",
     ),
+    "yolox-s-1280": Weights(
+        "yolox_s_1280.onnx",
+        None,
+        "b89fb6acc9072a74ece25ab4951b43fd21328c2eb07e4d7606220c0aa97fa33d",
+        "Apache-2.0",
+    ),
     # D-FINE-S trained on Objects365 then COCO (Peterande/D-FINE release
     # dfinev1.0, Apache-2.0), exported by D-FINE's tools/deployment/export_onnx.py.
     # RF-DETR Nano COCO (Roboflow, rfdetr 1.11.2's Apache-2.0 Nano checkpoint),
@@ -84,6 +90,7 @@ _YOLOX = (
 )
 EXPORTS = {
     "yolox-s-960": Export(*_YOLOX, ("960",)),
+    "yolox-s-1280": Export(*_YOLOX, ("1280",)),
     "dfine-s": Export(
         "https://github.com/Peterande/D-FINE.git",
         "956d1709314c2c6a4df6f34de232054578a7449f",  # master, 2026-08-19

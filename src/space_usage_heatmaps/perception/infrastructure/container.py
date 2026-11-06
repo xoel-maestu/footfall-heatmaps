@@ -25,6 +25,7 @@ ENGINE = "onnx-cuda"
 MODELS = {
     ("yolox-s", 640): "yolox-s",
     ("yolox-s", 960): "yolox-s-960",
+    ("yolox-s", 1280): "yolox-s-1280",
     ("dfine-s", 640): "dfine-s",
     ("rfdetr-n", 384): "rfdetr-n",
 }
