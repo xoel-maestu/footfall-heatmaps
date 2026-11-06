@@ -166,6 +166,11 @@ def _all_row(r):
 
 
 def run_eval(args):
+    if args.dataset:
+        if not args.config:
+            print("space-usage: error: --dataset needs --config", file=sys.stderr)
+            return 2
+        return run_eval_dataset(args)
     if args.config:
         return run_eval_config(args)
     if not (args.scene and args.camera):
@@ -642,14 +647,15 @@ def _print_tracking(t, names, width):
         "\ntracking guards: HOTA (DetA, AssA) and IDF1 in image space against the "
         "camera's truth boxes, TrackEval definitions; pooled = mean over scenes"
     )
-    print(f"{'config':<{width}}{'scene':<10}{'':<9}" + "".join(f"{m:>8}" for m in TRACKING))
+    scene_w = max(10, *(len(k) + 2 for k in t["scenes"][names[0]]))
+    print(f"{'config':<{width}}{'scene':<{scene_w}}{'':<9}" + "".join(f"{m:>8}" for m in TRACKING))
     rows = [(n, t["scenes"][n], t["pooled"][n]) for n in names]
     if "delta" in t:
         rows.append(("delta", t["delta"]["scenes"], t["delta"]["pooled"]))
     for label, scenes, pool in rows:
         for where, m in [*scenes.items(), ("pooled", pool)]:
             cells = "".join(f"{m[k]:>8.3f}" for k in TRACKING)
-            print(f"{label:<{width}}{where:<10}{'tracking':<9}{cells}")
+            print(f"{label:<{width}}{where:<{scene_w}}{'tracking':<9}{cells}")
     if "delta" in t:
         d = {k: 100 * v for k, v in t["delta"]["pooled"].items()}
         holds = guard_holds(t)
@@ -762,6 +768,123 @@ def run_eval_config(args):
     return 0
 
 
+# External datasets (spec 5): evaluation only, never tuned on; each one's
+# licence is in docs/licenses.md.
+EXTERNAL = ("wildtrack", "caviar", "mot17")
+MOT17_SEQUENCES = ("MOT17-02", "MOT17-04", "MOT17-09")  # the static cameras
+GROUND_TARGET_M = 0.30  # spec 7: WILDTRACK median ground position error
+
+
+def external_dataset(name):
+    """(reader, [(scene, camera)]) of an external dataset under the data dir:
+    WILDTRACK's most oblique camera, every CAVIAR corridor clip, MOT17's
+    static-camera train sequences."""
+    from space_usage_heatmaps.evaluation.infrastructure import (
+        caviar_reader,
+        mot17_reader,
+        wildtrack_reader,
+    )
+
+    if name == "wildtrack":
+        reader = wildtrack_reader.WildtrackReader(data_dir())
+        scene = wildtrack_reader.SCENE
+        return reader, [(scene, reader.most_oblique(scene))]
+    if name == "caviar":
+        reader = caviar_reader.CaviarReader(data_dir())
+        return reader, [(clip, caviar_reader.CAMERA) for clip in reader.scenes()]
+    reader = mot17_reader.Mot17Reader(data_dir())
+    return reader, [(seq, mot17_reader.CAMERA) for seq in MOT17_SEQUENCES]
+
+
+def wildtrack_ground_error(reader, scene, camera, config, source):
+    """Floor points of the config's tracks (its foot point through the camera
+    matrix) against the annotated floor positions, paired by box IoU."""
+    import numpy as np
+
+    from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
+    from space_usage_heatmaps.evaluation.infrastructure.ground_position import (
+        matched_ground_error,
+    )
+
+    t = source.tracks(scene, camera)
+    cam = reader.camera(scene, camera)
+    xs, ys, head = camera_floor_points(
+        cam,
+        t.boxes,
+        config.foot_point,
+        config.person_height_m,
+        config.min_implied_height_m,
+        t.track_ids,
+        t.frames,
+        config.track_heights(),
+    )
+    # Diagnostic split: boxes placed from their bottom edge or, judged hidden,
+    # from their top edge at the track's height (auto, auto-track).
+    groups = {"bottom-placed": ~head, "head-placed": head}
+    e = matched_ground_error(
+        reader.samples(scene, camera), t, np.column_stack([xs, ys]), groups=groups
+    )
+    return {
+        "camera": camera,
+        "depression_deg": reader.depression_deg(scene, camera),
+        "foot_point": config.foot_point,
+        "head_boxes": int(head.sum()),
+        **e,
+        "target_m": GROUND_TARGET_M,
+        "meets_target": e["median_m"] is not None and e["median_m"] <= GROUND_TARGET_M,
+    }
+
+
+def run_eval_dataset(args):
+    reader, scenes = external_dataset(args.dataset)
+    if not scenes:
+        print(f"space-usage: error: no {args.dataset} data under {data_dir()}", file=sys.stderr)
+        return 1
+    name = config_name(args.config)
+    config = load_config(args.config)
+    source = track_source(config, reader)
+    runs = [(config, source)]
+    print(f"{reader.name}  config {name}  evaluation only, never tuned on")
+    report = {
+        "dataset": reader.name,
+        "use": "evaluation only: never tuned on (spec 5); licence in docs/licenses.md",
+        "config": vars(config),
+        "scenes": [f"{scene}/{camera}" for scene, camera in scenes],
+    }
+    if args.dataset == "wildtrack":
+        scene, camera = scenes[0]
+        g = wildtrack_ground_error(reader, scene, camera, config, source)
+        report["ground_position"] = g
+        print(
+            f"camera {camera} (most oblique, {g['depression_deg']:.1f} degrees below the horizon), "
+            f"foot point {g['foot_point']}: {g['matched']} of {g['truth_boxes']} annotated "
+            f"people paired at IoU >= {g['min_iou']} (recall {_cell(g['recall'], 0)}, "
+            f"precision {_cell(g['precision'], 0)})"
+        )
+        median = "n/a" if g["median_m"] is None else f"{100 * g['median_m']:.1f} cm"
+        p90 = "n/a" if g["p90_m"] is None else f"{100 * g['p90_m']:.1f} cm"
+        verdict = "meets" if g["meets_target"] else "misses"
+        print(
+            f"ground position error: median {median}, p90 {p90}; "
+            f"target median <= {100 * GROUND_TARGET_M:.0f} cm: {verdict}"
+        )
+        for group, m in g["groups"].items():
+            if m["matched"]:
+                print(
+                    f"  {group}: {m['matched']} pairs, median {100 * m['median_m']:.1f} cm, "
+                    f"p90 {100 * m['p90_m']:.1f} cm"
+                )
+    tracking = score_tracking(reader, scenes, [name], runs)
+    report["tracking"] = tracking
+    report["tracks_provenance"] = getattr(source, "provenance", None)
+    _print_tracking(tracking, [name], max(len(name), len("config")) + 2)
+    path = Path("reports") / f"external-{args.dataset}-{name}.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    print(f"\nreport {path}")
+    return 0
+
+
 BENCH_SCENE, BENCH_CAMERA, BENCH_CELL = "071", "645", 0.25
 
 
@@ -834,6 +957,11 @@ def main(argv=None):
     )
     ev.add_argument("--split", choices=sorted(SPLITS), help="with --config: scenes to score")
     ev.add_argument("--compare", help="with --config: second configuration, paired difference")
+    ev.add_argument(
+        "--dataset",
+        choices=EXTERNAL,
+        help="with --config: an external evaluation-only dataset instead of --split",
+    )
     ev.add_argument("--resamples", type=int, default=1000, help=argparse.SUPPRESS)
     ev.add_argument("--cell", type=float, choices=[0.25, 0.5, 1.0], default=0.5)
     be = sub.add_parser("bench", help="sustained end-to-end fps and peak VRAM on one video")
