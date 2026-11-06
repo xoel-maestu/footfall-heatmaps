@@ -95,7 +95,12 @@ def _open_member(archive, info, tries):
     base = info.header_offset % WRAP
     for k in sorted(range(4), key=lambda k: k != tries[0]):
         info.header_offset = base + k * WRAP
-        info._end_offset = None  # its overlap check reads the wrapped offsets
+        # zipfile has no public way to skip its overlap check, which compares
+        # against an end derived from the wrapped offsets (CPython >= 3.12.3;
+        # older versions lack the attribute): clear it only where it exists.
+        # tests/test_fetch_datasets.py covers both cases.
+        if getattr(info, "_end_offset", None) is not None:
+            info._end_offset = None
         try:
             stream = archive.open(info)
         except zipfile.BadZipFile:
@@ -132,6 +137,25 @@ def _remote_zip(url):
     return zipfile.ZipFile(io.BufferedReader(RemoteFile(url), buffer_size=32 << 20))
 
 
+def download(url, dest):
+    """url into dest unless dest is already at the size the server announces;
+    written to a .part file, checked against Content-Length, then renamed, so
+    a truncated or interrupted download never stays in place. Whether it wrote."""
+    check_url(url, HOSTS)
+    with _open(urllib.request.Request(url, method="HEAD"), timeout=120) as r:
+        size = int(r.headers["Content-Length"])
+    if dest.exists() and dest.stat().st_size == size:
+        return False
+    _, headers, body = _get(url)
+    if len(body) != size or len(body) != int(headers["Content-Length"]):
+        raise OSError(f"{url}: truncated, {len(body)} of {size} bytes")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_name(dest.name + ".part")
+    part.write_bytes(body)
+    part.replace(dest)
+    return True
+
+
 def fetch(name, data_dir):
     if name == "wildtrack":
         prefixes = [f"Wildtrack_dataset/{p}" for p in WILDTRACK]
@@ -142,12 +166,7 @@ def fetch(name, data_dir):
     written = 0
     for path in sorted(set(CAVIAR_FILE.findall(page.decode("latin-1")))):
         dest = data_dir / "caviar" / path.removeprefix("CAVIARDATA2/")
-        if dest.exists():
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        _, _, body = _get(f"https://homepages.inf.ed.ac.uk/rbf/{path}")
-        dest.write_bytes(body)
-        written += 1
+        written += download(f"https://homepages.inf.ed.ac.uk/rbf/{path}", dest)
     return written
 
 

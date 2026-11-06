@@ -49,3 +49,91 @@ def test_only_the_official_hosts_are_contacted():
 
     with pytest.raises(OSError, match="refusing"):
         fd.RemoteFile("https://example.com/MOT17.zip")
+
+
+class FakeResponse:
+    def __init__(self, status, body, length=None):
+        self.status, self.body = status, body
+        self.headers = {"Content-Length": str(len(body) if length is None else length)}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return self.body
+
+
+def fake_server(files, served=None):
+    """files: url -> (size the server announces, body it sends)."""
+    calls = []
+
+    def _open(request, timeout):
+        calls.append((request.get_method(), request.full_url))
+        size, body = files[request.full_url]
+        if request.get_method() == "HEAD":
+            return FakeResponse(200, b"", size)
+        return FakeResponse(200, body, size)
+
+    return _open, calls
+
+
+URL = "https://homepages.inf.ed.ac.uk/rbf/CAVIARDATA2/x/a.xml"
+
+
+def test_a_truncated_download_is_refused_and_leaves_no_file(tmp_path, monkeypatch):
+    fd = _module()
+    _open, _ = fake_server({URL: (10, b"short")})
+    monkeypatch.setattr(fd, "_open", _open)
+    dest = tmp_path / "a.xml"
+
+    with pytest.raises(OSError, match="truncated"):
+        fd.download(URL, dest)
+
+    assert not dest.exists() and not list(tmp_path.iterdir())
+
+
+def test_a_file_of_the_wrong_size_is_fetched_again(tmp_path, monkeypatch):
+    fd = _module()
+    _open, calls = fake_server({URL: (10, b"0123456789")})
+    monkeypatch.setattr(fd, "_open", _open)
+    dest = tmp_path / "a.xml"
+    dest.write_bytes(b"broken")
+
+    assert fd.download(URL, dest) is True
+    assert dest.read_bytes() == b"0123456789"
+    assert fd.download(URL, dest) is False  # kept at its size
+    assert [m for m, _ in calls] == ["HEAD", "GET", "HEAD"]
+
+
+class SlottedInfo:
+    """A ZipInfo stand-in without zipfile's private overlap-check attribute."""
+
+    __slots__ = ("filename", "header_offset")
+
+    def __init__(self):
+        self.filename, self.header_offset = "a", 5
+
+
+def test_member_lookup_does_not_need_zipfiles_private_attribute():
+    fd = _module()
+
+    class Archive:
+        def open(self, info):
+            return io.BytesIO(b"x")
+
+    assert fd._open_member(Archive(), SlottedInfo(), [0]).read() == b"x"
+
+
+def test_a_wrapped_end_offset_does_not_block_the_member():
+    # On an archive written without zip64, zipfile derives each member's end
+    # from the wrapped offsets, below where the member really ends.
+    fd = _module()
+    z = archive({"d/a.txt": b"abc" * 100})
+    info = z.getinfo("d/a.txt")
+    if hasattr(info, "_end_offset"):
+        info._end_offset = 1
+
+    assert fd._open_member(z, info, [0]).read() == b"abc" * 100
