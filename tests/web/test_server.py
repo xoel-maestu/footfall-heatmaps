@@ -55,7 +55,7 @@ def recording():
 
 def test_live_has_the_contract_shape(serve):
     recorder, live = recording()
-    recorder.add(T0, np.arange(3), np.full(3, -0.9), np.full(3, 2.1), 1.0)
+    recorder.add(T0, np.arange(5), np.full(5, -0.9), np.full(5, 2.1), 1.0)
     server = serve(live)
 
     status, kind, body = get(server, "/api/live?camera=645")
@@ -131,7 +131,7 @@ def test_the_page_is_served_with_the_layer_names(serve):
 
 def test_reading_live_writes_nothing_to_disk(serve, tmp_path):
     recorder, live = recording()
-    recorder.add(T0, np.arange(3), np.full(3, -0.9), np.full(3, 2.1), 1.0)
+    recorder.add(T0, np.arange(5), np.full(5, -0.9), np.full(5, 2.1), 1.0)
     server = serve(live)
 
     get(server, "/api/live?camera=645")

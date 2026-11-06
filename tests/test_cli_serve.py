@@ -85,7 +85,8 @@ def test_serve_records_in_process_and_serves_live_and_slots(tmp_path, setup):
         server.shutdown()
         server.server_close()
 
-    assert live["shape"] == [20, 20] and np.asarray(live["dwell"]).sum() > 0
+    assert live["shape"] == [20, 20]
+    assert np.asarray(live["dwell"]).sum() == 0  # 2 people on this video: under k (R5)
     assert slots["shape"] == [20, 20] and len(slots["slots"]) in (1, 2)  # 2 across a quarter
 
 

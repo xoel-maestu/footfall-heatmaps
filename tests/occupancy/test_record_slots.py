@@ -99,16 +99,16 @@ def test_live_layer_halves_every_60_seconds():
     store = SqliteSlotStore(":memory:")
     r = recorder(store)
 
-    r.add(T0, *crowd(2), seconds=1.0)
+    r.add(T0, *crowd(6), seconds=1.0)
     dwell, passage = r.live(T0 + 60)
 
-    assert dwell[0, 0] == 1.0  # 2 person-seconds, one half-life later
-    assert passage[0, 0] == 1.0  # 2 entries
+    assert dwell[0, 0] == 3.0  # 6 person-seconds, one half-life later
+    assert passage[0, 0] == 3.0  # 6 entries
 
 
 def test_live_passage_counts_a_track_entering_a_cell_once():
     store = SqliteSlotStore(":memory:")
-    r = recorder(store)
+    r = RecordSlots(store, "cam", SPEC, retention_days=90, now=lambda: T0, k=1)  # one track shown
 
     for t in range(3):  # track 0 stays in cell (0, 0)
         r.add(T0 + t * 1e-6, np.array([0]), np.array([0.1]), np.array([0.1]), seconds=0.1)

@@ -29,7 +29,7 @@ class RecordSlots:
         self.slot = None
         self.written = 0  # slots written so far
         self.past_retention = 0  # slots not written: older than the retention
-        self.live_layer = LiveLayer((spec.ny, spec.nx))
+        self.live_layer = LiveLayer((spec.ny, spec.nx), k=k)
 
     def add(self, t, track_ids, xs, ys, seconds):
         """Samples of one frame at t (UTC epoch seconds), each worth seconds of dwell;
@@ -56,7 +56,8 @@ class RecordSlots:
             self._write()
 
     def live(self, t):
-        """(dwell, passage) of the live layer at t, decayed with a 60 s half-life."""
+        """(dwell, passage) of the live layer at t, decayed with a 60 s half-life,
+        empty where fewer than k people were seen in the last 120 s (R5)."""
         return self.live_layer.at(t)
 
     def _write(self):

@@ -1,4 +1,5 @@
-"""R5 (spec 3): a cell of a persisted slot with fewer than k=5 distinct people reads as empty.
+"""R5 (spec 3): a cell with fewer than k=5 distinct people reads as empty, in a
+persisted slot and, by the same rule, in the live layer.
 
 The passage layer is the per-cell count of distinct ephemeral ids, an
 aggregate R4 allows; suppression runs before the write, so no cell below k
@@ -10,6 +11,7 @@ import numpy as np
 from space_usage_heatmaps.occupancy.application.read_slots import read_slots
 from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
 from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from space_usage_heatmaps.occupancy.domain.live import RECENT_S, LiveLayer
 from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, SlotGrid, suppress
 from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
@@ -109,3 +111,45 @@ def test_the_read_path_empties_n_unique_below_k_even_if_stored():
     )
 
     assert {s.n_unique for s in read_slots(store, "cam", T0, T0 + 900)} == {0}
+
+
+# The live layer: a cell shows only once k distinct ids were seen in it within
+# the last two half-lives (120 s); the (id, cell, last seen) bookkeeping is in
+# memory and pruned as it ages.
+
+
+def live_cell(n, t, first=0, layer=None):
+    """n ids in cell (0, 0) at t, one second of dwell each."""
+    layer = layer or LiveLayer((2, 4))
+    layer.add(t, np.arange(first, first + n), np.zeros(n, dtype=int), 1.0)
+    return layer
+
+
+def test_live_cell_with_four_people_reads_as_empty():
+    dwell, passage = live_cell(4, T0).at(T0)
+
+    assert not dwell.any() and not passage.any()
+
+
+def test_live_cell_with_five_people_is_shown():
+    dwell, passage = live_cell(5, T0).at(T0)
+
+    assert dwell[0, 0] == 5.0 and passage[0, 0] == 5.0
+
+
+def test_live_ids_age_out_of_the_recent_window():
+    layer = live_cell(5, T0)
+    assert RECENT_S == 120
+
+    assert layer.at(T0 + 119)[0][0, 0] > 0
+    dwell, passage = layer.at(T0 + 121)  # decayed but still above zero, and hidden
+    assert not dwell.any() and not passage.any()
+    assert layer.last_seen == {}  # pruned, not only ignored
+
+
+def test_live_window_counts_people_seen_at_different_times():
+    layer = live_cell(4, T0)
+    live_cell(1, T0 + 100, first=4, layer=layer)
+
+    assert layer.at(T0 + 100)[1][0, 0] > 0  # 5 distinct ids within 120 s
+    assert not layer.at(T0 + 121)[1].any()  # the first 4 aged out: 1 left
