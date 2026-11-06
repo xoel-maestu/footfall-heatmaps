@@ -46,8 +46,9 @@ on the canvas. Numbers are tabular.
 ## Layout
 
 Below 960 px one column: the map (its height follows the grid's aspect), then the
-panel. From 960 px two columns: the map takes the remaining width and the full
-viewport height, the panel is 340 px on the right.
+panel. From 960 px two columns: the map takes the full viewport height and the
+width its grid needs at that height, with no empty side gutters; the panel takes
+the rest (at least 340 px) and lays its groups in columns of at least 260 px.
 
 ## Elevation & Depth
 
@@ -62,7 +63,7 @@ None: no sheets, no dialogs, no shadows.
 - Map: canvas, x to the right and y up, grid lines every 2 m labelled in metres.
 - Source and layer switches: segmented radio groups. Layer names are exactly
   "Dwell (person-seconds)" and "Passage (people)".
-- Slot picker: a UTC day and the slots that start on it.
+- Slot picker: a UTC day and the slots that start on it; hidden in live mode.
 - Legend: the ramp from 0 to the highest cell shown, with the unit.
 - Summary: sum over cells, cells above zero, highest cell, cell size, data time.
 

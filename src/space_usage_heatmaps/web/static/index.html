@@ -57,13 +57,21 @@ h1 { font-size: 22px; font-weight: 600; margin: 0; text-wrap: balance; }
 main {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); padding: var(--gap);
 }
-@media (min-width: 960px) {
-  main { grid-template-columns: minmax(0, 1fr) 340px; height: calc(100vh - 54px); }
-}
 #map-wrap { position: relative; min-height: 240px; aspect-ratio: var(--map-aspect, 1); }
-@media (min-width: 960px) { #map-wrap { aspect-ratio: auto; min-height: 0; } }
 #map { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
-aside { display: flex; flex-direction: column; gap: 20px; min-width: 0; overflow-y: auto; }
+aside { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+@media (min-width: 960px) {
+  /* the map takes the width its grid needs at full height; the panel takes the rest */
+  main { grid-template-columns: auto minmax(340px, 1fr); height: calc(100vh - 54px); }
+  #map-wrap {
+    aspect-ratio: auto; min-height: 0;
+    width: min(var(--map-w, 60vw), calc(100vw - 340px - 3 * var(--gap)));
+  }
+  aside {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    align-content: start; gap: 20px var(--gap); overflow-y: auto;
+  }
+}
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 legend, .label { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; padding: 0; }
 .seg { display: flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
@@ -84,7 +92,8 @@ input[type="date"], select {
 }
 input[type="date"]:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 select:disabled, input:disabled { opacity: 0.5; }
-#slot-picker { display: grid; gap: 8px; }
+#slot-picker { display: grid; gap: 8px; align-content: start; }
+#slot-picker[hidden] { display: none; }
 #legend-bar {
   height: 14px; border-radius: 4px; border: 1px solid var(--line);
   background: linear-gradient(to right, var(--ramp-0), var(--ramp-1), var(--ramp-2), var(--ramp-3));
@@ -118,13 +127,12 @@ dd { margin: 0; text-align: right; }
         <label><input type="radio" name="source" value="slot"><span>15-min slot</span></label>
       </div>
     </fieldset>
-    <fieldset id="slot-picker" disabled>
-      <legend>Slot (UTC)</legend>
-      <label class="label" for="slot-day">Day</label>
+    <div id="slot-picker" hidden>
+      <label class="label" for="slot-day">Slot day (UTC)</label>
       <input type="date" id="slot-day">
-      <label class="label" for="slot">Start</label>
-      <select id="slot"><option value="">No slots on this day</option></select>
-    </fieldset>
+      <label class="label" for="slot">Slot start</label>
+      <select id="slot"></select>
+    </div>
     <fieldset>
       <legend>Layer</legend>
       <div class="seg">
@@ -154,10 +162,12 @@ dd { margin: 0; text-align: right; }
 const camera = document.body.dataset.camera;
 const UNITS = { dwell: "person-seconds", passage: "people" };
 const NOTES = {
-  live: "Live layer: 60 s half-life, held in memory only and never stored.",
+  live: "Live layer: 60 s half-life, held in memory only and never stored. " +
+    "Cells with fewer than 5 distinct people in the last 2 minutes read as empty.",
   slot: "Slot layer: cells with fewer than 5 distinct people read as empty.",
 };
 const $ = (id) => document.getElementById(id);
+const desktop = window.matchMedia("(min-width: 960px)");
 const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false };
 const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 const timeFmt = (t) => new Date(t * 1000).toISOString().slice(11, 19) + " UTC";
@@ -201,6 +211,10 @@ function draw() {
   const px = Math.max(1, Math.min((W - pad.l - pad.r) / nx, (H - pad.t - pad.b) / ny));
   const mw = px * nx, mh = px * ny;
   const x0 = pad.l + (W - pad.l - pad.r - mw) / 2, y0 = pad.t;
+  if (desktop.matches) { // the map column as wide as the grid at full height: no empty side gutters
+    const w = `${Math.ceil(pad.l + pad.r + ((H - pad.t - pad.b) / ny) * nx)}px`;
+    if (wrap.style.getPropertyValue("--map-w") !== w) wrap.style.setProperty("--map-w", w);
+  }
   const grid = d[state.layer];
   const stops = ["--ramp-0", "--ramp-1", "--ramp-2", "--ramp-3"].map((v) => hexRgb(cssVar(v)));
   let max = 0, total = 0, cells = 0;
@@ -269,6 +283,8 @@ async function pollLive() {
     setStatus(`Live, updated ${timeFmt(d.t)}`, false, true);
     draw();
   } catch (e) {
+    if (state.source !== "live") return;
+    state.data = null; draw(); // no stale map under an error
     setStatus(`Live layer unavailable: ${e.message}`, true);
   } finally {
     state.busy = false;
@@ -324,7 +340,7 @@ function showSlot() {
 
 function setSource(source) {
   state.source = source;
-  $("slot-picker").disabled = source !== "slot";
+  $("slot-picker").hidden = source !== "slot";
   clearInterval(state.timer);
   if (source === "live") {
     state.data = null; draw();
@@ -342,6 +358,7 @@ $("slot-day").addEventListener("change", loadSlots);
 $("slot").addEventListener("change", showSlot);
 new ResizeObserver(draw).observe($("map-wrap"));
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+desktop.addEventListener("change", draw);
 $("slot-day").value = new Date().toISOString().slice(0, 10);
 setSource("live");
 </script>

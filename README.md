@@ -9,7 +9,9 @@ plan, never images or identities. Python, runs locally on a modest NVIDIA GPU.
 live layer (60 s half-life, held in memory only) updating every second, and the
 persisted 15-minute slots. With `--source` it records that camera in the same
 process, so the live layer never leaves memory; without it, it shows slots only.
-It binds to 127.0.0.1 unless `--host` says otherwise.
+Both layers read a cell with fewer than 5 distinct people as empty: a slot over
+its quarter, the live layer over the last 2 minutes. It binds to 127.0.0.1
+unless `--host` says otherwise, and warns when it binds beyond loopback.
 
 ```bash
 uv run space-usage serve --config configs/h5-best.yaml --db slots.db \
@@ -17,9 +19,10 @@ uv run space-usage serve --config configs/h5-best.yaml --db slots.db \
 # open http://127.0.0.1:8000/
 ```
 
-API: `GET /api/live?camera=` returns `{cell_m, origin, shape, dwell, passage, t}`;
-`GET /api/slots?camera=&from=&to=` returns the slots starting in `[from, to)`
-(ISO 8601 with a zone, or epoch seconds), k-suppressed as they are stored.
+API: `GET /api/live?camera=` returns `{cell_m, origin, shape, dwell, passage, t}`,
+or 503 once the recorder has failed; `GET /api/slots?camera=&from=&to=` returns
+the slots starting in `[from, to)` (ISO 8601 with a zone, or epoch seconds,
+clamped to 1970 to 2100), k-suppressed as they are stored.
 
 ### A local RTSP stream from a video file
 
