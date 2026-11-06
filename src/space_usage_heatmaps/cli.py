@@ -443,13 +443,14 @@ def cache_key(c):
     return key + _params_suffix(c.tracker_params) if c.tracker_params else key
 
 
-def detection_cache_key(c):
+def detection_cache_key(c, stride=1):
     """Directory of a detector recipe's cached detections (detection_cache):
     every tracker, stride and higher score threshold of that recipe replays
-    them, so they hold every frame at the cache's score floor."""
+    them, so they hold every frame at the cache's score floor. With a stride,
+    those of every stride-th frame only, for a camera without every-frame ones."""
     from space_usage_heatmaps.perception.infrastructure.container import cache_params
 
-    key = f"{c.detector}-{c.input_size}-{c.engine}-stride1"
+    key = f"{c.detector}-{c.input_size}-{c.engine}-stride{stride}"
     params = cache_params(c.detector, c.detector_params)
     return key + _params_suffix(params) if params else key
 
@@ -482,7 +483,10 @@ def pipeline_track_source(config, reader):
     tracker on each video and the skipped frames filled."""
     import numpy as np
 
-    from space_usage_heatmaps.evaluation.infrastructure.detection_cache import CachedDetections
+    from space_usage_heatmaps.evaluation.infrastructure.detection_cache import (
+        CachedDetections,
+        StridedDetections,
+    )
     from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
         PipelineDetections,
         PipelineTrackSource,
@@ -492,16 +496,19 @@ def pipeline_track_source(config, reader):
 
     cached = container.cache_params(config.detector, config.detector_params)
 
-    def detection_of(scene, camera):
-        return container.build_detection(
-            reader.video(scene, camera),
-            config.detector,
-            config.input_size,
-            1,
-            data_dir() / "models",
-            params=cached,
-            engine=config.engine,
-        )
+    def detection_at(stride):
+        def detection_of(scene, camera):
+            return container.build_detection(
+                reader.video(scene, camera),
+                config.detector,
+                config.input_size,
+                stride,
+                data_dir() / "models",
+                params=cached,
+                engine=config.engine,
+            )
+
+        return detection_of
 
     def tracker_of(scene, camera):
         return container.build_tracker(
@@ -523,12 +530,19 @@ def pipeline_track_source(config, reader):
             "homography_sha256": hashlib.sha256(h.tobytes()).hexdigest()
         }
 
-    detections = CachedDetections(
-        PipelineDetections(detection_of),
-        data_dir() / "cache" / "detections" / detection_cache_key(config),
-        container.detection_metadata(config.detector, config.input_size, 1, cached, config.engine),
-        identity=video_identity,
-    )
+    def cache_at(stride):
+        return CachedDetections(
+            PipelineDetections(detection_at(stride)),
+            data_dir() / "cache" / "detections" / detection_cache_key(config, stride),
+            container.detection_metadata(
+                config.detector, config.input_size, stride, cached, config.engine
+            ),
+            identity=video_identity,
+        )
+
+    detections = cache_at(1)
+    if config.stride > 1:
+        detections = StridedDetections(detections, cache_at(config.stride))
     meta = container.pipeline_metadata(
         config.detector,
         config.tracker,

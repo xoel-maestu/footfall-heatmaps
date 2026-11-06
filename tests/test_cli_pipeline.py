@@ -386,3 +386,43 @@ def test_the_bench_writes_its_result_for_the_e1_suite(tmp_path, monkeypatch, cap
     report = json.loads((tmp_path / "reports" / "bench-configs_trt.json").read_text())
     assert report["minutes"] == 0.5 and report["fps_mean"] == 42.0
     assert report["config"] == "configs_trt" and "measured_at" in report
+
+
+def test_a_stride_without_every_frame_detections_detects_only_its_frames(
+    tmp_path, rows, monkeypatch
+):
+    data, _ = _tiny(tmp_path, rows, monkeypatch)
+    seen = []
+    real = container.build_detection
+
+    def counting(*args, **kwargs):
+        source, detector = real(*args, **kwargs)
+        original = detector.detect
+        detector.detect = lambda frame: seen.append(frame.index) or original(frame)
+        return source, detector
+
+    monkeypatch.setattr(container, "build_detection", counting)
+
+    (tmp_path / "half.yaml").write_text(CONFIG.replace("stride: 1", "stride: 2"))
+    args = ["eval", "--config", "half.yaml", "--split", "tiny", "--resamples", "5"]
+    assert cli.main(args) == 0
+
+    assert seen == [0, 2, 4, 6, 8, 10]  # one frame in two through the detector
+    assert sorted(p.name for p in (data / "cache/detections").iterdir()) == [
+        "yolox-s-640-onnx-cuda-stride2"
+    ]
+    half, meta = _tracks(data, cli.cache_key(cli.load_config("half.yaml")))
+    assert meta["stride"] == 2 and set(half) & {1, 3, 5}  # skipped frames filled
+
+
+def test_a_stride_prefers_every_frame_detections_when_they_exist(tmp_path, rows, monkeypatch):
+    data, loaded = _tiny(tmp_path, rows, monkeypatch)
+
+    assert _eval(tmp_path, "every", "") == 0
+    (tmp_path / "half.yaml").write_text(CONFIG.replace("stride: 1", "stride: 2"))
+    assert cli.main(["eval", "--config", "half.yaml", "--split", "tiny", "--resamples", "5"]) == 0
+
+    assert len(loaded) == 1  # replayed from the every-frame cache
+    assert [p.name for p in (data / "cache/detections").iterdir()] == [
+        "yolox-s-640-onnx-cuda-stride1"
+    ]

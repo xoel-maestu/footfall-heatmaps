@@ -36,6 +36,15 @@ class CachedDetections:
         self._identity = identity or (lambda scene, camera: {})
         self.last_run = None
 
+    def has(self, scene, camera):
+        """Whether a stored file of this recipe holds the camera's detections."""
+        path = self.directory / f"scene_{scene}_camera_{camera}.npz"
+        if not path.exists():
+            return False
+        read = read_cache(path, ("frames",))
+        expected = self.metadata | self._identity(scene, camera)
+        return read is not None and stale(read[0], expected, lambda line: None, "") is None
+
     def detections(self, scene, camera):
         path = self.directory / f"scene_{scene}_camera_{camera}.npz"
         expected = self.metadata | self._identity(scene, camera)
@@ -74,3 +83,19 @@ def _replay(frames, box_frames, boxes, scores):
         (int(i), Detections(boxes[a:b], scores[a:b]))
         for i, a, b in zip(frames, lo, hi, strict=True)
     ]
+
+
+class StridedDetections:
+    """A stride-N recipe's detections: the every-frame cache when it holds the
+    camera (a stride subsamples it exactly), else the detector on every N-th
+    frame only, in its own cache."""
+
+    def __init__(self, every_frame, strided):
+        self._every, self._strided = every_frame, strided
+        self.last_run = None
+
+    def detections(self, scene, camera):
+        source = self._every if self._every.has(scene, camera) else self._strided
+        run = source.detections(scene, camera)
+        self.last_run = source.last_run
+        return run
