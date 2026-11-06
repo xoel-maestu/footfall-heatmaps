@@ -98,3 +98,17 @@ def test_a_complete_slot_replaces_an_incomplete_one():
     store.write(slot(9, incomplete=False))
 
     assert stored(store) == {(9, False)}
+
+
+def test_two_incomplete_passes_merge_without_overstating_presence():
+    """A process restart in one quarter writes it twice, both incomplete. Ids
+    differ across runs, so dwell adds up while passage and n_unique take the
+    larger pass: no dwell is lost and no person is counted twice."""
+    store = SqliteSlotStore(":memory:")
+    store.write(slot(9, incomplete=True))  # first 10 min, then the process stops
+    store.write(slot(5, incomplete=True))  # restart, last 3 min
+
+    rows = {s.layer: s for s in store.read("cam", T0, T0 + 900)}
+    assert stored(store) == {(9, True)}
+    assert np.all(rows["dwell"].grid == 14.0)
+    assert np.all(rows["passage"].grid == 9.0)

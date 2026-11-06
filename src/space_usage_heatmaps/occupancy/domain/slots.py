@@ -43,10 +43,24 @@ def suppress_count(n, k=K_MIN_PEOPLE):
     return n if n >= k else 0
 
 
+def merge_incomplete(old, new, k=K_MIN_PEOPLE):
+    """Two incomplete passes over one quarter (a restart): ids differ across
+    runs, so dwell adds up (disjoint time) and passage and n_unique take the
+    larger pass, which never counts one person twice. Inputs are already
+    suppressed, so a passage cell is 0 or at least k, and so is their max."""
+    if old.layer == "dwell":
+        grid = np.asarray(old.grid) + np.asarray(new.grid)
+    else:
+        grid = np.where(np.maximum(old.grid, new.grid) < k, 0.0, np.maximum(old.grid, new.grid))
+    n = suppress_count(max(old.n_unique, new.n_unique), k)
+    return SlotGrid(new.camera_id, new.start_utc, new.cell_m, new.layer, grid, n, True)
+
+
 class SlotStore(Protocol):
     def write(self, slots: Sequence[SlotGrid]) -> None:
-        """Insert, or replace a slot with the same camera, start, cell and layer,
-        unless the stored one is complete and the new one is not."""
+        """Insert a slot; on the same camera, start, cell and layer, a complete
+        one replaces the stored one, an incomplete one is merged into a stored
+        incomplete one (merge_incomplete) and dropped over a complete one."""
         ...
 
     def read(self, camera_id: str, start_utc: int, end_utc: int) -> list[SlotGrid]:

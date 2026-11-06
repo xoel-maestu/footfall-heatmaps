@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import numpy as np
 
-from space_usage_heatmaps.occupancy.domain.slots import SlotGrid
+from space_usage_heatmaps.occupancy.domain.slots import SlotGrid, merge_incomplete
 
 SCHEMA = """CREATE TABLE IF NOT EXISTS slots (
     camera_id TEXT NOT NULL,
@@ -47,15 +47,28 @@ class SqliteSlotStore:
 
     def write(self, slots):
         with self.db:
-            self.db.executemany(
-                # A complete slot is never replaced by an incomplete one, e.g. a
-                # stream whose wall clock steps back into a quarter already written.
-                "INSERT INTO slots VALUES (?, ?, ?, ?, ?, ?, ?)"
-                " ON CONFLICT (camera_id, start_utc, cell_m, layer) DO UPDATE SET"
-                " grid_blob = excluded.grid_blob, n_unique = excluded.n_unique,"
-                " incomplete = excluded.incomplete"
-                " WHERE slots.incomplete = 1 OR excluded.incomplete = 0",
-                [
+            for s in slots:
+                if s.incomplete:
+                    row = self.db.execute(
+                        "SELECT grid_blob, n_unique, incomplete FROM slots WHERE camera_id = ?"
+                        " AND start_utc = ? AND cell_m = ? AND layer = ?",
+                        (s.camera_id, _iso(s.start_utc), s.cell_m, s.layer),
+                    ).fetchone()
+                    if row is not None and not row[2]:
+                        continue  # a complete slot is never replaced by an incomplete one
+                    if row is not None:
+                        old = SlotGrid(
+                            s.camera_id,
+                            s.start_utc,
+                            s.cell_m,
+                            s.layer,
+                            self.decode(row[0]),
+                            row[1],
+                            True,
+                        )
+                        s = merge_incomplete(old, s)
+                self.db.execute(
+                    "INSERT OR REPLACE INTO slots VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         s.camera_id,
                         _iso(s.start_utc),
@@ -64,10 +77,8 @@ class SqliteSlotStore:
                         self.encode(s.grid),
                         s.n_unique,
                         int(s.incomplete),
-                    )
-                    for s in slots
-                ],
-            )
+                    ),
+                )
 
     def read(self, camera_id, start_utc, end_utc):
         rows = self.db.execute(
