@@ -318,6 +318,13 @@ def run_record(args):
         f"camera {settings.camera_id}: {n} frames, {recorder.written} slots "
         f"({spec.ny}x{spec.nx} cells of {settings.cell_m} m) in {args.db}"
     )
+    if recorder.past_retention:
+        print(
+            f"camera {settings.camera_id}: {recorder.past_retention} slots past retention "
+            f"({settings.retention_days} days) were not written; check --start",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

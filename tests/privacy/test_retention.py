@@ -46,3 +46,27 @@ def test_recording_purges_as_it_writes():
     r.close()
 
     assert {s.start_utc for s in store.read("cam", 0, NOW + 900)} == {NOW}
+
+
+def test_a_slot_already_past_the_retention_is_not_counted_as_written():
+    """Regression: a video recorded with an old --start wrote each slot and purged
+    it at once, while the run reported it as written."""
+    store = SqliteSlotStore(":memory:")
+    r = RecordSlots(store, "cam", SPEC, retention_days=90, now=lambda: NOW)
+
+    for i in range(10):
+        r.add(NOW - 200 * DAY + i, np.arange(6), np.full(6, 0.1), np.full(6, 0.1), seconds=1.0)
+    r.close()
+
+    assert (r.written, r.past_retention) == (0, 1)
+    assert store.read("cam", 0, NOW + 900) == []
+
+
+def test_a_slot_inside_the_retention_is_written_and_not_reported():
+    store = SqliteSlotStore(":memory:")
+    r = RecordSlots(store, "cam", SPEC, retention_days=90, now=lambda: NOW)
+
+    r.add(NOW - 89 * DAY, np.arange(6), np.full(6, 0.1), np.full(6, 0.1), seconds=1.0)
+    r.close()
+
+    assert (r.written, r.past_retention) == (1, 0)

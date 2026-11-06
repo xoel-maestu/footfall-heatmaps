@@ -4,12 +4,17 @@ A slot is written when time moves into the next quarter, and on close. It is
 marked incomplete when the source did not cover it: its first sample came
 more than one frame after the slot began, the source dropped while it was
 open, or it was still open when the source ended. Each write also purges the
-slots past the retention (R7).
+slots past the retention (R7); a slot already past it when it closes (a video
+with an old start) is not written, only counted in past_retention.
 """
 
 import numpy as np
 
-from space_usage_heatmaps.occupancy.application.purge_slots import RETENTION_DAYS, purge_slots
+from space_usage_heatmaps.occupancy.application.purge_slots import (
+    DAY_S,
+    RETENTION_DAYS,
+    purge_slots,
+)
 from space_usage_heatmaps.occupancy.domain.live import LiveLayer
 from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, SlotAccumulator, slot_start
 
@@ -23,6 +28,7 @@ class RecordSlots:
         self.retention_days, self.now = retention_days, now
         self.slot = None
         self.written = 0  # slots written so far
+        self.past_retention = 0  # slots not written: older than the retention
         self.live_layer = LiveLayer((spec.ny, spec.nx))
 
     def add(self, t, track_ids, xs, ys, seconds):
@@ -54,8 +60,12 @@ class RecordSlots:
         return self.live_layer.at(t)
 
     def _write(self):
-        self.store.write(self.slot.grids(self.camera_id, self.k))
-        self.slot = None
+        slot, self.slot = self.slot, None
+        now = None if self.now is None else self.now()
+        if now is not None and slot.start_utc < now - self.retention_days * DAY_S:
+            self.past_retention += 1
+            return
+        self.store.write(slot.grids(self.camera_id, self.k))
         self.written += 1
-        if self.now is not None:
-            purge_slots(self.store, self.now(), self.retention_days)
+        if now is not None:
+            purge_slots(self.store, now, self.retention_days)

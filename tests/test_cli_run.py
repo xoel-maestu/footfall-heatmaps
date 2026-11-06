@@ -87,3 +87,17 @@ def test_the_accepted_config_records_scene_071_camera_645():
 
     assert (settings.camera_id, settings.calibration) == ("645", "nvidia-mtmc/071/645")
     assert cli.load_config("configs/h5-best.yaml").detector == "yolox-s"
+
+
+def test_a_start_past_the_retention_fails_instead_of_reporting_slots(tmp_path, setup, capsys):
+    config, video = setup
+    db = tmp_path / "x.db"
+
+    args = ["run", "--config", str(config), "--source", str(video), "--db", str(db)]
+    assert cli.main([*args, "--start", "2025-01-01T00:00:00Z"]) != 0
+
+    captured = capsys.readouterr()
+    assert "past retention" in captured.err
+    assert "0 slots" in captured.out
+    with sqlite3.connect(db) as c:
+        assert c.execute("SELECT COUNT(*) FROM slots").fetchone() == (0,)
