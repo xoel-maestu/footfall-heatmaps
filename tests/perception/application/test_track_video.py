@@ -153,3 +153,12 @@ def test_fill_stride_of_one_is_the_identity():
 
     assert [t.frame_index for t in out] == [0, 1]
     np.testing.assert_array_equal(out[1].boxes, rows[1].boxes)
+
+
+def test_fill_stride_never_fills_past_the_last_frame_of_the_video():
+    from space_usage_heatmaps.perception.application.track_video import fill_stride
+
+    # A 6-frame video at stride 4: processed frames 0 and 4, frame 5 is the last.
+    out = list(fill_stride(_tracked([(0, {1: 0.0}), (4, {1: 8.0})]), 4, end=6))
+
+    assert [t.frame_index for t in out] == [0, 1, 2, 3, 4, 5]

@@ -46,24 +46,31 @@ def select_detections(
         yield index, Detections(d.boxes.reshape(-1, 4)[keep], d.scores[keep])
 
 
-def fill_stride(tracked: Iterable[TrackedBoxes], stride: int) -> Iterator[TrackedBoxes]:
+def fill_stride(
+    tracked: Iterable[TrackedBoxes], stride: int, end: int | None = None
+) -> Iterator[TrackedBoxes]:
     """Tracks of every source frame from those of every stride-th frame: a box
     seen on processed frames i and i + stride moves linearly between them; one
     not seen on i + stride stays where it was. Each processed box stands for
     stride frames, so dwell counted per frame matches stride / fps per processed
-    box. Holds one processed frame back (stride frames of delay)."""
+    box. Holds one processed frame back (stride frames of delay). end: the
+    video's frame count, if known; no frame at or past it is filled."""
     previous = None
     for current in tracked:
         if previous is not None:
             yield from _fill(previous, current, stride)
         previous = current
     if previous is not None:
-        yield from _fill(previous, None, stride)
+        yield from _fill(previous, None, stride, end)
 
 
-def _fill(a: TrackedBoxes, b: TrackedBoxes | None, stride: int) -> Iterator[TrackedBoxes]:
+def _fill(
+    a: TrackedBoxes, b: TrackedBoxes | None, stride: int, end: int | None = None
+) -> Iterator[TrackedBoxes]:
     yield a
     gap = stride if b is None else min(stride, b.frame_index - a.frame_index)
+    if end is not None:
+        gap = max(1, min(gap, end - a.frame_index))
     following = {}
     if b is not None and b.frame_index - a.frame_index == stride:
         following = dict(zip(b.track_ids.tolist(), b.boxes.reshape(-1, 4), strict=True))

@@ -45,11 +45,15 @@ class PipelineDetections:
 class SelectedDetections:
     def __init__(self, detections, stride, min_score):
         """Detections of every frame (a cache), as the config's detector gives
-        them: every stride-th frame, scores above min_score (select_detections)."""
+        them: every stride-th frame, scores above min_score (select_detections).
+        frame_count: the last video's frame count, known from its every-frame
+        detections."""
         self._detections, self.stride, self.min_score = detections, stride, min_score
+        self.frame_count = None
 
     def detections(self, scene, camera):
-        every = self._detections.detections(scene, camera)
+        every = list(self._detections.detections(scene, camera))
+        self.frame_count = every[-1][0] + 1 if every else 0
         return select_detections(every, self.stride, self.min_score)
 
     @property
@@ -72,7 +76,8 @@ class PipelineTrackSource:
     def tracks(self, scene, camera):
         tracker = self.tracker_of(scene, camera)
         processed = track_detections(self.detections.detections(scene, camera), tracker)
-        tracked = fill_stride(processed, self.stride)
+        end = getattr(self.detections, "frame_count", None)
+        tracked = fill_stride(processed, self.stride, end)
         ids, frames, boxes = collect_tracks(tracked)
         self.last_run = self.detections.last_run
         return Tracks(ids, frames, boxes)
