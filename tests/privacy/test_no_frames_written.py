@@ -177,7 +177,7 @@ if real := os.environ.pop("REAL_MODELS", None):  # the real YOLOX-s, weights che
 else:
     container.ensure_weights = lambda d, name: d / name
     rows = json.load(open("rows.json"))
-    container.load_detector = lambda path: LetterboxingDetector(rows)
+    container.load_detector = lambda path, *_: LetterboxingDetector(rows)
 cli.SPLITS["tiny"] = (("001", "7"),)
 raise SystemExit(cli.main(["eval", "--config", "h1.yaml", "--split", "tiny", "--resamples", "5"]))
 """

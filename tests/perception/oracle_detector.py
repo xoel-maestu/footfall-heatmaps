@@ -7,6 +7,8 @@ from space_usage_heatmaps.perception.domain.frame import Detections
 
 
 class GroundTruthDetector:
+    input_size = 640  # what the test configs ask for
+
     def __init__(self, rows, camera=7):
         self.by_frame = {}
         for c, _, frame, x, y, w, h, *_ in rows:

@@ -19,8 +19,9 @@ Default dependencies (`uv sync`) and the `runtime` group (`uv sync --group runti
 | pyyaml | 6.0.3 | MIT | `configs/*.yaml` |
 | opencv-python-headless | 5.0.0.93 | Apache-2.0 (bundles FFmpeg, LGPL-2.1) | video decoding, letterbox resize |
 | trackers | 2.6.1 | Apache-2.0 | ByteTrack (`ByteTrackTracker`) |
-| onnxruntime-gpu | 1.31.1 | MIT | runs the YOLOX ONNX model (`runtime` group) |
+| onnxruntime-gpu | 1.31.1 | MIT | runs the YOLOX, D-FINE and RF-DETR ONNX models (`runtime` group) |
 | nvidia-ml-py | 13.615.71 | BSD | VRAM in `space-usage bench` (`runtime` group) |
+| pillow | 13.0.0 | MIT-CMU | D-FINE's letterbox resize, its official bilinear filter (`runtime` group; also pulled by matplotlib) |
 
 Transitive, pulled by the ones above:
 
@@ -28,7 +29,7 @@ Transitive, pulled by the ones above:
 |---|---|---|
 | supervision | MIT | trackers (its `Detections` type) |
 | scipy | BSD-3-Clause | pot, trackers (Hungarian assignment) |
-| matplotlib, contourpy, cycler, kiwisolver, fonttools, pyparsing, python-dateutil, pillow | PSF-based (matplotlib), BSD, MIT, MIT-CMU (pillow) | supervision; not called here |
+| matplotlib, contourpy, cycler, kiwisolver, fonttools, pyparsing, python-dateutil | PSF-based (matplotlib), BSD, MIT | supervision; not called here |
 | requests, urllib3, idna, charset-normalizer, certifi | Apache-2.0, MIT, BSD-3-Clause, MIT, MPL-2.0 | supervision, trackers; not called here |
 | tqdm | MPL-2.0 AND MIT | supervision |
 | defusedxml | PSF | supervision |
@@ -61,13 +62,51 @@ Notes:
 
 ## Model weights
 
-Downloaded into `SPACE_USAGE_DATA_DIR/models`, never committed; loaded only by
-ONNX Runtime (run path) or by ultralytics (evaluation).
+Downloaded or exported into `SPACE_USAGE_DATA_DIR/models`, never committed;
+loaded only by ONNX Runtime (run path) or by ultralytics (evaluation). Every
+run-path file's sha256 is checked on every load
+(`perception/infrastructure/model_weights.py`). Exported files come from the
+release checkpoint below through the family's official exporter
+(`scripts/export-detector.py <name>`, CPU, deterministic: a re-export gives the
+same sha256).
 
 | Weights | Source | sha256 | Licence | Use |
 |---|---|---|---|---|
-| `yolox_s.onnx` (YOLOX-s, COCO) | Megvii-BaseDetection/YOLOX GitHub release `0.1.1rc0` | `c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063`, checked on every load (`perception/infrastructure/model_weights.py`) | Apache-2.0 | run path, `configs/h1-yolox-s.yaml` |
+| `yolox_s.onnx` (YOLOX-s, COCO, 640) | Megvii-BaseDetection/YOLOX GitHub release `0.1.1rc0` | `c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063` | Apache-2.0 | run path, `configs/h1-yolox-s.yaml` |
+| `yolox_s_960.onnx` (YOLOX-s, COCO, 960) | exported from `yolox_s.pth` (same release, sha256 `f55ded7181e1b0c13285c56e7790b8f0e8f8db590fe4edb37f0b7f345c913a30`) by YOLOX 0.3.0's `tools/export_onnx.py` | `95316ad4705db4dff9d77c22238514d685c86c3cb6a7b9ceb46879bedc84e73b` | Apache-2.0 | run path, `configs/h2-yolox-s-960.yaml` |
+| `yolox_s_1280.onnx` (YOLOX-s, COCO, 1280) | exported the same way at 1280 | `b89fb6acc9072a74ece25ab4951b43fd21328c2eb07e4d7606220c0aa97fa33d` | Apache-2.0 | candidate, `configs/h2-yolox-s-1280.yaml` |
+| `dfine_s_obj2coco.onnx` (D-FINE-S, Objects365 then COCO, 640) | exported from `dfine_s_obj2coco.pth` (Peterande/storage GitHub release `dfinev1.0`, sha256 `75bedc333cdf665f9cddd2c6a2a9baa34e0e5e9a38db7bb8e6110edc3b4ba8eb`) by Peterande/D-FINE `tools/deployment/export_onnx.py` at `956d170` | `f29f9569ef1d089dce6b392aef886fe4afd15e6193838bedae6e2ee4830b6ddd` | Apache-2.0 (the D-FINE repository's licence, which its release weights carry) | run path candidate, `configs/h1-dfine-s.yaml` |
+| `rf_detr_nano.onnx` (RF-DETR Nano, COCO, 384) | exported from `rf-detr-nano.pth` (Roboflow's public bucket `storage.googleapis.com/rfdetr/nano_coco/`, sha256 `d8d6b9ee57d4d0ed2b1f305163624712a0532cb7bce0c747317984fc5457440d`, md5 as recorded by rfdetr 1.11.2) by `RFDETRNano.export()` of rfdetr 1.11.2 | `d217512443ea74ca6f025e9d9239cfd7650de318664c6fc26ee81ae705e4baac` | Apache-2.0 (rfdetr's README licence table: N, S, M, L Apache-2.0; XL and 2XL PML 1.0, not used) | run path candidate, `configs/h1-rfdetr-n.yaml` |
 | `yolov8n.pt` (YOLOv8n, COCO) | ultralytics/assets GitHub release, fetched by ultralytics | not pinned | AGPL-3.0 | evaluation only: the Ultralytics reference recipe |
+
+Training data of these weights: COCO (all), and Objects365 for D-FINE-S's
+pre-training. The weights' own licence is the vendor's Apache-2.0.
+
+## Export only
+
+Turn release checkpoints into the ONNX files above; never imported by the
+package and never installed by CI.
+
+The optional `export` group (`uv sync --group runtime --group export`) runs the
+YOLOX and D-FINE exporters (`scripts/export/yolox.py`, `scripts/export/dfine.py`):
+
+| Distribution | Version | Licence | Why |
+|---|---|---|---|
+| torch, torchvision | 2.14.1+cu130, 0.29.1+cu130 | BSD-3-Clause with Apache-2.0, BSL-1.0 and MIT parts; BSD | the exporters trace the models |
+| onnx, onnxsim | 1.23.2, 0.8.1 | Apache-2.0; MIT AND (Apache-2.0 OR BSD-2-Clause) | saving and simplifying the graph |
+| loguru, thop, tabulate | 0.7.3, 0.1.1.post2209072238, 0.10.0 | MIT | imported by the yolox package |
+| faster-coco-eval, tensorboard | 1.8.0, 2.21.0 | Apache-2.0 | imported by D-FINE's package (`calflops` is stubbed, not installed: it pulls transformers) |
+| absl-py, grpcio, markdown, werkzeug, tensorboard-data-server, ml-dtypes | transitive | Apache-2.0, Apache-2.0, BSD-3-Clause, BSD-3-Clause, Apache-2.0, Apache-2.0 | tensorboard, onnx |
+
+RF-DETR's exporter has its own locked environment, `scripts/export/rfdetr`
+(rfdetr pins pyDeprecate < 0.10, which would downgrade the run path's
+trackers dependency): rfdetr 1.11.2 (Apache-2.0) with transformers 5.22.1,
+huggingface-hub, tokenizers, safetensors (Apache-2.0), pydantic and
+supervision (MIT), torch and torchvision as above. Its checkpoint download is
+the only weights download from outside GitHub (`EXPORT_HOSTS`); the run path's
+allowlist stays GitHub's release hosts. Installing that environment (`uv run
+--project scripts/export/rfdetr`) fetches packages from PyPI and torch and
+torchvision from `download.pytorch.org`, as the `export` group does.
 
 ## Evaluation only
 

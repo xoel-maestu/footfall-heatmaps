@@ -17,6 +17,8 @@ from tests.perception.synthetic_video import write_video
 class TwoPeople:
     """Two people walking apart, then a third one appearing, whatever the image shows."""
 
+    input_size = 640
+
     def detect(self, frame):
         i = frame.index
         boxes = [[10 + 2 * i, 20, 30 + 2 * i, 80], [120 - 2 * i, 20, 140 - 2 * i, 80]]
@@ -56,7 +58,7 @@ def test_ids_do_not_depend_on_the_image(tmp_path):
 def test_each_pipeline_gets_a_fresh_tracker(tmp_path, monkeypatch):
     video = write_video(tmp_path / "v.avi", n=4)
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
-    monkeypatch.setattr(container, "load_detector", lambda path: TwoPeople())
+    monkeypatch.setattr(container, "load_detector", lambda path, *_: TwoPeople())
 
     *_, first = container.build_pipeline(video, "yolox-s", "bytetrack", 640, 1, tmp_path)
     *_, second = container.build_pipeline(video, "yolox-s", "bytetrack", 640, 1, tmp_path)

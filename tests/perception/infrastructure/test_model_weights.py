@@ -82,3 +82,30 @@ def test_only_https_to_the_release_hosts(url):
 def test_the_release_hosts_pass():
     check_url("https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/x")
     check_url("https://release-assets.githubusercontent.com/github-production-release-asset/x")
+
+
+def test_a_missing_exported_model_names_the_export_command(monkeypatch, tmp_path):
+    monkeypatch.setitem(
+        model_weights.WEIGHTS, "exported", Weights("x.onnx", None, "0" * 64, "Apache-2.0")
+    )
+    fetch, calls = fetcher(CONTENT)
+
+    with pytest.raises(OSError, match="export-detector.py exported"):
+        ensure_weights(tmp_path, "exported", fetch)
+    assert calls == []
+
+
+def test_every_exported_model_says_how_to_export_it():
+    exported = {n for n, w in model_weights.WEIGHTS.items() if w.url is None}
+
+    assert exported <= set(model_weights.EXPORTS)
+    for e in model_weights.EXPORTS.values():
+        assert (e.repo is None) == (e.commit is None) == (e.project is not None)
+        assert e.commit is None or len(e.commit) == 40
+        assert len(e.checkpoint_sha256) == 64
+        check_url(e.checkpoint_url, model_weights.EXPORT_HOSTS)
+
+
+def test_the_run_path_does_not_download_from_the_export_only_hosts():
+    with pytest.raises(OSError, match="refusing"):
+        check_url("https://storage.googleapis.com/rfdetr/nano_coco/checkpoint_best_regular.pth")

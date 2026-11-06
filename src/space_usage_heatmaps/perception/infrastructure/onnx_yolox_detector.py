@@ -19,24 +19,22 @@ a dependency:
 Only the model file goes through ONNX Runtime; nothing else in it is run.
 """
 
-import logging
-import re
-
 import cv2
 import numpy as np
 
 from space_usage_heatmaps.perception.domain.frame import Detections
+from space_usage_heatmaps.perception.infrastructure.onnx_session import (  # noqa: F401
+    CPU,
+    CUDA,
+    OnnxDetector,
+    clip_to_image,
+    engine_of,
+)
 
 SCORE_THR = 0.1  # the official ONNX demo's multiclass_nms score_thr
 NMS_THR = 0.45  # and its nms_thr
 PERSON = 0  # COCO class id
 STRIDES = (8, 16, 32)
-CUDA, CPU = "CUDAExecutionProvider", "CPUExecutionProvider"
-# What ONNX Runtime's messages say when the GPU runs out of memory during run:
-# the BFC arena, a CUDA allocation, cuDNN or cuBLAS workspaces.
-OUT_OF_MEMORY = re.compile(r"Failed to allocate memory|out of memory|_ALLOC_FAILED")
-
-log = logging.getLogger(__name__)
 
 
 def preprocess(image, size):
@@ -84,55 +82,30 @@ def nms(boxes, scores, thr):
     return keep
 
 
-def engine_of(providers):
-    """The provider a session runs on; anything but CUDA is logged as a fallback."""
-    if providers[0] != CUDA:
-        log.warning("ONNX Runtime is running YOLOX on %s, not CUDA: slow", providers[0])
-    return providers[0]
+def recipe():
+    """What the boxes depend on besides the model file, for the track cache."""
+    return {
+        "preprocess": "yolox letterbox, top-left, pad 114, BGR 0-255",
+        "postprocess": "boxes clipped to the image",
+        "score_thr": SCORE_THR,
+        "nms_thr": NMS_THR,
+        "nms": "class-agnostic",
+        "classes": [PERSON],
+    }
 
 
-class OnnxYoloxDetector:
+def load(path):
+    return OnnxYoloxDetector.load(path)
+
+
+class OnnxYoloxDetector(OnnxDetector):
     def __init__(self, session, cpu_session=None, engine=None):
-        """session: an onnxruntime.InferenceSession of a YOLOX model, or a test double.
-        cpu_session(): the same model on CPUExecutionProvider, built only if the
-        GPU runs out of memory during a run (spec 4). engine: session's provider.
-        providers: every provider this detector has run on, in order."""
-        self._session, self._cpu_session = session, cpu_session
-        self.engine = engine
-        self.providers = [engine] if engine else []
-        inp = session.get_inputs()[0]
-        self._input, self.input_size = inp.name, int(inp.shape[-1])
+        super().__init__(session, cpu_session, engine)
         self._grids = _grids(self.input_size)
-
-    @classmethod
-    def load(cls, path):
-        """ONNX Runtime on CUDA, falling back to CPU (logged), at load or on out of memory."""
-        import onnxruntime
-
-        onnxruntime.preload_dlls()  # the CUDA and cuDNN libraries of the nvidia-* wheels
-        onnxruntime.disable_telemetry_events()  # privacy R1: no usage events leave the process
-        session = onnxruntime.InferenceSession(str(path), providers=[CUDA, CPU])
-        return cls(
-            session,
-            cpu_session=lambda: onnxruntime.InferenceSession(str(path), providers=[CPU]),
-            engine=engine_of(session.get_providers()),
-        )
-
-    def _run(self, x):
-        feed = {self._input: x[None]}
-        try:
-            return self._session.run(None, feed)[0]
-        except Exception as e:  # onnxruntime's RuntimeException is not a RuntimeError
-            if self.engine == CPU or self._cpu_session is None or not OUT_OF_MEMORY.search(str(e)):
-                raise
-        log.warning("ONNX Runtime ran out of GPU memory on %s; retrying on CPU: slow", self.engine)
-        self._session, self.engine = self._cpu_session(), CPU
-        self.providers.append(CPU)
-        return self._session.run(None, feed)[0]
 
     def detect(self, frame):
         x, r = preprocess(frame.image, self.input_size)
-        out = self._run(x)
+        out = self._run({self._input: x[None]})[0]
         boxes, scores = decode(out, self.input_size, self._grids)
         boxes = boxes / r  # to source pixels before NMS, as the demo
         cls = scores.argmax(1)
@@ -140,7 +113,5 @@ class OnnxYoloxDetector:
         valid = best > SCORE_THR
         boxes, best, cls = boxes[valid], best[valid], cls[valid]
         keep = [i for i in nms(boxes, best, NMS_THR) if cls[i] == PERSON]
-        h, w = frame.image.shape[:2]
         # Clipped after NMS, so the NMS stays the demo's.
-        kept = np.clip(boxes[keep].reshape(-1, 4), 0, [w, h, w, h])
-        return Detections(kept, best[keep].astype(float))
+        return Detections(clip_to_image(boxes[keep], frame.image.shape), best[keep].astype(float))

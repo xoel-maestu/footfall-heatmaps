@@ -42,6 +42,25 @@ baseline = [
 runtime = [
     "onnxruntime-gpu[cuda,cudnn]>=1.31",
     "nvidia-ml-py>=13.0",
+    # D-FINE's letterbox resizes with Pillow's bilinear filter (its official
+    # ONNX example); OpenCV's differs when downscaling.
+    "pillow>=11",
+]
+
+# Detector export only (scripts/export-detector.sh): each family's official
+# exporter turns its release checkpoint into the ONNX file the runtime group
+# runs. Never imported by the package; CPU is enough. Not a default group.
+# Install locally with: uv sync --group runtime --group export
+export = [
+    "torch>=2.14",
+    "torchvision>=0.29",
+    "onnx>=1.19",
+    "onnxsim>=0.4.36",
+    "loguru>=0.7",
+    "thop>=0.1.1.post2209072238",
+    "tabulate>=0.9",
+    "faster-coco-eval>=1.6.6",
+    "tensorboard>=2.18",
 ]
 
 [tool.uv]
@@ -58,8 +77,14 @@ override-dependencies = [
 ]
 
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu130", group = "baseline" }]
-torchvision = [{ index = "pytorch-cu130", group = "baseline" }]
+torch = [
+    { index = "pytorch-cu130", group = "baseline" },
+    { index = "pytorch-cu130", group = "export" },
+]
+torchvision = [
+    { index = "pytorch-cu130", group = "baseline" },
+    { index = "pytorch-cu130", group = "export" },
+]
 
 # CUDA 13.0 wheels: bundle the CUDA runtime (no nvcc needed), support Turing
 # (sm_75, GTX 1650 Ti) and run on driver 615.
@@ -154,4 +179,7 @@ forbidden_modules = [
     "av", "defusedxml", "deprecate", "supervision", "tqdm", "trackers",
     # The optional runtime group (uv sync --group runtime).
     "flatbuffers", "google",
+    # The optional export group (uv sync --group export).
+    "absl", "faster_coco_eval", "grpc", "loguru", "markdown", "ml_dtypes", "onnx", "onnxsim",
+    "tabulate", "tensorboard", "tensorboard_data_server", "werkzeug",
 ]
