@@ -2,7 +2,8 @@
 
 The config's detector and input_size pick the model file (MODELS); the
 detector's family picks the adapter, with its own pre- and post-processing.
-The config's tracker picks the tracker adapter (TRACKERS).
+The config's tracker picks the tracker adapter (TRACKERS), and its engine the
+ONNX Runtime provider (onnx_session).
 
 detection_metadata names everything the detections depend on, for the
 detection cache; pipeline_metadata adds the tracker, for the track cache. Both
@@ -33,7 +34,10 @@ from space_usage_heatmaps.perception.infrastructure.ucmc_tracker import (
 from space_usage_heatmaps.perception.infrastructure.ucmc_tracker import UcmcTracker
 
 TRACKERS = ("bytetrack", "ocsort", "ucmc")
-ENGINE = "onnx-cuda"
+ENGINE = "onnx-cuda"  # the default engine; onnx-trt runs TensorRT fp16
+ENGINES = (ENGINE, "onnx-trt")
+# What the stride adds to a track recipe: the skipped frames' boxes (fill_stride).
+STRIDE_FILL = "linear between processed frames of a track, else held"
 # (config detector, input size) -> model file (model_weights.WEIGHTS key)
 MODELS = {
     ("yolox-s", 640): "yolox-s",
@@ -68,16 +72,48 @@ def check(detector, tracker, input_size):
     return model_file(detector, input_size)
 
 
-def detection_metadata(detector, input_size, stride):
+def detector_params(detector, params=None):
+    """The config's detector_params, checked against what the family takes."""
+    params = dict(params or {})
+    takes = FAMILIES[detector].PARAMS
+    if unknown := sorted(set(params) - set(takes)):
+        raise ValueError(f"{detector} has no parameters {unknown}; it takes {sorted(takes)}")
+    return params
+
+
+def cache_params(detector, params=None):
+    """The detector params the detection cache runs with: a score threshold
+    above the default is cached at the default and filtered (min_score), so
+    variants share one cache."""
+    params = detector_params(detector, params)
+    default = FAMILIES[detector].PARAMS.get("score_thr")
+    if "score_thr" in params and params["score_thr"] >= default:
+        del params["score_thr"]  # the default's cache
+    return params
+
+
+def min_score(detector, params=None):
+    """The score a replayed box must exceed: the config's threshold, if the family has one."""
+    defaults = FAMILIES[detector].PARAMS
+    if "score_thr" not in defaults:
+        return float("-inf")
+    return detector_params(detector, params).get("score_thr", defaults["score_thr"])
+
+
+def detection_metadata(detector, input_size, stride, params=None, engine=ENGINE):
     model = model_file(detector, input_size)
+    if engine not in ENGINES:
+        raise ValueError(f"engines are {list(ENGINES)}, not {engine!r}")
+    tensorrt = {"precision": "fp16", "tensorrt": _version("tensorrt-cu13-libs")}
     return {
         "detector": detector,
         "weights": WEIGHTS[model].file,
         "weights_sha256": WEIGHTS[model].sha256,
-        "engine": ENGINE,
+        "engine": engine,
         "onnxruntime": _version("onnxruntime-gpu"),
+        **(tensorrt if engine == "onnx-trt" else {}),
         "opencv": _version("opencv-python-headless"),  # decoding and the resize
-        **FAMILIES[detector].recipe(),
+        **FAMILIES[detector].recipe(**detector_params(detector, params)),
         "input_size": input_size,
         "stride": stride,
     }
@@ -104,24 +140,34 @@ def tracker_metadata(tracker, params=None):
     return {"tracker": name, "trackers": _version("trackers"), "tracker_params": tracker_params}
 
 
-def pipeline_metadata(detector, tracker, input_size, stride, params=None):
+def pipeline_metadata(
+    detector, tracker, input_size, stride, params=None, det_params=None, engine=ENGINE
+):
+    """params: the tracker's overrides; det_params: the detector's."""
     check(detector, tracker, input_size)
-    return detection_metadata(detector, input_size, stride) | tracker_metadata(tracker, params)
+    fill = {"stride_fill": STRIDE_FILL} if stride > 1 else {}
+    return (
+        detection_metadata(detector, input_size, stride, det_params, engine)
+        | tracker_metadata(tracker, params)
+        | fill
+    )
 
 
-def load_detector(path, detector):
-    return FAMILIES[detector].load(path)
+def load_detector(path, detector, params=None, engine=ENGINE):
+    return FAMILIES[detector].load(path, engine, **detector_params(detector, params))
 
 
 def video_fps(video):
     return OpenCvFileSource(video).fps
 
 
-def build_detection(video, detector, input_size, stride, models_dir, loop=False):
+def build_detection(
+    video, detector, input_size, stride, models_dir, loop=False, params=None, engine=ENGINE
+):
     """(frame source, person detector) for one video."""
     weights = model_file(detector, input_size)
     source = OpenCvFileSource(video, stride, loop)
-    model = load_detector(ensure_weights(models_dir, weights), detector)
+    model = load_detector(ensure_weights(models_dir, weights), detector, params, engine)
     if model.input_size != input_size:
         raise ValueError(
             f"config input_size {input_size}, but {WEIGHTS[weights].file} takes {model.input_size}"
@@ -155,9 +201,13 @@ def build_pipeline(
     loop=False,
     world_to_image=None,
     tracker_params=None,
+    det_params=None,
+    engine=ENGINE,
 ):
     """(frame source, person detector, tracker) for one video; a fresh tracker each time."""
     check(detector, tracker, input_size)
-    source, model = build_detection(video, detector, input_size, stride, models_dir, loop)
+    source, model = build_detection(
+        video, detector, input_size, stride, models_dir, loop, det_params, engine
+    )
     tracker = build_tracker(tracker, source.fps / stride, world_to_image, tracker_params)
     return source, model, tracker

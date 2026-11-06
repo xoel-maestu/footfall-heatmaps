@@ -220,3 +220,144 @@ def test_the_low_threshold_h3_configs_change_only_the_tracker_params():
         low = cli.load_config(f"configs/h3-{tracker}-lowthr.yaml")
         assert low == type(h3)(**{**vars(h3), "tracker_params": params})
         container.tracker_metadata(tracker, params)  # every name is the tracker's
+
+
+def _ran_on(detector, engine):
+    """The detector, with the providers a real one on engine reports."""
+    trt = engine == "onnx-trt"
+    detector.providers = ["TensorrtExecutionProvider" if trt else "CUDAExecutionProvider"]
+    return detector
+
+
+def _tiny(tmp_path, rows, monkeypatch, n=12):
+    """The tiny scene and video; the detector is the truth, scored 0.3 on frame 5."""
+
+    class Scored(GroundTruthDetector):
+        def detect(self, frame):
+            d = super().detect(frame)
+            return type(d)(d.boxes, np.full(len(d.scores), 0.3 if frame.index == 5 else 0.9))
+
+    data = write_scene(tmp_path / "data", rows)
+    write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4", n=n)
+    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
+    monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
+    loaded = []
+    monkeypatch.setattr(
+        container,
+        "load_detector",
+        lambda path, detector, params=None, engine=None: (
+            loaded.append((params, engine)) or _ran_on(Scored(rows), engine)
+        ),
+    )
+    return data, loaded
+
+
+def _eval(tmp_path, name, extra):
+    (tmp_path / f"{name}.yaml").write_text(CONFIG + extra)
+    return cli.main(["eval", "--config", f"{name}.yaml", "--split", "tiny", "--resamples", "5"])
+
+
+def _tracks(data, key):
+    with np.load(data / f"cache/tracks/{key}/scene_001_camera_7.npz") as f:
+        return f["frames"].copy(), json.loads(str(f["meta"]))
+
+
+def test_a_higher_score_threshold_filters_the_cached_detections(tmp_path, rows, monkeypatch):
+    data, loaded = _tiny(tmp_path, rows, monkeypatch)
+
+    assert _eval(tmp_path, "base", "") == 0
+    assert _eval(tmp_path, "strict", "detector_params:\n  score_thr: 0.5\n") == 0
+
+    assert len(loaded) == 1  # the second config replayed the first one's detections
+    assert sorted(p.name for p in (data / "cache/detections").iterdir()) == [
+        "yolox-s-640-onnx-cuda-stride1"
+    ]
+    base = cli.load_config("base.yaml")
+    strict = cli.load_config("strict.yaml")
+    base_frames, _ = _tracks(data, cli.cache_key(base))
+    strict_frames, meta = _tracks(data, cli.cache_key(strict))
+    assert meta["score_thr"] == 0.5 and cli.cache_key(strict) != cli.cache_key(base)
+    assert 0 < len(strict_frames) < len(base_frames)
+
+
+def test_a_lower_score_threshold_or_another_nms_runs_the_detector_again(
+    tmp_path, rows, monkeypatch
+):
+    data, loaded = _tiny(tmp_path, rows, monkeypatch)
+
+    assert _eval(tmp_path, "low", "detector_params:\n  score_thr: 0.05\n") == 0
+    assert _eval(tmp_path, "nms", "detector_params:\n  nms_thr: 0.6\n") == 0
+
+    assert [p for p, _ in loaded] == [{"score_thr": 0.05}, {"nms_thr": 0.6}]
+    assert len(list((data / "cache/detections").iterdir())) == 2
+
+
+def test_a_stride_replays_every_frame_detections_and_fills_the_skipped_frames(
+    tmp_path, rows, monkeypatch
+):
+    data, loaded = _tiny(tmp_path, rows, monkeypatch)
+
+    assert _eval(tmp_path, "every", "") == 0
+    (tmp_path / "half.yaml").write_text(CONFIG.replace("stride: 1", "stride: 2"))
+    assert cli.main(["eval", "--config", "half.yaml", "--split", "tiny", "--resamples", "5"]) == 0
+
+    assert len(loaded) == 1
+    every, _ = _tracks(data, cli.cache_key(cli.load_config("every.yaml")))
+    half, meta = _tracks(data, cli.cache_key(cli.load_config("half.yaml")))
+    assert meta["stride"] == 2 and "stride_fill" in meta
+    assert set(half) & {1, 3, 5}  # odd frames come back, filled
+
+
+def test_the_tensorrt_engine_has_its_own_detections(tmp_path, rows, monkeypatch):
+    data, loaded = _tiny(tmp_path, rows, monkeypatch)
+
+    assert _eval(tmp_path, "cuda", "") == 0
+    (tmp_path / "trt.yaml").write_text(CONFIG.replace("onnx-cuda", "onnx-trt"))
+    assert cli.main(["eval", "--config", "trt.yaml", "--split", "tiny", "--resamples", "5"]) == 0
+
+    assert [e for _, e in loaded] == ["onnx-cuda", "onnx-trt"]
+    assert (data / "cache/detections/yolox-s-640-onnx-trt-stride1").is_dir()
+
+
+def test_the_bench_names_the_engine_and_precision_that_ran():
+    cuda = cli.engine_label("onnx-cuda", ["CUDAExecutionProvider"], "1.31.1")
+    trt = cli.engine_label("onnx-trt", ["TensorrtExecutionProvider"], "1.31.1")
+    fell = cli.engine_label("onnx-trt", ["CUDAExecutionProvider"], "1.31.1")
+
+    assert cuda == "onnx-cuda (ONNX Runtime 1.31.1, CUDAExecutionProvider, fp32)"
+    assert trt == "onnx-trt (ONNX Runtime 1.31.1, TensorrtExecutionProvider, fp16)"
+    assert fell.endswith("CUDAExecutionProvider, fp32)")
+
+
+def test_detector_params_get_their_own_track_cache():
+    base = cli.load_config("configs/h1-best.yaml")
+    low = cli.RunConfig(**{**vars(base), "detector_params": {"score_thr": 0.05}})
+
+    assert cli.cache_key(base) == "yolox-s-bytetrack-960-onnx-cuda-stride1"
+    assert cli.cache_key(low).startswith(cli.cache_key(base) + "-params")
+    assert cli.detection_cache_key(base) == "yolox-s-960-onnx-cuda-stride1"
+    assert cli.detection_cache_key(low).startswith("yolox-s-960-onnx-cuda-stride1-params")
+
+
+def test_the_phase_5_configs_change_one_thing_of_h1_best():
+    best = cli.load_config("configs/h1-best.yaml")
+
+    def changed(path):
+        c = cli.load_config(path)
+        return {k: v for k, v in vars(c).items() if vars(best)[k] != v}
+
+    assert changed("configs/h6a-activation.yaml") == {
+        "tracker_params": {"track_activation_threshold": 0.6}
+    }
+    assert changed("configs/h6c-buffer.yaml") == {"tracker_params": {"lost_track_buffer": 60}}
+    assert changed("configs/h6d-score-low.yaml") == {"detector_params": {"score_thr": 0.05}}
+    assert changed("configs/h6f-nms.yaml") == {"detector_params": {"nms_thr": 0.6}}
+    assert changed("configs/h7-stride2.yaml") == {"stride": 2}
+    assert changed("configs/h5-trt.yaml") == {"engine": "onnx-trt"}
+    assert changed("configs/h2a2-yolox-s-1280-trt.yaml") == {
+        "engine": "onnx-trt",
+        "input_size": 1280,
+    }
+    assert cli.load_config("configs/h5-best.yaml") == cli.load_config("configs/h5-trt.yaml")

@@ -1,0 +1,14 @@
+# H7 (spec 8, hypothesis 7): configs/h1-best.yaml processing one frame in two
+# (detector and tracker); the skipped frame's box is interpolated between the
+# two processed frames of its track, or held after the last one, so dwell
+# stays one sample per source frame. Replays h1-best's cached detections.
+detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960
+engine: onnx-cuda      # ONNX Runtime, CUDA execution provider (CPU fallback is logged)
+tracker: bytetrack     # roboflow trackers 2.6.1 ByteTrackTracker, its defaults
+input_size: 960        # the exported model's fixed input
+foot_point: auto-track # as h1-yolox-s.yaml
+track_height_percentile: 0.9
+hidden_ratio: 0.88
+track_height_min_m: 1.0
+track_height_max_m: 2.0
+stride: 2

@@ -68,8 +68,11 @@ def _version(dist):
     return metadata.version(dist)
 
 
-def load(path):
-    return OnnxDfineDetector.load(path)
+PARAMS = {}  # nothing a config may override
+
+
+def load(path, engine="onnx-cuda"):
+    return OnnxDfineDetector.load(path, engine)
 
 
 class OnnxDfineDetector(OnnxDetector):

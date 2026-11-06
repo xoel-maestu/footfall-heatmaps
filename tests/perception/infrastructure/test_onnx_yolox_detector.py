@@ -238,3 +238,24 @@ def test_the_release_model_is_invariant_to_grey_padding_below_a_real_frame():
     order_a, order_b = np.lexsort(a.boxes.T[::-1]), np.lexsort(b.boxes.T[::-1])
     np.testing.assert_allclose(b.boxes[order_b], a.boxes[order_a], atol=0.5)
     np.testing.assert_allclose(b.scores[order_b], a.scores[order_a], atol=1e-3)
+
+
+def test_score_and_nms_thresholds_are_parameters():
+    # Two person boxes at neighbouring cells: 16 px wide, 8 px apart, IoU 1/3.
+    session = FakeSession([(9, 0, 0.9), (10, 0, 0.5), (40, 0, 0.3)])
+
+    default = OnnxYoloxDetector(session).detect(frame())
+    strict = OnnxYoloxDetector(session, score_thr=0.4).detect(frame())
+    loose_nms = OnnxYoloxDetector(session, nms_thr=0.3).detect(frame())
+
+    np.testing.assert_allclose(default.scores, [0.9, 0.5, 0.3], rtol=1e-6)
+    np.testing.assert_allclose(strict.scores, [0.9, 0.5], rtol=1e-6)
+    np.testing.assert_allclose(loose_nms.scores, [0.9, 0.3], rtol=1e-6)  # IoU .36 > 0.3
+
+
+def test_the_recipe_names_the_thresholds_it_ran_with():
+    from space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector import recipe
+
+    assert (recipe()["score_thr"], recipe()["nms_thr"]) == (0.1, 0.45)
+    assert recipe(score_thr=0.05, nms_thr=0.6)["score_thr"] == 0.05
+    assert recipe(score_thr=0.05, nms_thr=0.6)["nms_thr"] == 0.6

@@ -60,18 +60,15 @@ def test_compare_gives_the_paired_difference_of_the_two_configs(reader, rows):
     assert vc.delta_pooled["dwell"]["tvd"].value == vc.scenes[0][0]["dwell"]["tvd"].value
 
 
-def test_stride_weights_each_sample_by_the_frames_it_stands_for(reader, rows):
-    every_other = tracks_from_rows(rows)
-    keep = every_other.frames % 2 == 0
-    sparse = Tracks(every_other.track_ids[keep], every_other.frames[keep], every_other.boxes[keep])
-    strided = RunConfig(**(vars(CFG) | {"stride": 2}))
-    source = InMemoryTrackSource({("001", "7"): sparse})
+def test_each_sample_is_one_frame_whatever_the_stride(reader, rows):
+    """The pipeline fills the frames a stride skips (fill_stride), so its tracks
+    have one sample per source frame and dwell counts each at 1 / fps."""
+    strided = RunConfig(**(vars(CFG) | {"stride": 2, "engine": "onnx-cuda"}))
+    source = InMemoryTrackSource({("001", "7"): tracks_from_rows(rows)})
 
     report = evaluate_config(reader, [("001", "7")], [(strided, source)], cell=0.5, n_resamples=10)
 
-    # 8 of the 15 samples kept, each worth 2 frames: 16 frames for 15 true ones.
-    mass = report.results["visible@coverage"].scenes[0][0]["dwell"]["mass_error"].value
-    assert mass == pytest.approx(1 / 15)
+    assert report.results["visible@coverage"].scenes[0][0]["dwell"]["mass_error"].value == 0
 
 
 def test_predictions_outside_the_truth_frames_are_not_scored(reader, rows):
