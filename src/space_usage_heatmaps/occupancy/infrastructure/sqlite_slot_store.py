@@ -92,6 +92,13 @@ class SqliteSlotStore:
             for c, s, m, layer, b, n, i in rows
         ]
 
+    def latest_start(self, camera_id):
+        """Epoch seconds of the newest slot start of the camera, or None."""
+        (start,) = self.db.execute(
+            "SELECT MAX(start_utc) FROM slots WHERE camera_id = ?", (camera_id,)
+        ).fetchone()
+        return None if start is None else _epoch(start)
+
     def purge(self, before_utc):
         with self.db:
             return self.db.execute(
