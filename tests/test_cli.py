@@ -166,6 +166,7 @@ def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeyp
     hota = next(ln for ln in rows_out if ln[:3] == ["configs_foot", "pooled", "tracking"])
     assert hota[3:] == ["1.000", "1.000", "1.000", "1.000"]
     assert "guard: HOTA -0.0 points, IDF1 -0.0 points: holds" in out.replace("+0.0", "-0.0")
+    assert report["tracking"]["guard_holds"] is True
     tracking = report["tracking"]
     assert tracking["pooled"]["configs_foot"]["hota"] == 1.0
     assert tracking["delta"]["pooled"] == {"hota": 0.0, "deta": 0.0, "assa": 0.0, "idf1": 0.0}

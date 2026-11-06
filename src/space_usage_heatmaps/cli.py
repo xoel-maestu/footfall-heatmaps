@@ -1,6 +1,7 @@
 """space-usage: command-line entry point (driving adapter)."""
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -199,8 +200,13 @@ def load_config(path):
 
 def cache_key(c):
     """Directory of a config's cached tracks; each file also stores the recipe
-    metadata and is recomputed when it no longer matches (track_cache)."""
-    return f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
+    metadata and is recomputed when it no longer matches (track_cache). Tracker
+    overrides get their own directory, so variants do not overwrite each other."""
+    key = f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
+    if not c.tracker_params:
+        return key
+    params = json.dumps(c.tracker_params, sort_keys=True).encode()
+    return f"{key}-params{hashlib.sha256(params).hexdigest()[:12]}"
 
 
 def detection_cache_key(c):
@@ -223,6 +229,7 @@ def pipeline_of(config, reader, loop=False):
             data_dir() / "models",
             loop,
             reader.camera(scene, camera).world_to_image,
+            config.tracker_params,
         )
 
     return build
@@ -231,6 +238,8 @@ def pipeline_of(config, reader, loop=False):
 def pipeline_track_source(config, reader):
     """Tracks of an onnx-cuda config: cached detections of its detector recipe,
     then a fresh tracker on each video."""
+    import numpy as np
+
     from space_usage_heatmaps.evaluation.infrastructure.detection_cache import CachedDetections
     from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
         PipelineDetections,
@@ -252,18 +261,37 @@ def pipeline_track_source(config, reader):
             config.tracker,
             container.video_fps(reader.video(scene, camera)) / config.stride,
             reader.camera(scene, camera).world_to_image,
+            config.tracker_params,
         )
+
+    def video_identity(scene, camera):
+        return {"video_bytes": reader.video(scene, camera).stat().st_size}
+
+    def track_identity(scene, camera):
+        """The video, and for a tracker on the floor the camera's homography."""
+        if config.tracker != "ucmc":
+            return video_identity(scene, camera)
+        h = np.ascontiguousarray(reader.camera(scene, camera).world_to_image, dtype=float)
+        return video_identity(scene, camera) | {
+            "homography_sha256": hashlib.sha256(h.tobytes()).hexdigest()
+        }
 
     detections = CachedDetections(
         PipelineDetections(detection_of),
         data_dir() / "cache" / "detections" / detection_cache_key(config),
         container.detection_metadata(config.detector, config.input_size, config.stride),
+        identity=video_identity,
     )
     meta = container.pipeline_metadata(
-        config.detector, config.tracker, config.input_size, config.stride
+        config.detector, config.tracker, config.input_size, config.stride, config.tracker_params
     )
     directory = data_dir() / "cache" / "tracks" / cache_key(config)
-    return CachedTrackSource(lambda: PipelineTrackSource(detections, tracker_of), directory, meta)
+    return CachedTrackSource(
+        lambda: PipelineTrackSource(detections, tracker_of),
+        directory,
+        meta,
+        identity=track_identity,
+    )
 
 
 def track_source(config, reader):
@@ -323,6 +351,7 @@ def _rows(label, per_scene, pooled, scenes, width):
 
 # Spec 6 guard: HOTA and IDF1 may not drop more than this against the config compared to.
 GUARD_POINTS = 1.0
+GUARD_BROKEN = 3  # eval's exit code when the guard breaks (the report is still written)
 TRACKING = ["hota", "deta", "assa", "idf1"]
 
 
@@ -356,6 +385,14 @@ def score_tracking(reader, scenes, names, runs):
     return result
 
 
+def guard_holds(t):
+    """Whether HOTA and IDF1 dropped at most GUARD_POINTS; None without a comparison."""
+    if "delta" not in t:
+        return None
+    d = t["delta"]["pooled"]
+    return 100 * min(d["hota"], d["idf1"]) >= -GUARD_POINTS
+
+
 def _print_tracking(t, names, width):
     print(
         "\ntracking guards: HOTA (DetA, AssA) and IDF1 in image space against the "
@@ -371,7 +408,7 @@ def _print_tracking(t, names, width):
             print(f"{label:<{width}}{where:<10}{'tracking':<9}{cells}")
     if "delta" in t:
         d = {k: 100 * v for k, v in t["delta"]["pooled"].items()}
-        holds = min(d["hota"], d["idf1"]) >= -GUARD_POINTS
+        holds = guard_holds(t)
         print(
             f"guard: HOTA {d['hota']:+.1f} points, IDF1 {d['idf1']:+.1f} points: "
             + ("holds" if holds else f"BROKEN (more than {GUARD_POINTS:g} point lower)")
@@ -392,6 +429,7 @@ def run_eval_config(args):
     runs = [(c, track_source(c, reader)) for c in configs]
     r = evaluate_config(reader, SPLITS[args.split], runs, args.cell, n_resamples=args.resamples)
     tracking = score_tracking(reader, SPLITS[args.split], names, runs)
+    tracking["guard_holds"] = guard_holds(tracking)
 
     print(
         f"{r.dataset}  split {args.split}  cell {r.cell_m} m  "
@@ -474,6 +512,9 @@ def run_eval_config(args):
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     print(f"\nreport {path}")
+    if tracking["guard_holds"] is False:
+        print("space-usage: tracking guard broken", file=sys.stderr)
+        return GUARD_BROKEN
     return 0
 
 

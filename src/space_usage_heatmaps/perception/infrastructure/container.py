@@ -83,30 +83,30 @@ def detection_metadata(detector, input_size, stride):
     }
 
 
-def tracker_metadata(tracker):
-    frame_rate = {"frame_rate": "video fps / stride"}
-    if tracker == "bytetrack":
-        name, params = "trackers.ByteTrackTracker", BYTETRACK_DEFAULTS
-    elif tracker == "ocsort":
-        name, params = "trackers.OCSORTTracker", OCSORT_DEFAULTS
-    elif tracker == "ucmc":
+def tracker_metadata(tracker, params=None):
+    """The tracker's recipe: its defaults with the config's overrides (params)."""
+    defaults = {"bytetrack": BYTETRACK_DEFAULTS, "ocsort": OCSORT_DEFAULTS, "ucmc": UCMC_DEFAULTS}
+    if tracker not in defaults:
+        raise ValueError(f"engine {ENGINE} runs trackers {list(TRACKERS)}, not {tracker!r}")
+    params = dict(params or {})
+    if unknown := sorted(set(params) - set(defaults[tracker])):
+        raise ValueError(
+            f"{tracker} has no parameters {unknown}; it takes {sorted(defaults[tracker])}"
+        )
+    tracker_params = defaults[tracker] | params | {"frame_rate": "video fps / stride"}
+    if tracker == "ucmc":
         return {
             "tracker": f"space_usage_heatmaps UcmcTracker v{UCMC_VERSION}",
             "scipy": _version("scipy"),
-            "tracker_params": UCMC_DEFAULTS | frame_rate,
+            "tracker_params": tracker_params,
         }
-    else:
-        raise ValueError(f"engine {ENGINE} runs trackers {list(TRACKERS)}, not {tracker!r}")
-    return {
-        "tracker": name,
-        "trackers": _version("trackers"),
-        "tracker_params": params | frame_rate,
-    }
+    name = {"bytetrack": "trackers.ByteTrackTracker", "ocsort": "trackers.OCSORTTracker"}[tracker]
+    return {"tracker": name, "trackers": _version("trackers"), "tracker_params": tracker_params}
 
 
-def pipeline_metadata(detector, tracker, input_size, stride):
+def pipeline_metadata(detector, tracker, input_size, stride, params=None):
     check(detector, tracker, input_size)
-    return detection_metadata(detector, input_size, stride) | tracker_metadata(tracker)
+    return detection_metadata(detector, input_size, stride) | tracker_metadata(tracker, params)
 
 
 def load_detector(path, detector):
@@ -129,24 +129,35 @@ def build_detection(video, detector, input_size, stride, models_dir, loop=False)
     return source, model
 
 
-def build_tracker(tracker, frame_rate, world_to_image=None):
+def build_tracker(tracker, frame_rate, world_to_image=None, params=None):
     """A fresh tracker. world_to_image: the camera's floor homography (metres ->
-    pixels), for trackers that associate on the floor."""
+    pixels), for trackers that associate on the floor. params: overrides of the
+    tracker's defaults by name (the config's tracker_params)."""
+    params = dict(params or {})
     if tracker == "bytetrack":
-        return ByteTrackTracker(frame_rate=frame_rate)
+        return ByteTrackTracker(frame_rate=frame_rate, **params)
     if tracker == "ocsort":
-        return OcSortTracker(frame_rate=frame_rate)
+        return OcSortTracker(frame_rate=frame_rate, **params)
     if tracker == "ucmc":
         if world_to_image is None:
             raise ValueError("tracker ucmc associates on the floor: it needs the camera homography")
-        return UcmcTracker(frame_rate, world_to_image)
+        return UcmcTracker(frame_rate, world_to_image, params)
     raise ValueError(f"engine {ENGINE} runs trackers {list(TRACKERS)}, not {tracker!r}")
 
 
 def build_pipeline(
-    video, detector, tracker, input_size, stride, models_dir, loop=False, world_to_image=None
+    video,
+    detector,
+    tracker,
+    input_size,
+    stride,
+    models_dir,
+    loop=False,
+    world_to_image=None,
+    tracker_params=None,
 ):
     """(frame source, person detector, tracker) for one video; a fresh tracker each time."""
     check(detector, tracker, input_size)
     source, model = build_detection(video, detector, input_size, stride, models_dir, loop)
-    return source, model, build_tracker(tracker, source.fps / stride, world_to_image)
+    tracker = build_tracker(tracker, source.fps / stride, world_to_image, tracker_params)
+    return source, model, tracker

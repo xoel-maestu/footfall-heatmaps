@@ -15,7 +15,8 @@ boxes left with tentative tracks; the rest start tentative tracks. Positions
 only (spec 3, R3): never the image.
 
 Parameters are the defaults of the original's make_args (util/run_ucmc.py),
-cdt being frames at 30 fps, scaled to the source like ByteTrack's buffer:
+cdt being frames at 30 fps, scaled to the source like ByteTrack's buffer; a
+config can override them by name (tracker_params):
 
 - wx, wy 0.1: process noise of the floor acceleration
 - vmax 0.5: prior spread of a new track's speed, m/s
@@ -109,14 +110,18 @@ class _Track:
 
 
 class UcmcTracker:
-    def __init__(self, frame_rate, world_to_image):
-        self.parameters = {**DEFAULTS, "frame_rate": frame_rate}
+    def __init__(self, frame_rate, world_to_image, params=None):
+        params = dict(params or {})
+        if unknown := sorted(set(params) - set(DEFAULTS)):
+            raise ValueError(f"ucmc has no parameters {unknown}; it takes {sorted(DEFAULTS)}")
+        self._p = p = {**DEFAULTS, **params}
+        self.parameters = {**p, "frame_rate": frame_rate}
         self._image_to_world = np.linalg.inv(np.asarray(world_to_image, float))
-        self._max_misses = DEFAULTS["cdt"] * frame_rate / 30.0
+        self._max_misses = p["cdt"] * frame_rate / 30.0
         dt = 1.0 / frame_rate
         self._f = np.array([[1, dt, 0, 0], [0, 1, 0, 0], [0, 0, 1, dt], [0, 0, 0, 1.0]])
         g = np.array([[0.5 * dt * dt, 0], [dt, 0], [0, 0.5 * dt * dt], [0, dt]])
-        self._q = g @ np.diag([DEFAULTS["wx"], DEFAULTS["wy"]]) @ g.T
+        self._q = g @ np.diag([p["wx"], p["wy"]]) @ g.T
         self._tracks = []
         self._next_id = 0
 
@@ -124,9 +129,9 @@ class UcmcTracker:
         boxes = np.asarray(boxes, float).reshape(-1, 4)
         scores = np.asarray(scores, float)
         xy, cov, front = floor_points(boxes, self._image_to_world)
-        usable = front & (scores >= DEFAULTS["conf_thresh"])
-        high = np.flatnonzero(usable & (scores >= DEFAULTS["high_score"])).tolist()
-        low = np.flatnonzero(usable & (scores < DEFAULTS["high_score"])).tolist()
+        usable = front & (scores >= self._p["conf_thresh"])
+        high = np.flatnonzero(usable & (scores >= self._p["high_score"])).tolist()
+        low = np.flatnonzero(usable & (scores < self._p["high_score"])).tolist()
 
         for t in self._tracks:
             t.x, t.p = self._f @ t.x, self._f @ t.p @ self._f.T + self._q
@@ -134,14 +139,14 @@ class UcmcTracker:
 
         active = [t for t in self._tracks if t.status != "tentative"]
         tentative = [t for t in self._tracks if t.status == "tentative"]
-        left, high_left = self._match(active, high, xy, cov, DEFAULTS["a1"], "confirmed")
-        left, _ = self._match(left, low, xy, cov, DEFAULTS["a2"], "confirmed")
+        left, high_left = self._match(active, high, xy, cov, self._p["a1"], "confirmed")
+        left, _ = self._match(left, low, xy, cov, self._p["a2"], "confirmed")
         for t in left:
             t.status = "coasted"
-        _, new = self._match(tentative, high_left, xy, cov, DEFAULTS["a1"], "tentative")
+        _, new = self._match(tentative, high_left, xy, cov, self._p["a1"], "tentative")
         for i in new:
             x = np.array([xy[i, 0], 0.0, xy[i, 1], 0.0])
-            vv = DEFAULTS["vmax"] ** 2 / 3.0
+            vv = self._p["vmax"] ** 2 / 3.0
             self._tracks.append(_Track(x, np.diag([1.0, vv, 1.0, vv]), box=i))
 
         for t in self._tracks:

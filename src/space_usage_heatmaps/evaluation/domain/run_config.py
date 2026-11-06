@@ -1,6 +1,6 @@
 """A run configuration (configs/*.yaml): which detector, tracker and foot point."""
 
-from dataclasses import MISSING, dataclass, fields
+from dataclasses import MISSING, dataclass, field, fields
 
 from space_usage_heatmaps.floorplan.domain.foot_point import (
     FOOT_POINTS,
@@ -40,6 +40,8 @@ class RunConfig:
     hidden_ratio: float = HIDDEN_RATIO  # auto-track: below this share of its track, hidden
     track_height_min_m: float = TRACK_HEIGHT_MIN_M  # auto-track: clip of a track's height
     track_height_max_m: float = TRACK_HEIGHT_MAX_M
+    # Overrides of the tracker's defaults by name; the tracker adapter checks the names.
+    tracker_params: dict = field(default_factory=dict)
 
     def track_heights(self):
         """A fresh auto-track height estimator with this config's parameters."""
@@ -53,7 +55,9 @@ class RunConfig:
     @classmethod
     def from_mapping(cls, d):
         names = [f.name for f in fields(cls)]
-        required = [f.name for f in fields(cls) if f.default is MISSING]
+        required = [
+            f.name for f in fields(cls) if f.default is MISSING and f.default_factory is MISSING
+        ]
         if missing := [n for n in required if n not in d]:
             raise ValueError(f"config: missing keys {missing}")
         if unknown := sorted(set(d) - set(names)):
@@ -64,7 +68,12 @@ class RunConfig:
                 raise ValueError(f"config: {name} must be a non-empty string")
         if cfg.foot_point not in FOOT_POINTS:
             raise ValueError(f"config: foot_point must be one of {FOOT_POINTS}")
-        optional = {n for n in names if n not in required}
+        params = cfg.tracker_params
+        if not isinstance(params, dict) or not all(
+            isinstance(k, str) and _number(v, 0, float("inf")) for k, v in params.items()
+        ):
+            raise ValueError("config: tracker_params must map parameter names to positive numbers")
+        optional = {n for n in names if n not in required and n != "tracker_params"}
         for name in sorted(optional & set(d) - set(FOOT_POINT_KEYS[cfg.foot_point])):
             raise ValueError(
                 f"config: {name} does not apply to foot_point {cfg.foot_point} "
@@ -80,6 +89,8 @@ class RunConfig:
             raise ValueError("config: track_height_min_m must be below track_height_max_m")
         if cfg.engine not in ENGINES:
             raise ValueError(f"config: engine must be one of {ENGINES}")
+        if params and cfg.engine != "onnx-cuda":
+            raise ValueError("config: tracker_params apply to the onnx-cuda pipeline only")
         if not _positive_int(cfg.stride):
             raise ValueError("config: stride must be a positive integer")
         if not _positive_int(cfg.input_size) or cfg.input_size % 32:

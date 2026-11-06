@@ -74,3 +74,32 @@ def test_the_providers_the_detector_ran_on_are_stored_and_replayed(tmp_path):
     assert cached.last_run == {"providers": ["CUDAExecutionProvider"]}
     with np.load(tmp_path / "scene_071_camera_645.npz") as f:
         assert json.loads(str(f["meta"]))["run"] == {"providers": ["CUDAExecutionProvider"]}
+
+
+def test_a_corrupt_file_or_one_without_metadata_is_recomputed(tmp_path, capsys):
+    run = CountingDetection()
+    path = tmp_path / "scene_071_camera_645.npz"
+    path.write_bytes(b"not a zip file")
+    assert_same(CachedDetections(run, tmp_path, META).detections("071", "645"))
+
+    empty = np.empty(0)
+    np.savez(path, frames=empty, box_frames=empty, boxes=empty, scores=empty)  # no meta key
+    assert_same(CachedDetections(run, tmp_path, META).detections("071", "645"))
+
+    assert run.runs == 2
+    err = capsys.readouterr().err
+    assert "unreadable" in err and "no metadata" in err
+
+
+def test_another_video_recomputes(tmp_path, capsys):
+    run = CountingDetection()
+    CachedDetections(run, tmp_path, META, identity=lambda s, c: {"video_bytes": 7}).detections(
+        "071", "645"
+    )
+
+    CachedDetections(run, tmp_path, META, identity=lambda s, c: {"video_bytes": 8}).detections(
+        "071", "645"
+    )
+
+    assert run.runs == 2
+    assert "video_bytes 7 != 8" in capsys.readouterr().err

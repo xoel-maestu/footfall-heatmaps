@@ -103,3 +103,26 @@ def test_build_tracker_picks_the_adapter_and_ucmc_needs_the_homography():
         container.build_tracker("ucmc", 30.0)
     with pytest.raises(ValueError, match="sort"):
         container.build_tracker("sort", 30.0)
+
+
+def test_tracker_params_reach_the_tracker_and_its_recipe():
+    h = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+
+    ucmc = container.build_tracker("ucmc", 30.0, h, {"conf_thresh": 0.1, "wy": 0.4})
+    ocsort = container.build_tracker("ocsort", 30.0, params={"high_conf_det_threshold": 0.1})
+    meta = container.pipeline_metadata("yolox-s", "ucmc", 960, 1, {"conf_thresh": 0.1})
+
+    assert (ucmc.parameters["conf_thresh"], ucmc.parameters["wy"]) == (0.1, 0.4)
+    assert ocsort.parameters["high_conf_det_threshold"] == 0.1
+    assert meta["tracker_params"]["conf_thresh"] == 0.1
+    assert container.pipeline_metadata("yolox-s", "ucmc", 960, 1) == container.pipeline_metadata(
+        "yolox-s", "ucmc", 960, 1, {}
+    )
+
+
+@pytest.mark.parametrize("tracker", ["bytetrack", "ocsort", "ucmc"])
+def test_an_unknown_tracker_param_is_an_error(tracker):
+    with pytest.raises(ValueError, match="nope"):
+        container.tracker_metadata(tracker, {"nope": 1})
+    with pytest.raises(ValueError, match="nope"):
+        container.build_tracker(tracker, 30.0, [[1, 0, 0], [0, 1, 0], [0, 0, 1]], {"nope": 1})

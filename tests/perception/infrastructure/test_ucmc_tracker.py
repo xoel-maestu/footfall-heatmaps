@@ -136,3 +136,19 @@ def test_parameters_are_the_published_defaults_but_the_frame_rate():
         "conf_thresh": 0.5,
         "frame_rate": 25.0,
     }
+
+
+def test_a_lower_conf_thresh_lets_low_score_boxes_continue_a_track():
+    frames = [[walk(0.0, 5.0, f)] for f in range(10)]
+    scores = [0.9] * 5 + [0.3] * 5
+
+    def last_ids(params):
+        t = UcmcTracker(FPS, H, params)
+        out = [
+            t.update(np.array(b), np.array([s]), i)
+            for i, (b, s) in enumerate(zip(frames, scores, strict=True))
+        ]
+        return [ids.tolist() for ids, _ in out[5:]]
+
+    assert last_ids(None) == [[]] * 5  # default conf_thresh 0.5 drops them
+    assert last_ids({"conf_thresh": 0.1}) == [[0]] * 5

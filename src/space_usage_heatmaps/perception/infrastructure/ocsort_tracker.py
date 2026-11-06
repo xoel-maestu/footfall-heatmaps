@@ -6,7 +6,8 @@ consistency term (observation-centric momentum), and a second pass against each
 lost track's last observed box; no appearance features (spec 3, R3) and never
 the image. Parameters are the library's defaults, which are the OC-SORT paper's
 (det_thresh 0.6, max_age 30, min_hits 3, iou 0.3, delta_t 3, inertia 0.2),
-except frame_rate, which scales the lost track buffer to the source:
+except frame_rate, which scales the lost track buffer to the source, and the
+overrides a config names (tracker_params):
 
 - high_conf_det_threshold 0.6: lower boxes are dropped (no low-score stage)
 - minimum_iou_threshold 0.3: weakest IoU that still matches a box to a track
@@ -35,8 +36,10 @@ DEFAULTS = {
 
 
 class OcSortTracker:
-    def __init__(self, frame_rate):
-        self.parameters = {**DEFAULTS, "frame_rate": frame_rate}
+    def __init__(self, frame_rate, **params):
+        if unknown := sorted(set(params) - set(DEFAULTS)):
+            raise ValueError(f"ocsort has no parameters {unknown}; it takes {sorted(DEFAULTS)}")
+        self.parameters = {**DEFAULTS, **params, "frame_rate": frame_rate}
         self._tracker = trackers.OCSORTTracker(**self.parameters)
 
     def update(self, boxes, scores, frame_index):

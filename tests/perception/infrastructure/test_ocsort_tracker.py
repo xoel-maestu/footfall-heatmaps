@@ -69,3 +69,13 @@ def test_parameters_are_the_published_defaults_but_the_frame_rate():
         "high_conf_det_threshold": 0.6,
         "delta_t": 3,
     }
+
+
+def test_a_lower_detection_threshold_is_passed_to_the_library():
+    tracker = OcSortTracker(frame_rate=30, high_conf_det_threshold=0.1)
+    frames = [[] for _ in range(5)] + [[walk(10, f)] for f in range(6)]
+
+    out = run(tracker, frames, score=0.5)
+
+    assert tracker.parameters["high_conf_det_threshold"] == 0.1
+    assert {i for ids, _ in out for i in ids.tolist()} == {0}
