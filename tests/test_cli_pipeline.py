@@ -127,3 +127,10 @@ def test_a_second_tracker_replays_the_cached_detections(tmp_path, rows, monkeypa
     for tracker in ("bytetrack", "ocsort", "ucmc"):
         tracks = data / f"cache/tracks/yolox-s-{tracker}-640-onnx-cuda-stride1"
         assert (tracks / "scene_001_camera_7.npz").exists()
+
+
+def test_the_h3_configs_change_only_the_tracker_of_h1_best():
+    best = cli.load_config("configs/h1-best.yaml")
+    for tracker in ("ocsort", "ucmc"):
+        c = cli.load_config(f"configs/h3-{tracker}.yaml")
+        assert c.tracker == tracker and c == type(best)(**{**vars(best), "tracker": tracker})
