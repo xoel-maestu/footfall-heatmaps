@@ -10,6 +10,7 @@ import numpy as np
 
 from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
 from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from space_usage_heatmaps.occupancy.domain.slots import SlotGrid
 from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
 T0 = 1_793_955_600
@@ -67,3 +68,33 @@ def test_a_second_run_over_the_same_slot_replaces_it(tmp_path):
 
     with sqlite3.connect(tmp_path / "x.db") as db:
         assert db.execute("SELECT count(*) FROM slots").fetchone() == (2,)
+
+
+def slot(n_unique, incomplete):
+    grid = np.full((SPEC.ny, SPEC.nx), float(n_unique))
+    return [
+        SlotGrid("cam", T0, 0.5, layer, grid, n_unique, incomplete)
+        for layer in ("dwell", "passage")
+    ]
+
+
+def stored(store):
+    return {(s.n_unique, s.incomplete) for s in store.read("cam", T0, T0 + 900)}
+
+
+def test_an_incomplete_slot_never_replaces_a_complete_one():
+    """A clock stepping back re-enters a quarter already written: the partial
+    second pass must not overwrite the full first one."""
+    store = SqliteSlotStore(":memory:")
+    store.write(slot(9, incomplete=False))
+    store.write(slot(5, incomplete=True))
+
+    assert stored(store) == {(9, False)}
+
+
+def test_a_complete_slot_replaces_an_incomplete_one():
+    store = SqliteSlotStore(":memory:")
+    store.write(slot(5, incomplete=True))
+    store.write(slot(9, incomplete=False))
+
+    assert stored(store) == {(9, False)}

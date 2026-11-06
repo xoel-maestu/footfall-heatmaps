@@ -48,7 +48,13 @@ class SqliteSlotStore:
     def write(self, slots):
         with self.db:
             self.db.executemany(
-                "INSERT OR REPLACE INTO slots VALUES (?, ?, ?, ?, ?, ?, ?)",
+                # A complete slot is never replaced by an incomplete one, e.g. a
+                # stream whose wall clock steps back into a quarter already written.
+                "INSERT INTO slots VALUES (?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT (camera_id, start_utc, cell_m, layer) DO UPDATE SET"
+                " grid_blob = excluded.grid_blob, n_unique = excluded.n_unique,"
+                " incomplete = excluded.incomplete"
+                " WHERE slots.incomplete = 1 OR excluded.incomplete = 0",
                 [
                     (
                         s.camera_id,
