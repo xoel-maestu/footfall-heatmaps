@@ -8,11 +8,12 @@ polygon. The tracker never receives it, so it never gets an id.
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.perception.application.track_video import (
-    detect_video,
-    mask_detections,
-    track_detections,
-)
+from space_usage_heatmaps.evaluation.domain.dataset_reader import CameraCalibration
+from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
+from space_usage_heatmaps.occupancy.application.record_camera import record_camera
+from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
+from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 from space_usage_heatmaps.perception.domain.frame import Detections
 from space_usage_heatmaps.perception.domain.privacy_mask import PrivacyMask
 from tests.perception.fakes import EchoTracker, ListFrameSource
@@ -76,11 +77,18 @@ class TwoPeople:
 
 
 def test_masked_detections_never_reach_the_tracker():
+    """Through space-usage run's use case, the one path that applies the masks."""
     tracker = EchoTracker()
-    source = ListFrameSource([np.zeros((200, 200, 3), np.uint8)] * 3)
+    frames = ListFrameSource([np.zeros((200, 200, 3), np.uint8)] * 3).frames()
     mask = PrivacyMask(image_polygons=[SQUARE])
+    config = RunConfig.from_mapping(
+        {"detector": "yolox-s", "tracker": "bytetrack", "input_size": 640,
+         "engine": "onnx-cuda", "stride": 1, "foot_point": "bottom"}
+    )  # fmt: skip
+    cam = CameraCalibration(SCALE, width=200, height=200, fps=10.0)
+    recorder = RecordSlots(SqliteSlotStore(":memory:"), "cam", GridSpec(0.0, 0.0, 1.0, 2, 2))
 
-    list(track_detections(mask_detections(detect_video(source, TwoPeople()), mask), tracker))
+    record_camera(frames, TwoPeople(), mask, tracker, cam, config, recorder, lambda f: 0.0, 0.1)
 
     assert len(tracker.calls) == 3
     for _, sent, scores in tracker.calls:

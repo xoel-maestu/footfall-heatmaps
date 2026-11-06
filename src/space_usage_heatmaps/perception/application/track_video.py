@@ -15,20 +15,11 @@ import numpy as np
 
 from space_usage_heatmaps.perception.domain.frame import Detections, TrackedBoxes
 from space_usage_heatmaps.perception.domain.ports import FrameSource, PersonDetector, Tracker
-from space_usage_heatmaps.perception.domain.privacy_mask import PrivacyMask
 
 
 def detect_video(source: FrameSource, detector: PersonDetector) -> Iterator[tuple[int, Detections]]:
     for frame in source.frames():
         yield frame.index, detector.detect(frame)
-
-
-def mask_detections(
-    detections: Iterable[tuple[int, Detections]], mask: PrivacyMask
-) -> Iterator[tuple[int, Detections]]:
-    """R6: drop the detections inside the camera's privacy mask, before any tracker."""
-    for index, d in detections:
-        yield index, mask.apply(d)
 
 
 def track_detections(
