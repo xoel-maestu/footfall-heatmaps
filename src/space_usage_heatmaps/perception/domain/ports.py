@@ -23,3 +23,7 @@ class Tracker(Protocol):
         """Boxes and scores of one frame -> (track ids, boxes) of its confirmed
         tracks. Positions only: a tracker never sees the image."""
         ...
+
+
+class SourceDropped(OSError):
+    """A live source stopped or could not be reached; it may come back."""
