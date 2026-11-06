@@ -77,4 +77,8 @@ def build_pipeline(video, detector, tracker, input_size, stride, models_dir, loo
     weights = check(detector, tracker, input_size)
     source = OpenCvFileSource(video, stride, loop)
     model = load_detector(ensure_weights(models_dir, weights), detector)
+    if model.input_size != input_size:
+        raise ValueError(
+            f"config input_size {input_size}, but {WEIGHTS[weights].file} takes {model.input_size}"
+        )
     return source, model, ByteTrackTracker(frame_rate=source.fps / stride)

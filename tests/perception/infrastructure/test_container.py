@@ -53,3 +53,17 @@ def test_every_model_file_is_registered_with_an_adapter():
     for detector, _ in container.MODELS:
         assert detector in container.FAMILIES
     assert set(container.MODELS.values()) <= set(container.WEIGHTS)
+
+
+def test_a_model_whose_input_differs_from_the_config_is_an_error(monkeypatch, tmp_path):
+    source = type("Source", (), {"fps": 30.0})()
+    monkeypatch.setattr(container, "OpenCvFileSource", lambda *a: source)
+    monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
+    model = type("Model", (), {"input_size": 640})()
+    monkeypatch.setattr(container, "load_detector", lambda path, detector: model)
+
+    with pytest.raises(ValueError, match="960.*640"):
+        container.build_pipeline(tmp_path / "v.mp4", "yolox-s", "bytetrack", 960, 1, tmp_path)
+
+    model.input_size = 960
+    assert container.build_pipeline(tmp_path / "v.mp4", "yolox-s", "bytetrack", 960, 1, tmp_path)

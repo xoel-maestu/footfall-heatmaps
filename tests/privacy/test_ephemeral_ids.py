@@ -17,6 +17,8 @@ from tests.perception.synthetic_video import write_video
 class TwoPeople:
     """Two people walking apart, then a third one appearing, whatever the image shows."""
 
+    input_size = 640
+
     def detect(self, frame):
         i = frame.index
         boxes = [[10 + 2 * i, 20, 30 + 2 * i, 80], [120 - 2 * i, 20, 140 - 2 * i, 80]]
