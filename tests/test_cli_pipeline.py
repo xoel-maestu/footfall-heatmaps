@@ -98,3 +98,32 @@ def test_the_best_config_is_the_accepted_h2_one():
     )
 
     assert best == h2 and (best.detector, best.input_size) == ("yolox-s", 960)
+
+
+def test_a_second_tracker_replays_the_cached_detections(tmp_path, rows, monkeypatch, capsys):
+    data = write_scene(tmp_path / "data", rows)
+    write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4", n=12)
+    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
+    loaded = []
+    monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
+    monkeypatch.setattr(
+        container,
+        "load_detector",
+        lambda path, *_: loaded.append(path) or GroundTruthDetector(rows),
+    )
+    for tracker in ("bytetrack", "ocsort", "ucmc"):
+        (tmp_path / f"{tracker}.yaml").write_text(CONFIG.replace("bytetrack", tracker))
+        args = ["eval", "--config", f"{tracker}.yaml", "--split", "tiny", "--resamples", "5"]
+        assert cli.main(args) == 0
+
+    assert len(loaded) == 1  # the detector ran for the first tracker only
+    detections = data / "cache/detections/yolox-s-640-onnx-cuda-stride1/scene_001_camera_7.npz"
+    with np.load(detections) as f:
+        assert sorted(f.files) == ["box_frames", "boxes", "frames", "meta", "scores"]
+        assert len(f["frames"]) == 12
+        assert "tracker" not in json.loads(str(f["meta"]))
+    for tracker in ("bytetrack", "ocsort", "ucmc"):
+        tracks = data / f"cache/tracks/yolox-s-{tracker}-640-onnx-cuda-stride1"
+        assert (tracks / "scene_001_camera_7.npz").exists()

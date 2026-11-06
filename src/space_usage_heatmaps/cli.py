@@ -203,6 +203,12 @@ def cache_key(c):
     return f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
 
 
+def detection_cache_key(c):
+    """Directory of a detector recipe's cached detections (detection_cache):
+    every tracker of that recipe replays them."""
+    return f"{c.detector}-{c.input_size}-{c.engine}-stride{c.stride}"
+
+
 def pipeline_of(config, reader, loop=False):
     """(scene, camera) -> the perception pipeline of a config on that camera's video."""
     from space_usage_heatmaps.perception.infrastructure.container import build_pipeline
@@ -216,23 +222,54 @@ def pipeline_of(config, reader, loop=False):
             config.stride,
             data_dir() / "models",
             loop,
+            reader.camera(scene, camera).world_to_image,
         )
 
     return build
 
 
+def pipeline_track_source(config, reader):
+    """Tracks of an onnx-cuda config: cached detections of its detector recipe,
+    then a fresh tracker on each video."""
+    from space_usage_heatmaps.evaluation.infrastructure.detection_cache import CachedDetections
+    from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
+        PipelineDetections,
+        PipelineTrackSource,
+    )
+    from space_usage_heatmaps.perception.infrastructure import container
+
+    def detection_of(scene, camera):
+        return container.build_detection(
+            reader.video(scene, camera),
+            config.detector,
+            config.input_size,
+            config.stride,
+            data_dir() / "models",
+        )
+
+    def tracker_of(scene, camera):
+        return container.build_tracker(
+            config.tracker,
+            container.video_fps(reader.video(scene, camera)) / config.stride,
+            reader.camera(scene, camera).world_to_image,
+        )
+
+    detections = CachedDetections(
+        PipelineDetections(detection_of),
+        data_dir() / "cache" / "detections" / detection_cache_key(config),
+        container.detection_metadata(config.detector, config.input_size, config.stride),
+    )
+    meta = container.pipeline_metadata(
+        config.detector, config.tracker, config.input_size, config.stride
+    )
+    directory = data_dir() / "cache" / "tracks" / cache_key(config)
+    return CachedTrackSource(lambda: PipelineTrackSource(detections, tracker_of), directory, meta)
+
+
 def track_source(config, reader):
     directory = data_dir() / "cache" / "tracks" / cache_key(config)
     if config.engine == "onnx-cuda":
-        from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
-            PipelineTrackSource,
-        )
-        from space_usage_heatmaps.perception.infrastructure.container import pipeline_metadata
-
-        meta = pipeline_metadata(config.detector, config.tracker, config.input_size, config.stride)
-        return CachedTrackSource(
-            lambda: PipelineTrackSource(pipeline_of(config, reader)), directory, meta
-        )
+        return pipeline_track_source(config, reader)
 
     def make():
         try:

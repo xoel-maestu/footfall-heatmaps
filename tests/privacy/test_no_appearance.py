@@ -2,9 +2,10 @@
 
 Statically, over every module of the package: no import of a re-identification,
 embedding or face library, and no identifier that names one; the only tracker
-class used from `trackers` is ByteTrack. At run time: the tracker adapter wraps
-that class, whose parameters carry no appearance option, and never hands it
-the image.
+classes used from `trackers` are ByteTrack and OC-SORT (motion and IoU only),
+plus its evaluation metrics. At run time: each tracker adapter wraps that
+class, whose parameters carry no appearance option, and never hands it the
+image.
 """
 
 import ast
@@ -13,9 +14,11 @@ import re
 from pathlib import Path
 
 import numpy as np
+import pytest
 import trackers
 
 from space_usage_heatmaps.perception.infrastructure.bytetrack_tracker import ByteTrackTracker
+from space_usage_heatmaps.perception.infrastructure.ocsort_tracker import OcSortTracker
 
 PACKAGE = Path(__file__).resolve().parents[2] / "src" / "space_usage_heatmaps"
 LIBRARIES = {
@@ -90,7 +93,7 @@ def test_no_module_names_appearance_features():
     assert not offenders
 
 
-def test_the_only_tracker_used_from_trackers_is_bytetrack():
+def test_the_trackers_used_from_trackers_are_bytetrack_and_ocsort():
     used = set()
     for f in modules():
         tree = ast.parse(f.read_text())
@@ -102,14 +105,19 @@ def test_the_only_tracker_used_from_trackers_is_bytetrack():
             ):
                 used.add(node.attr)
         used |= {m.split(".", 1)[1] for m in imported(tree) if m.startswith("trackers.")}
-    assert used == {"ByteTrackTracker"}
+    metrics = {u for u in used if u == "eval" or u.startswith("eval.")}
+    assert used - metrics == {"ByteTrackTracker", "OCSORTTracker"}
 
 
-def test_the_tracker_is_bytetrack_without_appearance_and_never_sees_the_image():
-    adapter = ByteTrackTracker(frame_rate=30)
+@pytest.mark.parametrize(
+    ("adapter", "inner_class"),
+    [(ByteTrackTracker, trackers.ByteTrackTracker), (OcSortTracker, trackers.OCSORTTracker)],
+)
+def test_the_tracker_has_no_appearance_and_never_sees_the_image(adapter, inner_class):
+    adapter = adapter(frame_rate=30)
     inner = adapter._tracker
-    assert type(inner) is trackers.ByteTrackTracker
-    params = set(inspect.signature(trackers.ByteTrackTracker).parameters)
+    assert type(inner) is inner_class
+    params = set(inspect.signature(inner_class).parameters)
     assert not {w for p in params for w in words(p)} & WORDS
     calls = []
     original = inner.update

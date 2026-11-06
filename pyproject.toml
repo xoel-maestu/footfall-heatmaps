@@ -8,9 +8,12 @@ dependencies = [
     "numpy>=2.1",
     "pot>=0.9.5",
     "pyyaml>=6.0",
-    # perception: video decoding (OpenCvFileSource) and ByteTrack (ByteTrackTracker)
+    # perception: video decoding (OpenCvFileSource), ByteTrack and OC-SORT
+    # (ByteTrackTracker, OcSortTracker), and the floor-plane tracker's
+    # assignment (UcmcTracker; scipy was already pulled by pot and trackers)
     "opencv-python-headless>=4.10",
     "trackers==2.6.1",
+    "scipy>=1.14",
 ]
 
 [project.scripts]

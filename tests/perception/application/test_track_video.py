@@ -40,3 +40,21 @@ def test_collect_tracks_of_no_boxes_is_empty_with_the_right_shapes():
     ids, frames, boxes = collect_tracks(iter([]))
 
     assert (ids.shape, frames.shape, boxes.shape) == ((0,), (0,), (0, 4))
+
+
+def test_detect_then_track_is_track_video():
+    """The two halves, run apart (as when detections are replayed from a cache),
+    give what track_video gives."""
+    from space_usage_heatmaps.perception.application.track_video import (
+        detect_video,
+        track_detections,
+    )
+
+    detections = list(detect_video(ListFrameSource(IMAGES), ScriptedDetector()))
+    apart = list(track_detections(detections, EchoTracker()))
+    whole = list(track_video(ListFrameSource(IMAGES), ScriptedDetector(), EchoTracker()))
+
+    assert [i for i, _ in detections] == [0, 1, 2, 3]
+    assert [t.frame_index for t in apart] == [t.frame_index for t in whole]
+    for a, b in zip(apart, whole, strict=True):
+        np.testing.assert_array_equal(a.boxes, b.boxes)

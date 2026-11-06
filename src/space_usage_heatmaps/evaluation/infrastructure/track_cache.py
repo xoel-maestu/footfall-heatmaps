@@ -33,7 +33,7 @@ class CachedTrackSource:
         if path.exists():
             with np.load(path, allow_pickle=False) as f:
                 stored = json.loads(str(f["meta"])) if "meta" in f.files else None
-                if (why := self._stale(stored)) is None:
+                if (why := stale(stored, self.metadata, self._log, "cached tracks")) is None:
                     unknown = sorted(k for k, v in self.metadata.items() if v is None)
                     self.provenance[f"{scene}/{camera}"] = {"stored": stored, "unverified": unknown}
                     return Tracks(f["track_ids"], f["frames"], f["boxes"])
@@ -53,17 +53,19 @@ class CachedTrackSource:
         self.provenance[f"{scene}/{camera}"] = {"stored": stored, "unverified": []}
         return t
 
-    def _stale(self, stored):
-        """Why the stored metadata does not match, or None when it does."""
-        if stored is None:
-            return "no metadata"
-        diffs = [
-            f"{k} {stored.get(k)!r} != {v!r}"
-            for k, v in self.metadata.items()
-            if v is not None and stored.get(k) != v
-        ]
-        if diffs:
-            return ", ".join(diffs)
-        if unknown := [k for k, v in self.metadata.items() if v is None]:
-            self._log(f"cached tracks: {', '.join(unknown)} not checked (not installed here)")
-        return None
+
+def stale(stored, metadata, log, what):
+    """Why the stored metadata does not match the expected one, or None when it
+    does. An expected None is unknown here (not installed): logged, not checked."""
+    if stored is None:
+        return "no metadata"
+    diffs = [
+        f"{k} {stored.get(k)!r} != {v!r}"
+        for k, v in metadata.items()
+        if v is not None and stored.get(k) != v
+    ]
+    if diffs:
+        return ", ".join(diffs)
+    if unknown := [k for k, v in metadata.items() if v is None]:
+        log(f"{what}: {', '.join(unknown)} not checked (not installed here)")
+    return None
