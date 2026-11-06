@@ -20,7 +20,7 @@ def est(value, lo=None, hi=None):
     return {"value": value, "lo": lo, "hi": hi}
 
 
-def eval_report(split, tvd, mass, wape, emd, hota, idf1, delta=None):
+def eval_report(split, tvd, mass, wape, emd, hota, idf1, delta=None, tracking_delta=(0.0, 0.0)):
     dwell = {"tvd": est(tvd), "mass_error": est(mass), "wape_zone": est(wape), "emd_m": est(emd)}
     results = {
         "visible@coverage": {
@@ -29,14 +29,17 @@ def eval_report(split, tvd, mass, wape, emd, hota, idf1, delta=None):
         },
         "full@coverage": {"pooled": {NAME: {"dwell": {"tvd": est(tvd + 0.1)}}}},
     }
+    tracking = {"pooled": {NAME: {"hota": hota, "idf1": idf1}}}
     if delta is not None:
         results["visible@coverage"]["delta"] = {"pooled": {"dwell": {"tvd": est(*delta)}}}
+        d_hota, d_idf1 = tracking_delta
+        tracking["delta"] = {"pooled": {"hota": d_hota, "deta": 0.0, "assa": 0.0, "idf1": d_idf1}}
     return {
         "split": split,
         "cell_m": 0.5,
         "n_resamples": 1000,
         "results": results,
-        "tracking": {"pooled": {NAME: {"hota": hota, "idf1": idf1}}},
+        "tracking": tracking,
     }
 
 
@@ -75,7 +78,8 @@ def inputs():
              "sealed": eval_report("sealed", 0, 0, 0, 0, 0, 0, (-0.191, -0.203, -0.18))},
             {"label": "H9", "config": "c", "baseline": "d", "kind": "accuracy",
              "tune": eval_report("tune", 0, 0, 0, 0, 0, 0, (-0.02, -0.03, -0.01)),
-             "sealed": eval_report("sealed", 0, 0, 0, 0, 0, 0, (-0.01, -0.02, 0.001))},
+             "sealed": eval_report("sealed", 0, 0, 0, 0, 0, 0, (-0.01, -0.02, 0.001),
+                                   (0.02, -0.012))},
             {"label": "H5", "config": "e", "baseline": "f", "kind": "no-loss",
              "tune": eval_report("tune", 0, 0, 0, 0, 0, 0, (-0.001, -0.002, 0.0)),
              "sealed": eval_report("sealed", 0, 0, 0, 0, 0, 0, (-0.001, -0.003, 0.0))},
@@ -95,7 +99,6 @@ def test_the_summary_marks_the_20_percent_rule_and_the_targets():
     assert tvd["tune_meets_target"] is False and tvd["sealed_meets_target"] is False
     wape = s["map"]["metrics"]["wape_zone"]
     assert wape["tune_meets_target"] is True and wape["sealed_meets_target"] is False
-    assert s["tracking"]["idf1"]["within_20pct"] is True  # sealed is better
     assert [c["holds"] for c in s["confirmations"]] == [True, False, True]
     assert s["external"]["wildtrack"]["floor_pairing"]["gate_m"] == 1.0
     assert s["external"]["caviar"] is None
@@ -112,7 +115,8 @@ def test_the_markdown_has_every_section_and_says_what_is_missing():
     assert "| H9 |" in md and "| no (accuracy) |" in md
     assert "| floor, within 1 m | 21.5 cm | 43.0 cm | 0.76 | 0.35 | 2828 |" in md
     assert "| CAVIAR | missing | | |" in md and "| MOT17-04 | 1 | 0.500 | 0.600 |" in md
-    assert "42.4 fps mean" in md and "camera drift not computed" in md
+    assert "42.4 fps mean" in md and "Not computed: camera drift, it compares" in md
+    assert "camera drift not computed" not in md
     assert "| conservation error | tvd | 0.50 (10) | n/a |" in md
 
 
@@ -151,3 +155,41 @@ def test_a_stored_eval_report_is_reused_only_from_the_same_code(tmp_path, monkey
 
     assert reused == stored and redone == {"fresh": True} and len(computed) == 1
     assert json.loads(path.read_text()) == {"fresh": True}  # the new report is stored
+
+
+def passing_inputs():
+    """inputs() with every map target, the 20 % rule and the TVD confirmations met."""
+    data = inputs()
+    good = eval_report("sealed", 0.2, 0.05, 0.2, 1.0, 0.2, 0.2)
+    data["evals"] = {"tune": good | {"split": "tune"}, "sealed": good}
+    data["confirmations"] = data["confirmations"][:1]
+    return data
+
+
+def test_the_tracking_guard_is_checked_per_step_on_its_sealed_delta():
+    s = e1_final.assemble(inputs())
+
+    guards = [c["tracking_guard"] for c in s["confirmations"]]
+    assert [g["holds"] for g in guards] == [True, False, True]
+    assert round(guards[1]["hota_points"], 1) == 2.0 and round(guards[1]["idf1_points"], 1) == -1.2
+
+
+def test_e1_is_accepted_only_when_every_step_keeps_the_tracking_guard():
+    assert e1_final.assemble(passing_inputs())["e1_accepted"] is True
+
+    broken = passing_inputs()
+    broken["confirmations"][0]["sealed"] = eval_report(
+        "sealed", 0, 0, 0, 0, 0, 0, (-0.191, -0.203, -0.18), (0.0, -0.011)
+    )
+    assert e1_final.assemble(broken)["e1_accepted"] is False
+
+
+def test_hota_and_idf1_are_informational_against_tune_without_the_20_percent_verdict():
+    s = e1_final.assemble(inputs())
+    md = e1_final.render_markdown(s)
+
+    assert all("within_20pct" not in x for x in s["tracking"].values())
+    assert "| HOTA | 0.237 | 0.218 | +8 % | information only |" in md
+    assert "Degradation (positive = worse)" in md
+    assert "| ΔHOTA / ΔIDF1 sealed | Tracking guard |" in md
+    assert "| +2.0 / -1.2 | broken |" in md

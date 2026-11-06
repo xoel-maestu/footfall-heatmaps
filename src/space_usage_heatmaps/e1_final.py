@@ -1,8 +1,9 @@
 """space-usage eval --suite e1-final: the E1 report of the accepted config.
 
 It gathers, for configs/h5-best.yaml, the tune and sealed map metrics with the
-20 % rule and the spec 7 targets (recalibrated once after iteration 0), the
-sealed confirmation of every accepted step, the external datasets, the
+20 % rule and the spec 7 targets (recalibrated once after iteration 0), HOTA
+and IDF1 on tune and sealed for information, the sealed confirmation of every
+accepted step with its spec 6 tracking guard, the external datasets, the
 label-free metrics with their correlation against the true error, and the
 bench's fps and VRAM. Tracks come from the caches (the detector does not run
 where a valid cache exists); an eval report under reports/ is reused when it
@@ -39,7 +40,7 @@ MAP_TARGETS = {"tvd": 0.30, "mass_error": 0.10, "wape_zone": 0.30, "emd_m": 1.2}
 SEALED_MAX_DEGRADATION = 0.20
 FPS_MIN, VRAM_MAX_MB = 15.0, 3500.0
 DRIFT = (
-    "camera drift not computed: it compares each frame's edges with a background "
+    "camera drift, it compares each frame's edges with a background "
     "reference, and the evaluation keeps positions only, never frames; the NVIDIA "
     "cameras are static, so there is no drift to validate it against"
 )
@@ -147,6 +148,7 @@ def _pooled(report, name, metric):
 
 
 def _degradation(tune, sealed, higher_is_better=False):
+    """Relative change from tune to sealed, positive when sealed is worse."""
     if tune is None or sealed is None or tune == 0:
         return None
     return (tune - sealed) / tune if higher_is_better else (sealed - tune) / tune
@@ -173,13 +175,8 @@ def assemble(inputs):
     for metric in ("hota", "idf1"):
         t = tune["tracking"]["pooled"][name][metric]
         s = sealed["tracking"]["pooled"][name][metric]
-        d = _degradation(t, s, higher_is_better=True)
-        tracking[metric] = {
-            "tune": t,
-            "sealed": s,
-            "degradation": d,
-            "within_20pct": d is not None and d <= SEALED_MAX_DEGRADATION,
-        }
+        # Information only: the spec 6 guard is per step (tracking_guard below).
+        tracking[metric] = {"tune": t, "sealed": s, "degradation": _degradation(t, s, True)}
     scenes = {
         split: {
             key: v[name]["dwell"]["tvd"]["value"]
@@ -202,7 +199,7 @@ def assemble(inputs):
             holds = s["lo"] is not None and s["lo"] <= 0
         confirmations.append(
             {k: c[k] for k in ("label", "config", "baseline", "kind")}
-            | {"delta_tvd": delta, "holds": holds}
+            | {"delta_tvd": delta, "holds": holds, "tracking_guard": _tracking_guard(c["sealed"])}
         )
     external = _external(inputs["external"], name)
     speed = _speed(inputs["bench"])
@@ -210,6 +207,7 @@ def assemble(inputs):
     wildtrack = external.get("wildtrack") or {}
     accepted = (
         all(m["within_20pct"] and m["sealed_meets_target"] for m in metrics.values())
+        and all(c["tracking_guard"]["holds"] for c in confirmations)
         and bool(wildtrack.get("meets_target"))
         and bool(speed and speed["fps_meets"] and speed["vram_meets"])
     )
@@ -234,6 +232,18 @@ def assemble(inputs):
         "speed": speed,
         "label_free": label_free,
         "e1_accepted": accepted,
+    }
+
+
+def _tracking_guard(report):
+    """Spec 6 on a step's sealed run: HOTA and IDF1 against its baseline, in
+    points, dropping at most cli.GUARD_POINTS (eval's exit code 3)."""
+    t = report["tracking"]
+    d = t["delta"]["pooled"]
+    return {
+        "hota_points": 100 * d["hota"],
+        "idf1_points": 100 * d["idf1"],
+        "holds": bool(cli.guard_holds(t)),
     }
 
 
@@ -349,14 +359,17 @@ def render_markdown(s):
         "",
         f"Config `{s['config']}`. Dwell maps on {m['block']}, {m['cell_m']} m cells, pooled over "
         f"5 scenes per split, 95 % paired block-bootstrap CI ({m['n_resamples']} resamples). "
-        "Targets are spec 7 after its one recalibration; the sealed split must stay within "
-        f"{100 * m['sealed_max_degradation']:.0f} % of tune.",
+        "Targets are spec 7 after its one recalibration; on the map metrics the sealed split "
+        f"must stay within {100 * m['sealed_max_degradation']:.0f} % of tune. Degradation is "
+        "the relative change from tune to sealed, positive when sealed is worse. HOTA and IDF1 "
+        "are shown for information; their spec 6 guard is checked per step below.",
         "",
         f"E1 accepted: **{'yes' if s['e1_accepted'] else 'no'}**.",
         "",
         "## Tune and sealed",
         "",
-        "| Metric | Tune | Sealed | Degradation | Within 20 % | Target | Tune | Sealed |",
+        "| Metric | Tune | Sealed | Degradation (positive = worse) | Within 20 % | Target | Tune "
+        "| Sealed |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for k, x in m["metrics"].items():
@@ -368,7 +381,7 @@ def render_markdown(s):
     for k, x in s["tracking"].items():
         lines.append(
             f"| {TITLES[k]} | {_f(x['tune'])} | {_f(x['sealed'])} | {_pct(x['degradation'])} "
-            f"| {_yes(x['within_20pct'])} | guard only | | |"
+            "| information only | | | |"
         )
     full = m["full_coverage_tvd"]
     lines += [
@@ -384,16 +397,22 @@ def render_markdown(s):
         "",
         "## Sealed confirmation of each accepted step",
         "",
-        "Paired ΔTVD (config minus the one it was accepted over).",
+        "Paired ΔTVD (config minus the one it was accepted over). Tracking guard (spec 6): "
+        f"on sealed, HOTA and IDF1 drop at most {cli.GUARD_POINTS:g} point against the "
+        "baseline; ΔHOTA / ΔIDF1 in points, positive is better.",
         "",
-        "| Step | Config vs baseline | ΔTVD tune | ΔTVD sealed | Holds |",
-        "|---|---|---|---|---|",
+        "| Step | Config vs baseline | ΔTVD tune | ΔTVD sealed | Holds "
+        "| ΔHOTA / ΔIDF1 sealed | Tracking guard |",
+        "|---|---|---|---|---|---|---|",
     ]
     for c in s["confirmations"]:
+        g = c["tracking_guard"]
         lines.append(
             f"| {c['label']} | `{c['config']}` vs `{c['baseline']}` "
             f"| {_ci(c['delta_tvd']['tune'])} | {_ci(c['delta_tvd']['sealed'])} "
-            f"| {'yes' if c['holds'] else 'no'} ({c['kind']}) |"
+            f"| {'yes' if c['holds'] else 'no'} ({c['kind']}) "
+            f"| {g['hota_points']:+.1f} / {g['idf1_points']:+.1f} "
+            f"| {'holds' if g['holds'] else 'broken'} |"
         )
     lines += ["", "## External datasets (evaluation only, never tuned on)", ""]
     ext = s["external"]
