@@ -89,3 +89,12 @@ def test_the_recipe_names_the_opencv_build_that_decodes_and_resizes():
     meta = container.pipeline_metadata("yolox-s", "bytetrack", 640, 1)
 
     assert meta["opencv"] == metadata.version("opencv-python-headless")
+
+
+def test_the_best_config_is_the_accepted_h2_one():
+    best, h2 = (
+        cli.load_config("configs/h1-best.yaml"),
+        cli.load_config("configs/h2-yolox-s-960.yaml"),
+    )
+
+    assert best == h2 and (best.detector, best.input_size) == ("yolox-s", 960)
