@@ -1,6 +1,7 @@
 """Fetch the external evaluation-only datasets from their official sources.
 
     uv run --no-sync python scripts/fetch-datasets.py wildtrack|caviar|mot17
+    uv run --no-sync python scripts/fetch-datasets.py nvidia <scene> [<scene> ...]
 
 Only what `space-usage eval --dataset` reads, into SPACE_USAGE_DATA_DIR
 (default ~/datasets/space-usage-heatmaps), never into the repo:
@@ -9,8 +10,14 @@ Only what `space-usage eval --dataset` reads, into SPACE_USAGE_DATA_DIR
   written without zip64);
 - caviar: the 26 corridor-view clips of the second set and their ground truth;
 - mot17: train sequences 02, 04 and 09 (FRCNN copy), by HTTP range from
-  the official 5.9 GB MOT17.zip.
-Anonymous HTTPS to the hosts below only, no redirects followed. Licences:
+  the official 5.9 GB MOT17.zip;
+- nvidia: the video.mp4 of every calibrated camera of the named scenes of
+  MTMC_Tracking_2024 (their calibration and truth already on disk), from the
+  official Hugging Face dataset nvidia/PhysicalAI-SmartSpaces (multi-camera
+  fusion, phase 9). huggingface.co answers with one redirect to its CDN under
+  hf.co, which is the only redirect followed (check_hf_cdn).
+Anonymous HTTPS to the hosts below only, no other redirect followed, no
+header sent (no token, no cookie). Licences:
 docs/licenses.md. Files already present at their size are kept.
 """
 
@@ -18,9 +25,11 @@ import io
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from space_usage_heatmaps.perception.infrastructure.model_weights import check_url
 
@@ -38,6 +47,12 @@ MOT17 = [
     for part in ("img1/", "gt/", "seqinfo.ini")
 ]
 WRAP = 1 << 32
+HF_HOSTS = {"huggingface.co"}
+HF_DATASET = (
+    "https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces/resolve/main/"
+    "MTMC_Tracking_2024/test"
+)
+REDIRECTS = (301, 302, 303, 307, 308)
 
 
 class _NoRedirects(urllib.request.HTTPRedirectHandler):
@@ -156,6 +171,83 @@ def download(url, dest):
     return True
 
 
+def nvidia_video_url(scene, camera):
+    return f"{HF_DATASET}/scene_{int(scene):03d}/camera_{int(camera):04d}/video.mp4"
+
+
+def check_hf_cdn(url):
+    """The one redirect followed: HTTPS to Hugging Face's CDN (a host under
+    hf.co), without credentials in the URL."""
+    u = urlsplit(url)
+    host = u.hostname or ""
+    if u.scheme != "https" or not host.endswith(".hf.co") or u.username or u.password:
+        raise OSError(f"refusing redirect to {u.scheme}://{host}")
+
+
+class _Keep(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # urllib raises the redirect as an HTTPError, read in _resolve
+
+
+def _resolve(url):
+    """(where the file is, its size): a HEAD to huggingface.co, whose redirect
+    is read, not followed."""
+    check_url(url, HF_HOSTS)
+    request = urllib.request.Request(url, method="HEAD")
+    try:
+        with urllib.request.build_opener(_Keep).open(request, timeout=120) as r:
+            return url, int(r.headers["Content-Length"])
+    except urllib.error.HTTPError as e:
+        if e.code not in REDIRECTS:
+            raise
+        return e.headers["Location"], int(e.headers["X-Linked-Size"])
+
+
+def fetch_hf(url, dest):
+    """A Hugging Face file into dest unless dest is already at its size;
+    streamed to a .part file, checked against the announced size, then
+    renamed. Whether it wrote."""
+    check_url(url, HF_HOSTS)
+    location, size = _resolve(url)
+    if location != url:
+        check_hf_cdn(location)
+    if dest.exists() and dest.stat().st_size == size:
+        return False
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_name(dest.name + ".part")
+    written = 0
+    try:
+        with _open(urllib.request.Request(location), timeout=120) as r, part.open("wb") as f:
+            while chunk := r.read(1 << 22):
+                f.write(chunk)
+                written += len(chunk)
+        if written != size:
+            raise OSError(f"{url}: truncated, {written} of {size} bytes")
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    part.replace(dest)
+    return True
+
+
+def fetch_nvidia(scenes, data_dir):
+    """Every calibrated camera's video of each scene, one line per file on stdout."""
+    import json
+
+    root = data_dir / "nvidia" / "MTMC_Tracking_2024" / "test"
+    written = 0
+    for scene in scenes:
+        d = root / f"scene_{int(scene):03d}"
+        sensors = json.loads((d / "calibration_2025_format.json").read_text())["sensors"]
+        cameras = sorted(int(s["id"].removeprefix("Camera_")) for s in sensors)
+        for camera in cameras:
+            dest = d / f"camera_{camera:04d}" / "video.mp4"
+            new = fetch_hf(nvidia_video_url(scene, camera), dest)
+            written += new
+            print(f"scene {scene} camera {camera}: {'written' if new else 'present'}", flush=True)
+    return written
+
+
 def fetch(name, data_dir):
     if name == "wildtrack":
         prefixes = [f"Wildtrack_dataset/{p}" for p in WILDTRACK]
@@ -171,9 +263,12 @@ def fetch(name, data_dir):
 
 
 def main(argv):
+    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    if len(argv) > 1 and argv[0] == "nvidia":
+        print(f"nvidia: {fetch_nvidia(argv[1:], data.expanduser())} files written")
+        return
     if len(argv) != 1 or argv[0] not in ("wildtrack", "caviar", "mot17"):
         raise SystemExit(__doc__)
-    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
     print(f"{argv[0]}: {fetch(argv[0], data.expanduser())} files written")
 
 

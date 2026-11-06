@@ -137,3 +137,89 @@ def test_a_wrapped_end_offset_does_not_block_the_member():
         info._end_offset = 1
 
     assert fd._open_member(z, info, [0]).read() == b"abc" * 100
+
+
+HF_URL = (
+    "https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces/resolve/main/"
+    "MTMC_Tracking_2024/test/scene_071/camera_0635/video.mp4"
+)
+CDN_URL = "https://us.aws.cdn.hf.co/xet-bridge-us/abc?sig=fake"
+
+
+class StreamResponse:
+    def __init__(self, body, length=None):
+        self.body = io.BytesIO(body)
+        self.headers = {"Content-Length": str(len(body) if length is None else length)}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self, n=-1):
+        return self.body.read(n)
+
+
+def hf_server(monkeypatch, fd, location, size, body):
+    calls = []
+    monkeypatch.setattr(fd, "_resolve", lambda url: (calls.append(url), (location, size))[1])
+
+    def _open(request, timeout):
+        calls.append(request.full_url)
+        assert not request.header_items(), "no header may be sent (no token, no cookie)"
+        return StreamResponse(body)
+
+    monkeypatch.setattr(fd, "_open", _open)
+    return calls
+
+
+def test_the_nvidia_video_url_is_the_official_dataset():
+    fd = _module()
+
+    assert fd.nvidia_video_url("071", "635") == HF_URL
+
+
+def test_an_nvidia_video_is_streamed_to_a_part_file_then_renamed(tmp_path, monkeypatch):
+    fd = _module()
+    calls = hf_server(monkeypatch, fd, CDN_URL, 10, b"0123456789")
+    dest = tmp_path / "camera_0635" / "video.mp4"
+
+    assert fd.fetch_hf(HF_URL, dest) is True
+    assert dest.read_bytes() == b"0123456789"
+    assert calls == [HF_URL, CDN_URL]
+    assert fd.fetch_hf(HF_URL, dest) is False  # kept at its size
+    assert not list(dest.parent.glob("*.part"))
+
+
+def test_a_redirect_off_the_hugging_face_cdn_is_refused(tmp_path, monkeypatch):
+    fd = _module()
+    hf_server(monkeypatch, fd, "https://evil.example/video.mp4", 10, b"0123456789")
+    dest = tmp_path / "video.mp4"
+
+    with pytest.raises(OSError, match="refusing"):
+        fd.fetch_hf(HF_URL, dest)
+    assert not dest.exists()
+
+
+def test_only_hugging_face_is_asked_for_a_video(tmp_path):
+    fd = _module()
+
+    with pytest.raises(OSError, match="refusing"):
+        fd.fetch_hf("https://example.com/video.mp4", tmp_path / "video.mp4")
+    with pytest.raises(OSError, match="refusing"):
+        fd.check_hf_cdn("http://us.aws.cdn.hf.co/x")
+    with pytest.raises(OSError, match="refusing"):
+        fd.check_hf_cdn("https://user:pw@us.aws.cdn.hf.co/x")
+    with pytest.raises(OSError, match="refusing"):
+        fd.check_hf_cdn("https://cdn.hf.co.evil.example/x")
+
+
+def test_a_truncated_video_leaves_no_file(tmp_path, monkeypatch):
+    fd = _module()
+    hf_server(monkeypatch, fd, CDN_URL, 10, b"short")
+    dest = tmp_path / "video.mp4"
+
+    with pytest.raises(OSError, match="truncated"):
+        fd.fetch_hf(HF_URL, dest)
+    assert not list(tmp_path.iterdir())
