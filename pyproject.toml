@@ -153,6 +153,8 @@ source_modules = [
 forbidden_modules = [
     "space_usage_heatmaps.evaluation.application",
     "space_usage_heatmaps.evaluation.infrastructure",
+    "space_usage_heatmaps.occupancy.application",
+    "space_usage_heatmaps.occupancy.infrastructure",
     "space_usage_heatmaps.perception.application",
     "space_usage_heatmaps.perception.infrastructure",
     "space_usage_heatmaps.cli",
@@ -163,10 +165,12 @@ name = "application imports only domain and application"
 type = "forbidden"
 source_modules = [
     "space_usage_heatmaps.evaluation.application",
+    "space_usage_heatmaps.occupancy.application",
     "space_usage_heatmaps.perception.application",
 ]
 forbidden_modules = [
     "space_usage_heatmaps.evaluation.infrastructure",
+    "space_usage_heatmaps.occupancy.infrastructure",
     "space_usage_heatmaps.perception.infrastructure",
     "space_usage_heatmaps.cli",
 ]
@@ -180,6 +184,7 @@ source_modules = [
     "space_usage_heatmaps.occupancy.domain",
     "space_usage_heatmaps.perception.domain",
     "space_usage_heatmaps.evaluation.application",
+    "space_usage_heatmaps.occupancy.application",
     "space_usage_heatmaps.perception.application",
 ]
 forbidden_modules = [
