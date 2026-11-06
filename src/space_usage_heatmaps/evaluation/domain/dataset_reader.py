@@ -32,6 +32,10 @@ class Samples:
     # (N,) bool: a region the tracking guards neither score nor penalise (MOT17's
     # static people, reflections...); a tracked box matched to it is dropped.
     distractor: np.ndarray | None = None
+    # (N,) bool: the rows the tracking guards score; None means every row but
+    # the distractors. Rows neither scored nor distractors (MOT17's vehicles,
+    # occluders, ignored people) only take part in the distractor matching.
+    scored: np.ndarray | None = None
 
 
 @dataclass(frozen=True)

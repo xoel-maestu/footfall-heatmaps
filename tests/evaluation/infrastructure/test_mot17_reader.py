@@ -43,14 +43,16 @@ def test_scenes_are_the_fetched_sequences(tmp_path):
     assert reader.cameras("MOT17-02") == [CAMERA]
 
 
-def test_samples_keep_pedestrians_and_mark_distractors(tmp_path):
+def test_samples_keep_every_row_and_mark_what_is_scored(tmp_path):
     s = Mot17Reader(write_sequence(tmp_path)).samples("MOT17-02", CAMERA)
 
+    # Every row stays, as TrackEval matches tracked boxes against all of them.
     # Scored: considered pedestrians. Distractors: classes 2, 7, 8, 12 (TrackEval's
-    # MOT17 list). Dropped: other classes (vehicles, occluders) and ignored pedestrians.
-    assert s.track_ids.tolist() == [1, 2, 1, 5]
-    assert s.frames.tolist() == [0, 0, 1, 2]
-    assert s.distractor.tolist() == [False, True, False, True]
+    # MOT17 list). The rest (vehicles, occluders, ignored pedestrians) is neither.
+    assert s.track_ids.tolist() == [1, 2, 1, 3, 4, 5]
+    assert s.frames.tolist() == [0, 0, 1, 1, 1, 2]
+    assert s.scored.tolist() == [True, False, True, False, False, False]
+    assert s.distractor.tolist() == [False, True, False, False, False, True]
     assert s.boxes[0] == pytest.approx([10, 20, 30, 40])
     assert np.isnan(s.world).all()
 

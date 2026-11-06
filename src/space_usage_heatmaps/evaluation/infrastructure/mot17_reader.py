@@ -7,9 +7,9 @@ are fetched (the frames are the same in the DPM, FRCNN and SDP copies; only
 their public detections differ, which are not used): seqinfo.ini, gt/gt.txt
 (frame, id, x, y, w, h, consider, class, visibility; 1-based frames) and
 img1/<NNNNNN>.jpg. One scene per sequence, one camera ("1"). No floor truth:
-the tracking guards only, with TrackEval's MOT17 rules: considered
-pedestrians are scored, classes 2, 7, 8 and 12 are distractors, the rest is
-left out.
+the tracking guards only, with TrackEval's MOT17 rules: every row is kept
+for the distractor matching, considered pedestrians are scored, classes 2, 7,
+8 and 12 are distractors, the rest is neither.
 """
 
 import configparser
@@ -76,15 +76,13 @@ class Mot17Reader:
     def _load_samples(self, scene):
         gt = np.loadtxt(self._sequence(scene, CAMERA) / "gt" / "gt.txt", delimiter=",", ndmin=2)
         cls = gt[:, 7].astype(int)
-        scored = (gt[:, 6] != 0) & (cls == PEDESTRIAN)
-        distractor = np.isin(cls, DISTRACTORS)
-        g = gt[scored | distractor]
         return Samples(
-            g[:, 1].astype(int),
-            g[:, 0].astype(int) - 1,
-            g[:, 2:6],
-            np.full((len(g), 2), np.nan),
-            distractor=distractor[scored | distractor],
+            gt[:, 1].astype(int),
+            gt[:, 0].astype(int) - 1,
+            gt[:, 2:6],
+            np.full((len(gt), 2), np.nan),
+            distractor=np.isin(cls, DISTRACTORS),
+            scored=(gt[:, 6] != 0) & (cls == PEDESTRIAN),
         )
 
     def samples(self, scene, camera):

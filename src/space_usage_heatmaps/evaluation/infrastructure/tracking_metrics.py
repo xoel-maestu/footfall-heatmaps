@@ -6,9 +6,10 @@ TrackEval (Apache-2.0 over TrackEval's MIT code): HOTA over IoU thresholds
 Scored on the frames the camera's truth spans; tracked boxes outside them are
 left out. The truth boxes are the visible part of each person (NVIDIA
 ground_truth.txt), the same thing a detector boxes. Truth rows marked as
-distractors (MOT17) follow TrackEval's MOT17 preprocessing: per frame, tracked
-boxes are matched to every truth box (Hungarian on IoU, at least 0.5); those
-matched to a distractor are dropped, and distractors are not scored.
+distractors or unscored (MOT17) follow TrackEval's MOT17 preprocessing: per
+frame, tracked boxes are matched to every truth row, scored or not (Hungarian
+on IoU, at least 0.5); those matched to a distractor are dropped, and only the
+scored rows are scored.
 """
 
 import numpy as np
@@ -26,11 +27,13 @@ def _by_frame(frames, ids, boxes, span):
     return [(ids[a:b], boxes[a:b]) for a, b in zip(lo, hi, strict=True)]
 
 
-def _drop_distractor_matches(truth, distractor, pred):
-    """Per frame, the tracked boxes minus those matched to a distractor; the
-    truth minus its distractors."""
+def _drop_distractor_matches(truth, distractor, scored, pred):
+    """Per frame, the tracked boxes minus those matched to a distractor among
+    all truth rows; the truth's scored rows."""
     kept_truth, kept_pred = [], []
-    for (t_ids, t_boxes), d, (p_ids, p_boxes) in zip(truth, distractor, pred, strict=True):
+    for (t_ids, t_boxes), d, sc, (p_ids, p_boxes) in zip(
+        truth, distractor, scored, pred, strict=True
+    ):
         keep = np.ones(len(p_ids), dtype=bool)
         if d.any() and len(p_ids):
             iou = box_iou(t_boxes.reshape(-1, 4), p_boxes.reshape(-1, 4))
@@ -38,7 +41,7 @@ def _drop_distractor_matches(truth, distractor, pred):
             rows, cols = linear_sum_assignment(score, maximize=True)
             hit = score[rows, cols] > 0
             keep[cols[hit & d[rows]]] = False
-        kept_truth.append((t_ids[~d], t_boxes[~d]))
+        kept_truth.append((t_ids[sc], t_boxes[sc]))
         kept_pred.append((p_ids[keep], p_boxes[keep]))
     return kept_truth, kept_pred
 
@@ -50,9 +53,16 @@ def tracking_metrics(samples, tracks):
     truth_xyxy[:, 2:] += truth_xyxy[:, :2]
     truth = _by_frame(samples.frames, samples.track_ids, truth_xyxy, span)
     pred = _by_frame(tracks.frames, tracks.track_ids, np.asarray(tracks.boxes, float), span)
-    if samples.distractor is not None and np.any(samples.distractor):
-        flags = _by_frame(samples.frames, np.asarray(samples.distractor, bool), truth_xyxy, span)
-        truth, pred = _drop_distractor_matches(truth, [d for d, _ in flags], pred)
+    if samples.distractor is not None or samples.scored is not None:
+        n = len(samples.frames)
+        d = (
+            np.zeros(n, bool)
+            if samples.distractor is None
+            else np.asarray(samples.distractor, bool)
+        )
+        sc = ~d if samples.scored is None else np.asarray(samples.scored, bool)
+        flags = [_by_frame(samples.frames, f, truth_xyxy, span) for f in (d, sc)]
+        truth, pred = _drop_distractor_matches(truth, *([f for f, _ in x] for x in flags), pred)
     truth_ids = [ids for ids, _ in truth]
     pred_ids = [ids for ids, _ in pred]
     iou = [
