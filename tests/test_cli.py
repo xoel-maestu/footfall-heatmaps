@@ -162,6 +162,13 @@ def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeyp
     assert vc["pooled"]["configs_foot"]["dwell"]["tvd"] == {"value": 0.0, "lo": 0.0, "hi": 0.0}
     assert vc["delta"]["of"] == ["configs_foot", "configs_centre"]
     assert set(vc["scenes"]["001/7"]) == {"configs_foot", "configs_centre"}
+    # Tracking guards: the cached tracks are the truth boxes, so HOTA and IDF1 are 1.
+    hota = next(ln for ln in rows_out if ln[:3] == ["configs_foot", "pooled", "tracking"])
+    assert hota[3:] == ["1.000", "1.000", "1.000", "1.000"]
+    assert "guard: HOTA -0.0 points, IDF1 -0.0 points: holds" in out.replace("+0.0", "-0.0")
+    tracking = report["tracking"]
+    assert tracking["pooled"]["configs_foot"]["hota"] == 1.0
+    assert tracking["delta"]["pooled"] == {"hota": 0.0, "deta": 0.0, "assa": 0.0, "idf1": 0.0}
 
 
 def test_report_names_come_from_the_config_path_so_stems_do_not_collide(tmp_path, monkeypatch):

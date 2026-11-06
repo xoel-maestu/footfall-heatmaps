@@ -321,6 +321,63 @@ def _rows(label, per_scene, pooled, scenes, width):
             print(f"{label:<{width}}{where:<10}{layer:<9}{blocks:>7}{cells}")
 
 
+# Spec 6 guard: HOTA and IDF1 may not drop more than this against the config compared to.
+GUARD_POINTS = 1.0
+TRACKING = ["hota", "deta", "assa", "idf1"]
+
+
+def score_tracking(reader, scenes, names, runs):
+    """HOTA, DetA, AssA and IDF1 per config and scene in image space against the
+    camera's truth boxes, pooled as the mean over scenes; with two configs, the
+    difference first - second."""
+    from space_usage_heatmaps.evaluation.infrastructure.tracking_metrics import (
+        pooled,
+        tracking_metrics,
+    )
+
+    keys = [f"{scene}/{camera}" for scene, camera in scenes]
+    per = {n: {} for n in names}
+    for (scene, camera), key in zip(scenes, keys, strict=True):
+        samples = reader.samples(scene, camera)
+        for n, (_, source) in zip(names, runs, strict=True):
+            per[n][key] = tracking_metrics(samples, source.tracks(scene, camera))
+    result = {"scenes": per, "pooled": {n: pooled(list(per[n].values())) for n in names}}
+    if len(names) == 2:
+        a, b = names
+
+        def diff(x, y):
+            return {m: x[m] - y[m] for m in TRACKING}
+
+        result["delta"] = {
+            "of": names,
+            "scenes": {k: diff(per[a][k], per[b][k]) for k in keys},
+            "pooled": diff(result["pooled"][a], result["pooled"][b]),
+        }
+    return result
+
+
+def _print_tracking(t, names, width):
+    print(
+        "\ntracking guards: HOTA (DetA, AssA) and IDF1 in image space against the "
+        "camera's truth boxes, TrackEval definitions; pooled = mean over scenes"
+    )
+    print(f"{'config':<{width}}{'scene':<10}{'':<9}" + "".join(f"{m:>8}" for m in TRACKING))
+    rows = [(n, t["scenes"][n], t["pooled"][n]) for n in names]
+    if "delta" in t:
+        rows.append(("delta", t["delta"]["scenes"], t["delta"]["pooled"]))
+    for label, scenes, pool in rows:
+        for where, m in [*scenes.items(), ("pooled", pool)]:
+            cells = "".join(f"{m[k]:>8.3f}" for k in TRACKING)
+            print(f"{label:<{width}}{where:<10}{'tracking':<9}{cells}")
+    if "delta" in t:
+        d = {k: 100 * v for k, v in t["delta"]["pooled"].items()}
+        holds = min(d["hota"], d["idf1"]) >= -GUARD_POINTS
+        print(
+            f"guard: HOTA {d['hota']:+.1f} points, IDF1 {d['idf1']:+.1f} points: "
+            + ("holds" if holds else f"BROKEN (more than {GUARD_POINTS:g} point lower)")
+        )
+
+
 def _estimates(table):
     return {layer: {m: vars(e) for m, e in metrics.items()} for layer, metrics in table.items()}
 
@@ -334,6 +391,7 @@ def run_eval_config(args):
     configs = [load_config(args.config)] + ([load_config(args.compare)] if args.compare else [])
     runs = [(c, track_source(c, reader)) for c in configs]
     r = evaluate_config(reader, SPLITS[args.split], runs, args.cell, n_resamples=args.resamples)
+    tracking = score_tracking(reader, SPLITS[args.split], names, runs)
 
     print(
         f"{r.dataset}  split {args.split}  cell {r.cell_m} m  "
@@ -366,6 +424,7 @@ def run_eval_config(args):
             _rows(name, [s[i] for s in res.scenes], res.pooled[i], r.scenes, width)
         if res.delta_pooled is not None:
             _rows("delta", res.delta_scenes, res.delta_pooled, r.scenes, width)
+    _print_tracking(tracking, names, width)
 
     report = {
         "dataset": r.dataset,
@@ -378,6 +437,7 @@ def run_eval_config(args):
         "pooled": "unweighted mean over scenes, blocks resampled within each scene",
         "configs": {n: vars(c) for n, c in zip(names, configs, strict=True)},
         "scenes": [vars(run) for run in r.scenes],
+        "tracking": tracking,
         "tracks_provenance": {
             n: getattr(src, "provenance", None) for n, (_, src) in zip(names, runs, strict=True)
         },
