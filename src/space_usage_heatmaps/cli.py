@@ -806,6 +806,7 @@ def wildtrack_ground_error(reader, scene, camera, config, source):
         ground_plane_error,
         matched_ground_error,
     )
+    from space_usage_heatmaps.floorplan.domain.foot_point import camera_height, head_rule_applies
 
     t = source.tracks(scene, camera)
     cam = reader.camera(scene, camera)
@@ -829,6 +830,13 @@ def wildtrack_ground_error(reader, scene, camera, config, source):
     return plane, {
         "camera": camera,
         "depression_deg": reader.depression_deg(scene, camera),
+        "camera_height_m": camera_height(cam.projection),
+        # auto-track's camera-height guard: whether its head rule may run here.
+        "head_rule": (
+            head_rule_applies(cam.projection, config.track_heights())
+            if config.foot_point == "auto-track"
+            else None
+        ),
         "foot_point": config.foot_point,
         "head_boxes": int(head.sum()),
         **e,
@@ -873,8 +881,10 @@ def run_eval_dataset(args):
         report["ground_position"] = g
         report["ground_plane"] = plane
         print(
-            f"camera {camera} (most oblique, {g['depression_deg']:.1f} degrees below the horizon), "
-            f"foot point {g['foot_point']}, {g['truth_boxes']} annotated people, "
+            f"camera {camera} (most oblique, {g['depression_deg']:.1f} degrees below the horizon, "
+            f"{g['camera_height_m']:.2f} m high), foot point {g['foot_point']}"
+            + ("" if g["head_rule"] is not False else " (head rule off: camera below heads)")
+            + f", {g['truth_boxes']} annotated people, "
             f"{g['tracked_boxes']} tracked boxes"
         )
         print("ground position error; it holds for the people each view pairs (recall):")

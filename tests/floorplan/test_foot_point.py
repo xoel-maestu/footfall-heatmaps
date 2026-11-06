@@ -3,7 +3,9 @@ import pytest
 
 from space_usage_heatmaps.floorplan.domain.foot_point import (
     TrackHeights,
+    camera_height,
     floor_points,
+    head_rule_applies,
     image_points,
     implied_heights,
 )
@@ -36,15 +38,15 @@ def test_an_unknown_point_is_an_error():
 H_IMG = 1080
 
 
-def _camera():
+def _camera(height=4.0, tilt_deg=30.0):
     k = np.array([[1000.0, 0, 960], [0, 1000.0, 540], [0, 0, 1]])
-    tilt = np.radians(30)
+    tilt = np.radians(tilt_deg)
     # Camera axes in world coordinates: x right, y down in the image, z forward.
     forward = np.array([0, np.cos(tilt), -np.sin(tilt)])
     right = np.array([1.0, 0, 0])
     down = np.cross(forward, right)
     r = np.stack([right, down, forward])
-    centre = np.array([0, -10.0, 4.0])
+    centre = np.array([0, -10.0, height])
     return k @ np.hstack([r, (-r @ centre)[:, None]])
 
 
@@ -238,3 +240,65 @@ def test_a_box_cut_by_the_top_border_stays_out_of_its_track_height():
 
     assert not head[:-1].any() and head[-1]  # head-cut boxes keep their bottom
     np.testing.assert_allclose([xs[-1], ys[-1]], [0.0, 5.0], atol=1e-6)
+
+
+def test_camera_height_is_the_camera_centre_above_the_floor():
+    assert camera_height(P) == pytest.approx(4.0)
+    assert camera_height(-2.5 * _camera(1.68, 9.0)) == pytest.approx(1.68)
+
+
+def test_the_head_rule_needs_the_camera_a_clip_span_above_the_tallest_head():
+    # Track heights clipped to [1.0, 2.0] m: the head rule needs the camera at
+    # 2.0 + (2.0 - 1.0) = 3.0 m or higher.
+    heights = TrackHeights(0.9, 0.88, 1.0, 2.0)
+    assert head_rule_applies(_camera(3.1), heights)
+    assert not head_rule_applies(_camera(2.9), heights)
+    assert head_rule_applies(_camera(2.7), TrackHeights(0.9, 0.88, 1.2, 1.9))  # needs 2.6 m
+
+
+def _hidden_adult(camera):
+    """A 1.85 m adult seen whole four times, then cut at the knees, by camera."""
+    project = _projector(camera)
+    boxes = []
+    for y, cut in ((1.0, 0.0), (2.0, 0.0), (3.0, 0.0), (4.0, 0.0), (5.0, 0.6)):
+        u_foot, v_foot = project(0.0, y, cut)
+        u_head, v_head = project(0.0, y, 1.85)
+        u = (u_foot + u_head) / 2
+        boxes.append([u - 20.0, v_head, u + 20.0, v_foot])
+    return np.array(boxes)
+
+
+def _projector(camera):
+    def project(x, y, z):
+        q = camera @ np.array([x, y, z, 1.0])
+        return q[:2] / q[2]
+
+    return project
+
+
+def test_auto_track_keeps_the_bottom_when_the_camera_is_not_above_head_height():
+    # At 1.68 m the head plane of a 1.85 m adult is above the camera: the
+    # back-projection is unstable, so every box keeps its bottom-centre, also
+    # one whose legs the lower image border cuts (which uses the head otherwise).
+    low = _camera(1.68, 9.0)
+    boxes = _hidden_adult(low)
+    boxes[4, 3] = H_IMG - 1
+    ids, frames = np.full(5, 3), np.arange(5)
+
+    xs, ys, head = floor_points(boxes, low, H_IMG, "auto-track", track_ids=ids, frames=frames)
+    bx, by, _ = floor_points(boxes, low, H_IMG, "bottom")
+
+    assert not head.any()
+    np.testing.assert_allclose([xs, ys], [bx, by])
+
+
+def test_auto_track_still_places_a_hidden_box_from_its_head_on_a_high_camera():
+    high = _camera(3.1, 30.0)
+    boxes = _hidden_adult(high)
+
+    xs, ys, head = floor_points(
+        boxes, high, H_IMG, "auto-track", track_ids=np.full(5, 3), frames=np.arange(5)
+    )
+
+    assert head.tolist() == [False] * 4 + [True]
+    np.testing.assert_allclose([xs[4], ys[4]], [0.0, 5.0], atol=1e-6)
