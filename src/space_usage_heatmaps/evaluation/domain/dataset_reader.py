@@ -1,6 +1,7 @@
 """Port: what the evaluation needs from a dataset with floor ground truth."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
@@ -9,8 +10,9 @@ import numpy as np
 @dataclass(frozen=True)
 class CameraCalibration:
     # 3x3 ground-plane homography, metres -> pixels, scaled so that the third
-    # coordinate is positive for floor points in front of the camera.
-    world_to_image: np.ndarray
+    # coordinate is positive for floor points in front of the camera; None for
+    # a dataset without floor calibration (image-space tracking only).
+    world_to_image: np.ndarray | None
     width: int
     height: int
     fps: float
@@ -26,7 +28,14 @@ class Samples:
     track_ids: np.ndarray  # (N,)
     frames: np.ndarray  # (N,)
     boxes: np.ndarray  # (N, 4) x, y, w, h in pixels
-    world: np.ndarray  # (N, 2) floor position in metres
+    world: np.ndarray  # (N, 2) floor position in metres; NaN without floor truth
+    # (N,) bool: a region the tracking guards neither score nor penalise (MOT17's
+    # static people, reflections...); a tracked box matched to it is dropped.
+    distractor: np.ndarray | None = None
+    # (N,) bool: the rows the tracking guards score; None means every row but
+    # the distractors. Rows neither scored nor distractors (MOT17's vehicles,
+    # occluders, ignored people) only take part in the distractor matching.
+    scored: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +49,9 @@ class FloorTruth:
 
 
 class DatasetReader(Protocol):
+    """A dataset without floor truth (image-space tracking only) has no
+    floor_truth or scene_extent: both raise ValueError."""
+
     name: str
 
     def cameras(self, scene: str) -> list[str]:
@@ -54,4 +66,8 @@ class DatasetReader(Protocol):
 
     def scene_extent(self, scene: str) -> tuple[float, float, float, float]:
         """(xmin, ymin, xmax, ymax) in metres over every camera of the scene."""
+        ...
+
+    def video(self, scene: str, camera: str) -> Path:
+        """The camera's video file, which the perception pipeline reads."""
         ...
