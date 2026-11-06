@@ -1,12 +1,12 @@
 """Export the RF-DETR Nano COCO checkpoint to ONNX with the rfdetr package's own exporter.
 
-    python rfdetr.py <work dir> <checkpoint> <output.onnx>
+    python rfdetr.py <checkpoint> <output.onnx>
 
 Runs in scripts/export/rfdetr's own environment. The checkpoint is loaded by
-rfdetr's loader with torch.load forced to weights_only=True: a load that asks
-for full unpickling raises instead. Hugging Face is offline: nothing else is
-downloaded. The rest is RFDETRNano(pretrain_weights=...).export(), defaults
-(opset 17, batch 1, the model's 384 x 384).
+rfdetr's loader with torch.load forced to weights_only=True (_weights_only.py).
+Hugging Face is offline: nothing else is downloaded. The rest is
+RFDETRNano(pretrain_weights=...).export(), defaults (opset 17, batch 1, the
+model's 384 x 384).
 """
 
 import os
@@ -19,17 +19,12 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 
 import torch  # noqa: E402
 
-_load = torch.load
+sys.path.append(str(Path(__file__).parent))  # -I leaves the script's directory out
+from _weights_only import force_weights_only  # noqa: E402
 
 
-def _weights_only(*args, **kwargs):
-    if kwargs.get("weights_only") is False:
-        raise RuntimeError("refusing to unpickle a checkpoint (weights_only=False)")
-    return _load(*args, **(kwargs | {"weights_only": True}))
-
-
-def main(_work, ckpt, out):
-    torch.load = _weights_only
+def main(ckpt, out):
+    force_weights_only(torch)
     from rfdetr import RFDETRNano
 
     with tempfile.TemporaryDirectory() as d:

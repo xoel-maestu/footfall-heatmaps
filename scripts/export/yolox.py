@@ -7,7 +7,7 @@ exporter calls, gone from current torch) is torch.onnx.export with the
 TorchScript exporter (dynamo=False), as when the release models were exported;
 and the input size goes in through an experiment file (the official way: the
 exporter's command-line opts cannot set a tuple). The checkpoint is loaded by
-the exporter's torch.load, weights_only=True by default in torch >= 2.6.
+the exporter's torch.load, forced to weights_only=True (_weights_only.py).
 """
 
 import functools
@@ -17,6 +17,9 @@ import tempfile
 from pathlib import Path
 
 import torch
+
+sys.path.append(str(Path(__file__).parent))  # -I leaves the script's directory out
+from _weights_only import force_weights_only  # noqa: E402
 
 EXP = """
 from yolox.exp import Exp as MyExp
@@ -33,6 +36,7 @@ class Exp(MyExp):
 
 
 def main(src, ckpt, out, size):
+    force_weights_only(torch)
     torch.onnx._export = functools.partial(torch.onnx.export, dynamo=False)
     sys.path.insert(0, src)
     with tempfile.TemporaryDirectory() as d:

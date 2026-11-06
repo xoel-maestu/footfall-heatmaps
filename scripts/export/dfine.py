@@ -10,7 +10,7 @@ imports transformers at import time. And the exporter's dummy input is
 one image, not 32: tracing 32 images on CPU takes more than 14 GB of RAM, and
 the pipeline runs one image per call (traced at batch 1, the decoder's
 `if memory.shape[0] > 1` takes the batch-1 branch). The checkpoint is loaded by the exporter's
-torch.load, weights_only=True by default in torch >= 2.6. The exporter writes
+torch.load, forced to weights_only=True (_weights_only.py). The exporter writes
 <checkpoint>.onnx next to the checkpoint; it is moved to <output.onnx>.
 """
 
@@ -23,8 +23,12 @@ from pathlib import Path
 
 import torch
 
+sys.path.append(str(Path(__file__).parent))  # -I leaves the script's directory out
+from _weights_only import force_weights_only  # noqa: E402
+
 
 def main(src, ckpt, out, config):
+    force_weights_only(torch)
     torch.onnx.export = functools.partial(torch.onnx.export, dynamo=False)
     sys.modules["calflops"] = types.SimpleNamespace(calculate_flops=None)
     rand = torch.rand
