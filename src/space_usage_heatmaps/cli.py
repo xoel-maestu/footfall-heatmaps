@@ -5,7 +5,9 @@ import hashlib
 import json
 import math
 import os
+import signal
 import sys
+import threading
 import time
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
@@ -258,10 +260,15 @@ def calibration_of(spec):
     return NvidiaMtmcReader(data_dir()).camera(scene, camera)
 
 
-def run_record(args):
+STOP_WAIT_S = 10  # serve: how long the recorder gets to write its open slot on exit
+
+
+def run_record(args, live=None, stop=None):
     """space-usage run: one camera into 15-min slots in SQLite, with the live layer
     in memory. A video file is read once from --start (or run.start_utc, or now);
-    a stream (rtsp://) is timed by the wall clock and reconnects when it drops."""
+    a stream (rtsp://) is timed by the wall clock and reconnects when it drops.
+    live: a LiveSource the viewer reads the live layer from (space-usage serve);
+    stop: an Event that ends the frames, so the open slot is still written."""
     from space_usage_heatmaps.perception.infrastructure import container
     from space_usage_heatmaps.perception.infrastructure.opencv_stream_source import (
         OpenCvStreamSource,
@@ -277,6 +284,8 @@ def run_record(args):
     )
     store = SqliteSlotStore(args.db)
     recorder = RecordSlots(store, settings.camera_id, spec, settings.retention_days, time.time)
+    if live is not None:
+        recorder = live.attach(recorder)
     purge_slots(store, time.time(), settings.retention_days)
     detector = container.build_detector(
         config.detector,
@@ -308,6 +317,8 @@ def run_record(args):
     tracker = container.build_tracker(
         config.tracker, fps / config.stride, cam.world_to_image, config.tracker_params
     )
+    if stop is not None:
+        frames = _until(stop, frames)
     try:
         n = record_camera(
             frames, detector, mask, tracker, cam, config, recorder, time_of, config.stride / fps
@@ -325,6 +336,60 @@ def run_record(args):
             file=sys.stderr,
         )
         return 1
+    return 0
+
+
+def _until(stop, frames):
+    for frame in frames:
+        if stop.is_set():
+            return
+        yield frame
+
+
+def start_serve(args):
+    """The viewer's server for the config's camera, and with --source the recorder
+    in a thread of this process: the live layer stays in its memory, and the
+    server reads it there. (server, recorder thread or None, stop event)."""
+    from space_usage_heatmaps.web.server import LiveSource, make_server
+
+    settings = load_run_settings(args.config)
+    spec = GridSpec.covering(*settings.extent_m, cell_m=settings.cell_m)
+    live = LiveSource() if args.source else None
+    server = make_server(args.host, args.port, settings.camera_id, spec, args.db, live)
+    stop, recording = threading.Event(), None
+    if args.source:
+
+        def record():
+            try:
+                run_record(args, live, stop)
+            except CAMERA_ERRORS as e:
+                print(f"space-usage: error: {e}", file=sys.stderr)
+
+        recording = threading.Thread(target=record, name="recorder", daemon=True)
+        recording.start()
+    return server, recording, stop
+
+
+def _interrupt(signum, frame):
+    raise KeyboardInterrupt
+
+
+def run_serve(args):
+    """space-usage serve: the page, /api/live and /api/slots until Ctrl+C or SIGTERM."""
+    server, recording, stop = start_serve(args)
+    host, port = server.server_address[:2]
+    live = f"live from {args.source}" if args.source else "slots only, no live source"
+    print(f"space-usage serve: http://{host}:{port}/ ({live})", flush=True)
+    signal.signal(signal.SIGTERM, _interrupt)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+        stop.set()
+        if recording is not None:
+            recording.join(timeout=STOP_WAIT_S)
     return 0
 
 
@@ -757,8 +822,15 @@ def main(argv=None):
     ru.add_argument("--source", required=True, help="video file or rtsp:// stream")
     ru.add_argument("--db", required=True, help="SQLite file of the slots")
     ru.add_argument("--start", help="video file: UTC start, e.g. 2026-11-06T09:10:00Z")
+    se = sub.add_parser("serve", help="viewer page with the live layer and the persisted slots")
+    se.add_argument("--config", required=True, help="configuration with a run section")
+    se.add_argument("--db", required=True, help="SQLite file of the slots")
+    se.add_argument("--source", help="video file or rtsp:// stream to record in this process")
+    se.add_argument("--start", help="video file: UTC start, e.g. 2026-11-06T09:10:00Z")
+    se.add_argument("--host", default="127.0.0.1", help="address to bind (default 127.0.0.1)")
+    se.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
-    commands = {"bench": run_bench, "eval": run_eval, "run": run_record}
+    commands = {"bench": run_bench, "eval": run_eval, "run": run_record, "serve": run_serve}
     try:
         return commands[args.command](args)
     except CAMERA_ERRORS as e:
