@@ -50,6 +50,15 @@ runtime = [
     "pillow>=11",
 ]
 
+# TensorRT 10 libraries for engine onnx-trt (ONNX Runtime's TensorRT execution
+# provider, fp16). NVIDIA proprietary licence (docs/licenses.md): optional, never
+# needed by the default path, which falls back to CUDA without it. From NVIDIA's
+# own index; ONNX Runtime 1.31's provider links against libnvinfer.so.10.
+# Install locally with: uv sync --group runtime --group tensorrt
+tensorrt = [
+    "tensorrt-cu13-libs>=10.16,<11",
+]
+
 # Detector export only (scripts/export-detector.sh): each family's official
 # exporter turns its release checkpoint into the ONNX file the runtime group
 # runs. Never imported by the package; CPU is enough. Not a default group.
@@ -88,12 +97,19 @@ torchvision = [
     { index = "pytorch-cu130", group = "baseline" },
     { index = "pytorch-cu130", group = "export" },
 ]
+tensorrt-cu13-libs = { index = "nvidia", group = "tensorrt" }
 
 # CUDA 13.0 wheels: bundle the CUDA runtime (no nvcc needed), support Turing
 # (sm_75, GTX 1650 Ti) and run on driver 615.
 [[tool.uv.index]]
 name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+# NVIDIA's index: the TensorRT wheels (PyPI has only a stub that downloads them).
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"
 explicit = true
 
 [build-system]
@@ -182,6 +198,8 @@ forbidden_modules = [
     "av", "defusedxml", "deprecate", "supervision", "tqdm", "trackers",
     # The optional runtime group (uv sync --group runtime).
     "flatbuffers", "google",
+    # The optional tensorrt group (uv sync --group tensorrt).
+    "tensorrt_libs",
     # The optional export group (uv sync --group export).
     "absl", "faster_coco_eval", "grpc", "loguru", "markdown", "ml_dtypes", "onnx", "onnxsim",
     "tabulate", "tensorboard", "tensorboard_data_server", "werkzeug",

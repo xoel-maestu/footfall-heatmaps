@@ -1,12 +1,12 @@
 """Sustained end-to-end speed: decode -> detect -> track -> floor grid, for any pipeline.
 
-fps counts source-video frames per wall-clock second (with stride N, each
-processed frame stands for N), from the first processed frame on (model load
-and the first inference are excluded). fps_p5 is the 5th percentile of the
-per-second rates. VRAM is this process's GPU memory as the driver reports it
-(NVML), the peak of one sample every 30 frames: it includes the CUDA context
-and every runtime's cached blocks, and is what another process on the 4 GB card
-would find taken.
+fps counts source-video frames per wall-clock second (with stride N, the
+pipeline fills the skipped frames back, so tracked yields every source frame),
+from the first frame on (model load and the first inference are excluded).
+fps_p5 is the 5th percentile of the per-second rates. VRAM is this process's
+GPU memory as the driver reports it (NVML), the peak of one sample every 30
+frames: it includes the CUDA context and every runtime's cached blocks, and is
+what another process on the 4 GB card would find taken.
 """
 
 import os
@@ -63,7 +63,7 @@ def _run(tracked, config, cam, spec, minutes, handle):
         row = np.floor((ys - spec.origin_y) / spec.cell_m).astype(int)
         inside = (col >= 0) & (col < spec.nx) & (row >= 0) & (row < spec.ny)
         cell = row[inside] * spec.nx + col[inside]
-        np.add.at(dwell, cell, config.stride / fps)
+        np.add.at(dwell, cell, 1 / fps)
         passage.update(zip(ids[inside].tolist(), cell.tolist(), strict=True))
 
         now = time.monotonic()
@@ -74,7 +74,7 @@ def _run(tracked, config, cam, spec, minutes, handle):
         frames += 1
         in_window += 1
         if now - window >= 1.0:
-            rates.append(in_window * config.stride / (now - window))
+            rates.append(in_window / (now - window))
             window, in_window = now, 0
         if frames % VRAM_EVERY == 0:
             peak = max(peak, process_vram_mb(handle))
@@ -83,10 +83,10 @@ def _run(tracked, config, cam, spec, minutes, handle):
     elapsed = time.monotonic() - start
     peak = max(peak, process_vram_mb(handle))
     return {
-        "fps_mean": round(frames * config.stride / elapsed, 2),
+        "fps_mean": round(frames / elapsed, 2),
         "fps_p5": round(float(np.percentile(rates, 5)), 2) if rates else None,
         "vram_peak_mb": round(peak, 1),
-        "frames": frames * config.stride,
+        "frames": frames,
         "seconds": round(elapsed, 1),
         "vram_source": "NVML process usedGpuMemory, sampled every 30 frames",
         "grid_dwell_s": round(float(dwell.sum()), 1),

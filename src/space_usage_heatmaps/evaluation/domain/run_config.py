@@ -13,7 +13,10 @@ from space_usage_heatmaps.floorplan.domain.foot_point import (
     TrackHeights,
 )
 
-ENGINES = ("ultralytics", "onnx-cuda")  # the baseline; the perception pipeline
+BASELINE = "ultralytics"  # the iteration 0 recipe
+# The perception pipeline on ONNX Runtime: CUDA (fp32) or TensorRT (fp16).
+PIPELINE_ENGINES = ("onnx-cuda", "onnx-trt")
+ENGINES = (BASELINE, *PIPELINE_ENGINES)
 HEIGHTS_M = ("person_height_m", "min_implied_height_m", "track_height_min_m", "track_height_max_m")
 FRACTIONS = ("track_height_percentile", "hidden_ratio")
 # The optional keys each foot point reads; any other one in a file is an error.
@@ -42,6 +45,9 @@ class RunConfig:
     track_height_max_m: float = TRACK_HEIGHT_MAX_M
     # Overrides of the tracker's defaults by name; the tracker adapter checks the names.
     tracker_params: dict = field(default_factory=dict)
+    # Overrides of the detector's thresholds (score_thr, nms_thr), fractions;
+    # the detector adapter checks the names.
+    detector_params: dict = field(default_factory=dict)
 
     def track_heights(self):
         """A fresh auto-track height estimator with this config's parameters."""
@@ -73,7 +79,14 @@ class RunConfig:
             isinstance(k, str) and _number(v, 0, float("inf")) for k, v in params.items()
         ):
             raise ValueError("config: tracker_params must map parameter names to positive numbers")
-        optional = {n for n in names if n not in required and n != "tracker_params"}
+        detector_params = cfg.detector_params
+        if not isinstance(detector_params, dict) or not all(
+            isinstance(k, str) and _number(v, 0, 1) for k, v in detector_params.items()
+        ):
+            raise ValueError(
+                "config: detector_params must map parameter names to numbers in (0, 1)"
+            )
+        optional = {n for n in names if n not in required} - {"tracker_params", "detector_params"}
         for name in sorted(optional & set(d) - set(FOOT_POINT_KEYS[cfg.foot_point])):
             raise ValueError(
                 f"config: {name} does not apply to foot_point {cfg.foot_point} "
@@ -89,10 +102,16 @@ class RunConfig:
             raise ValueError("config: track_height_min_m must be below track_height_max_m")
         if cfg.engine not in ENGINES:
             raise ValueError(f"config: engine must be one of {ENGINES}")
-        if params and cfg.engine != "onnx-cuda":
-            raise ValueError("config: tracker_params apply to the onnx-cuda pipeline only")
+        if cfg.engine == BASELINE:
+            for name in ("tracker_params", "detector_params"):
+                if getattr(cfg, name):
+                    raise ValueError(f"config: {name} apply to {PIPELINE_ENGINES} only")
         if not _positive_int(cfg.stride):
             raise ValueError("config: stride must be a positive integer")
+        if cfg.stride > 1 and cfg.engine == BASELINE:
+            raise ValueError(
+                f"config: stride above 1 needs {PIPELINE_ENGINES}, which fill the skipped frames"
+            )
         if not _positive_int(cfg.input_size) or cfg.input_size % 32:
             raise ValueError("config: input_size must be a positive multiple of 32")
         return cfg

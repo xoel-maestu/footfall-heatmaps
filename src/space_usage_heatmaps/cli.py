@@ -198,21 +198,31 @@ def load_config(path):
     return RunConfig.from_mapping(yaml.safe_load(Path(path).read_text()))
 
 
+def _params_suffix(params):
+    data = json.dumps(params, sort_keys=True).encode()
+    return f"-params{hashlib.sha256(data).hexdigest()[:12]}"
+
+
 def cache_key(c):
     """Directory of a config's cached tracks; each file also stores the recipe
     metadata and is recomputed when it no longer matches (track_cache). Tracker
-    overrides get their own directory, so variants do not overwrite each other."""
+    and detector overrides get their own directory, so variants do not
+    overwrite each other."""
     key = f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
-    if not c.tracker_params:
-        return key
-    params = json.dumps(c.tracker_params, sort_keys=True).encode()
-    return f"{key}-params{hashlib.sha256(params).hexdigest()[:12]}"
+    if c.detector_params:
+        return key + _params_suffix({"tracker": c.tracker_params, "detector": c.detector_params})
+    return key + _params_suffix(c.tracker_params) if c.tracker_params else key
 
 
 def detection_cache_key(c):
     """Directory of a detector recipe's cached detections (detection_cache):
-    every tracker of that recipe replays them."""
-    return f"{c.detector}-{c.input_size}-{c.engine}-stride{c.stride}"
+    every tracker, stride and higher score threshold of that recipe replays
+    them, so they hold every frame at the cache's score floor."""
+    from space_usage_heatmaps.perception.infrastructure.container import cache_params
+
+    key = f"{c.detector}-{c.input_size}-{c.engine}-stride1"
+    params = cache_params(c.detector, c.detector_params)
+    return key + _params_suffix(params) if params else key
 
 
 def pipeline_of(config, reader, loop=False):
@@ -230,30 +240,38 @@ def pipeline_of(config, reader, loop=False):
             loop,
             reader.camera(scene, camera).world_to_image,
             config.tracker_params,
+            config.detector_params,
+            config.engine,
         )
 
     return build
 
 
 def pipeline_track_source(config, reader):
-    """Tracks of an onnx-cuda config: cached detections of its detector recipe,
-    then a fresh tracker on each video."""
+    """Tracks of a pipeline config: cached detections of its detector recipe on
+    every frame, its stride and score threshold applied to them, then a fresh
+    tracker on each video and the skipped frames filled."""
     import numpy as np
 
     from space_usage_heatmaps.evaluation.infrastructure.detection_cache import CachedDetections
     from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
         PipelineDetections,
         PipelineTrackSource,
+        SelectedDetections,
     )
     from space_usage_heatmaps.perception.infrastructure import container
+
+    cached = container.cache_params(config.detector, config.detector_params)
 
     def detection_of(scene, camera):
         return container.build_detection(
             reader.video(scene, camera),
             config.detector,
             config.input_size,
-            config.stride,
+            1,
             data_dir() / "models",
+            params=cached,
+            engine=config.engine,
         )
 
     def tracker_of(scene, camera):
@@ -279,15 +297,24 @@ def pipeline_track_source(config, reader):
     detections = CachedDetections(
         PipelineDetections(detection_of),
         data_dir() / "cache" / "detections" / detection_cache_key(config),
-        container.detection_metadata(config.detector, config.input_size, config.stride),
+        container.detection_metadata(config.detector, config.input_size, 1, cached, config.engine),
         identity=video_identity,
     )
     meta = container.pipeline_metadata(
-        config.detector, config.tracker, config.input_size, config.stride, config.tracker_params
+        config.detector,
+        config.tracker,
+        config.input_size,
+        config.stride,
+        config.tracker_params,
+        config.detector_params,
+        config.engine,
     )
     directory = data_dir() / "cache" / "tracks" / cache_key(config)
+    selected = SelectedDetections(
+        detections, config.stride, container.min_score(config.detector, config.detector_params)
+    )
     return CachedTrackSource(
-        lambda: PipelineTrackSource(detections, tracker_of),
+        lambda: PipelineTrackSource(selected, tracker_of, config.stride),
         directory,
         meta,
         identity=track_identity,
@@ -296,7 +323,7 @@ def pipeline_track_source(config, reader):
 
 def track_source(config, reader):
     directory = data_dir() / "cache" / "tracks" / cache_key(config)
-    if config.engine == "onnx-cuda":
+    if config.engine != "ultralytics":
         return pipeline_track_source(config, reader)
 
     def make():
@@ -524,10 +551,16 @@ BENCH_SCENE, BENCH_CAMERA, BENCH_CELL = "071", "645", 0.25
 RUNTIME_MISSING = "the perception pipeline needs the runtime group: uv sync --group runtime"
 
 
+def engine_label(engine, providers, ort):
+    """What ran: the config's engine, the providers in order, the precision of the first."""
+    precision = "fp16" if providers[0] == "TensorrtExecutionProvider" else "fp32"
+    return f"{engine} (ONNX Runtime {ort}, {' then '.join(providers)}, {precision})"
+
+
 def bench_pipeline(config, reader, cam, spec, minutes):
     from importlib import metadata
 
-    from space_usage_heatmaps.perception.application.track_video import track_video
+    from space_usage_heatmaps.perception.application.track_video import fill_stride, track_video
 
     try:
         from space_usage_heatmaps.evaluation.infrastructure import bench as sustained
@@ -537,11 +570,11 @@ def bench_pipeline(config, reader, cam, spec, minutes):
         raise OSError(RUNTIME_MISSING) from e
     source, detector, tracker = pipeline_of(config, reader, loop=True)(BENCH_SCENE, BENCH_CAMERA)
     tracked = (
-        (t.frame_index, t.track_ids, t.boxes) for t in track_video(source, detector, tracker)
+        (t.frame_index, t.track_ids, t.boxes)
+        for t in fill_stride(track_video(source, detector, tracker), config.stride)
     )
     result = sustained.bench(tracked, config, cam, spec, minutes)
-    engine = f"{config.engine} (ONNX Runtime {ort}, {' then '.join(detector.providers)}, fp32)"
-    return {"engine": engine} | result
+    return {"engine": engine_label(config.engine, detector.providers, ort)} | result
 
 
 def run_bench(args):
@@ -550,7 +583,7 @@ def run_bench(args):
     reader = NvidiaMtmcReader(data_dir())
     cam = reader.camera(BENCH_SCENE, BENCH_CAMERA)
     spec = GridSpec.covering(*reader.scene_extent(BENCH_SCENE), cell_m=BENCH_CELL)
-    if config.engine == "onnx-cuda":
+    if config.engine != "ultralytics":
         result = bench_pipeline(config, reader, cam, spec, args.minutes)
         print(json.dumps(result))
         return 0

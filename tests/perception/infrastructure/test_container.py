@@ -60,7 +60,7 @@ def test_a_model_whose_input_differs_from_the_config_is_an_error(monkeypatch, tm
     monkeypatch.setattr(container, "OpenCvFileSource", lambda *a: source)
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
     model = type("Model", (), {"input_size": 640})()
-    monkeypatch.setattr(container, "load_detector", lambda path, detector: model)
+    monkeypatch.setattr(container, "load_detector", lambda path, *a: model)
 
     with pytest.raises(ValueError, match="960.*640"):
         container.build_pipeline(tmp_path / "v.mp4", "yolox-s", "bytetrack", 960, 1, tmp_path)
@@ -126,3 +126,34 @@ def test_an_unknown_tracker_param_is_an_error(tracker):
         container.tracker_metadata(tracker, {"nope": 1})
     with pytest.raises(ValueError, match="nope"):
         container.build_tracker(tracker, 30.0, [[1, 0, 0], [0, 1, 0], [0, 0, 1]], {"nope": 1})
+
+
+def test_detector_params_reach_the_recipe_and_unknown_ones_are_errors():
+    meta = container.detection_metadata("yolox-s", 960, 1, {"nms_thr": 0.6})
+
+    assert (meta["score_thr"], meta["nms_thr"]) == (0.1, 0.6)
+    assert container.detection_metadata("yolox-s", 960, 1, {}) == container.detection_metadata(
+        "yolox-s", 960, 1
+    )
+    with pytest.raises(ValueError, match="nope"):
+        container.detection_metadata("yolox-s", 960, 1, {"nope": 0.1})
+    with pytest.raises(ValueError, match="score_thr"):
+        container.detection_metadata("dfine-s", 640, 1, {"score_thr": 0.2})
+
+
+def test_the_detection_cache_runs_at_the_default_score_floor_or_lower():
+    assert container.cache_params("yolox-s", {"score_thr": 0.2}) == {}  # the default's cache
+    assert container.cache_params("yolox-s", {"score_thr": 0.05}) == {"score_thr": 0.05}
+    assert container.cache_params("yolox-s", {"nms_thr": 0.6}) == {"nms_thr": 0.6}
+    assert container.cache_params("dfine-s", {}) == {}
+    assert container.min_score("yolox-s", {"score_thr": 0.2}) == 0.2
+    assert container.min_score("yolox-s", {}) == 0.1
+    assert container.min_score("rfdetr-n", {}) == float("-inf")  # no threshold to filter
+
+
+def test_the_engine_is_part_of_the_detection_recipe():
+    cuda = container.detection_metadata("yolox-s", 960, 1)
+    trt = container.detection_metadata("yolox-s", 960, 1, engine="onnx-trt")
+
+    assert cuda["engine"] == "onnx-cuda" and trt["engine"] == "onnx-trt"
+    assert trt["precision"] == "fp16" and "precision" not in cuda

@@ -12,7 +12,8 @@ a dependency:
   class scores = objectness * class probability; cx cy w h -> x1 y1 x2 y2, / r
   (source pixels, before NMS);
 - class-agnostic NMS (the demo's default): each box takes its best class,
-  score > 0.1, IoU > 0.45 suppressed (areas with the demo's +1); then only
+  score > 0.1, IoU > 0.45 suppressed (the defaults; a config may override
+  both, detector_params) (areas with the demo's +1); then only
   boxes whose best class is person (COCO 0) are kept;
 - then clipped to the image (not in the demo, which draws them unclipped).
 
@@ -82,26 +83,39 @@ def nms(boxes, scores, thr):
     return keep
 
 
-def recipe():
+# The thresholds a config may override (detector_params), with their defaults.
+PARAMS = {"score_thr": SCORE_THR, "nms_thr": NMS_THR}
+
+
+def recipe(score_thr=SCORE_THR, nms_thr=NMS_THR):
     """What the boxes depend on besides the model file, for the track cache."""
     return {
         "preprocess": "yolox letterbox, top-left, pad 114, BGR 0-255",
         "postprocess": "boxes clipped to the image",
-        "score_thr": SCORE_THR,
-        "nms_thr": NMS_THR,
+        "score_thr": score_thr,
+        "nms_thr": nms_thr,
         "nms": "class-agnostic",
         "classes": [PERSON],
     }
 
 
-def load(path):
-    return OnnxYoloxDetector.load(path)
+def load(path, engine="onnx-cuda", **params):
+    return OnnxYoloxDetector.load(path, engine, **params)
 
 
 class OnnxYoloxDetector(OnnxDetector):
-    def __init__(self, session, cpu_session=None, engine=None):
-        super().__init__(session, cpu_session, engine)
+    def __init__(
+        self,
+        session,
+        cpu_session=None,
+        engine=None,
+        fallbacks=None,
+        score_thr=SCORE_THR,
+        nms_thr=NMS_THR,
+    ):
+        super().__init__(session, cpu_session, engine, fallbacks)
         self._grids = _grids(self.input_size)
+        self.score_thr, self.nms_thr = score_thr, nms_thr
 
     def detect(self, frame):
         x, r = preprocess(frame.image, self.input_size)
@@ -110,8 +124,8 @@ class OnnxYoloxDetector(OnnxDetector):
         boxes = boxes / r  # to source pixels before NMS, as the demo
         cls = scores.argmax(1)
         best = scores[np.arange(len(cls)), cls]
-        valid = best > SCORE_THR
+        valid = best > self.score_thr
         boxes, best, cls = boxes[valid], best[valid], cls[valid]
-        keep = [i for i in nms(boxes, best, NMS_THR) if cls[i] == PERSON]
+        keep = [i for i in nms(boxes, best, self.nms_thr) if cls[i] == PERSON]
         # Clipped after NMS, so the NMS stays the demo's.
         return Detections(clip_to_image(boxes[keep], frame.image.shape), best[keep].astype(float))

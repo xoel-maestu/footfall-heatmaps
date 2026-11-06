@@ -66,8 +66,11 @@ def recipe():
     }
 
 
-def load(path):
-    return OnnxRfdetrDetector.load(path)
+PARAMS = {}  # nothing a config may override
+
+
+def load(path, engine="onnx-cuda"):
+    return OnnxRfdetrDetector.load(path, engine)
 
 
 class OnnxRfdetrDetector(OnnxDetector):

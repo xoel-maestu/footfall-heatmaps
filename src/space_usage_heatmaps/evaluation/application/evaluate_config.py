@@ -2,9 +2,10 @@
 
 Each tracked box becomes one floor point (the config's foot point, through the
 camera matrix; see floorplan.domain.foot_point) and is accumulated in the floor
-grid: dwell adds stride/fps person-seconds per sample, passage counts distinct
-track ids per cell. The three truth blocks of evaluate_oracle are scored with
-a paired block bootstrap over 30 s blocks.
+grid: dwell adds 1/fps person-seconds per sample (with a stride, the pipeline
+fills the skipped frames back, so there is one sample per source frame),
+passage counts distinct track ids per cell. The three truth blocks of
+evaluate_oracle are scored with a paired block bootstrap over 30 s blocks.
 """
 
 from dataclasses import dataclass
@@ -81,8 +82,7 @@ def evaluate_config(reader, scenes, runs, cell, n_resamples=1000, seed=0):
                 config.track_heights(),
             )
             xs, ys = xs[keep], ys[keep]
-            fps = cam.fps / config.stride
-            preds.append(layers(t.track_ids[keep], t.frames[keep], xs, ys, fps))
+            preds.append(layers(t.track_ids[keep], t.frames[keep], xs, ys, cam.fps))
             counts.append((int(keep.sum()), preds[-1].dropped, int((~keep).sum())))
         for name, tr, mask in (
             ("visible@coverage", visible, gt.coverage),

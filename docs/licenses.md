@@ -60,6 +60,21 @@ Notes:
   `tests/perception/infrastructure/test_dependencies.py` checks that the
   perception adapters never import it and that the lock never installs it.
 
+Optional engine: the `tensorrt` group (`uv sync --group runtime --group
+tensorrt`) for `engine: onnx-trt` (ONNX Runtime's TensorRT execution provider,
+fp16; `perception/infrastructure/onnx_session.py`).
+
+| Distribution | Version | Licence | Why it is here |
+|---|---|---|---|
+| tensorrt-cu13-libs | 10.16.1.11 | NVIDIA proprietary (TensorRT Software License Agreement) | `libnvinfer.so.10` and the ONNX parser that ONNX Runtime's TensorRT provider loads; from NVIDIA's index `pypi.nvidia.com` |
+
+- TensorRT is not open source and not on the Apache, MIT or BSD list of the
+  run path. It is an optional speed-up only: without the group, `onnx-trt`
+  logs a warning and runs on CUDA (then CPU), and `onnx-cuda` never loads it.
+- The engines TensorRT builds (`SPACE_USAGE_DATA_DIR/models/tensorrt/`) are
+  derived from the Apache-2.0 weights for this card and driver; they stay
+  under the data dir, never committed.
+
 Code written here after a published method:
 
 | Module | After | Licence of the original | How |

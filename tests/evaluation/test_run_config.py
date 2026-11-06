@@ -122,3 +122,38 @@ def test_tracker_params_must_map_names_to_numbers(value):
 def test_tracker_params_need_the_onnx_cuda_pipeline():
     with pytest.raises(ValueError, match="tracker_params.*onnx-cuda"):
         RunConfig.from_mapping(ITER0 | {"tracker_params": {"conf_thresh": 0.1}})
+
+
+PIPELINE = ITER0 | {"detector": "yolox-s", "engine": "onnx-cuda", "input_size": 960}
+
+
+def test_detector_params_override_named_detector_defaults():
+    cfg = RunConfig.from_mapping(PIPELINE | {"detector_params": {"score_thr": 0.05}})
+
+    assert cfg.detector_params == {"score_thr": 0.05}
+    assert RunConfig.from_mapping(PIPELINE).detector_params == {}
+
+
+@pytest.mark.parametrize("value", [[0.1], {"score_thr": "0.1"}, {"nms_thr": 1.5}, {1: 0.1}])
+def test_detector_params_must_map_names_to_fractions(value):
+    with pytest.raises(ValueError, match="detector_params"):
+        RunConfig.from_mapping(PIPELINE | {"detector_params": value})
+
+
+def test_detector_params_need_the_own_pipeline():
+    with pytest.raises(ValueError, match="detector_params"):
+        RunConfig.from_mapping(ITER0 | {"detector_params": {"score_thr": 0.2}})
+
+
+def test_the_tensorrt_engine_runs_the_own_pipeline_with_its_parameters():
+    cfg = RunConfig.from_mapping(
+        PIPELINE | {"engine": "onnx-trt", "tracker_params": {"lost_track_buffer": 60}}
+    )
+
+    assert cfg.engine == "onnx-trt" and cfg.tracker_params == {"lost_track_buffer": 60}
+
+
+def test_a_stride_needs_the_own_pipeline_which_fills_the_skipped_frames():
+    assert RunConfig.from_mapping(PIPELINE | {"stride": 2}).stride == 2
+    with pytest.raises(ValueError, match="stride"):
+        RunConfig.from_mapping(ITER0 | {"stride": 2})
