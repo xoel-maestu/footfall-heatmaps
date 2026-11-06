@@ -206,3 +206,17 @@ def test_a_broken_tracking_guard_fails_the_eval(tmp_path, rows, monkeypatch, cap
     assert "BROKEN" in capsys.readouterr().out
     (report,) = (tmp_path / "reports").rglob("*.json")
     assert json.loads(report.read_text())["tracking"]["guard_holds"] is False
+
+
+def test_the_low_threshold_h3_configs_change_only_the_tracker_params():
+    for tracker, params in (
+        ("ocsort", {"high_conf_det_threshold": 0.1}),
+        (
+            "ucmc",
+            {"conf_thresh": 0.1, "high_score": 0.6, "wx": 0.2, "wy": 0.4, "a1": 10.0, "a2": 10.0},
+        ),
+    ):
+        h3 = cli.load_config(f"configs/h3-{tracker}.yaml")
+        low = cli.load_config(f"configs/h3-{tracker}-lowthr.yaml")
+        assert low == type(h3)(**{**vars(h3), "tracker_params": params})
+        container.tracker_metadata(tracker, params)  # every name is the tracker's
