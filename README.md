@@ -3,6 +3,62 @@
 Builds anonymous foot-traffic heatmaps from fixed cameras: positions on a floor
 plan, never images or identities. Python, runs locally on a modest NVIDIA GPU.
 
+## Results (E1, one camera)
+
+`uv run space-usage eval --suite e1-final` writes the full report to
+`reports/e1-final.json` and `reports/e1-final.md`. Everything below is
+`configs/h5-best.yaml` (YOLOX-s at 960 on TensorRT fp16, ByteTrack, the
+auto-track foot point), scored on NVIDIA MTMC 2024 against floor ground truth:
+dwell maps on 0.5 m cells, the people the camera can see, 5 scenes per split,
+95 % paired block-bootstrap CI. Every parameter was chosen on the tune scenes
+(071 to 075). The sealed scenes (076 to 080) were scored once, at the end.
+
+| Metric | Tune | Sealed | Sealed vs tune | Target | Sealed meets it |
+|---|---|---|---|---|---|
+| TVD | 0.308 [0.294, 0.324] | 0.419 [0.402, 0.436] | +36 % | ≤ 0.30 | no |
+| Mass error | 0.154 [0.142, 0.166] | 0.297 [0.284, 0.310] | +92 % | ≤ 0.10 | no |
+| Zone WAPE (2 m) | 0.231 [0.211, 0.252] | 0.380 [0.351, 0.412] | +65 % | ≤ 0.30 | no |
+| EMD | 1.50 m [1.37, 1.64] | 3.19 m [3.03, 3.36] | +113 % | ≤ 1.2 m | no |
+| HOTA / IDF1 | 0.237 / 0.182 | 0.218 / 0.189 | +8 % / −4 % | guard only | – |
+
+E1 is not accepted. The sealed scenes miss the targets and the rule that
+sealed stays within 20 % of tune. The sealed scenes are harder for every
+configuration, not only the tuned one: the iteration 0 baseline also degrades,
+from TVD 0.629 to 0.671 and mass error 0.273 to 0.458. Two scenes carry most of
+the gap: 078 (TVD 0.602) and 080 (0.477). Each step accepted on tune keeps its
+effect on sealed:
+
+| Step | ΔTVD tune | ΔTVD sealed |
+|---|---|---|
+| Auto-track foot point vs box centre (iteration 0) | −0.248 [−0.264, −0.232] | −0.191 [−0.203, −0.180] |
+| YOLOX-s detector | −0.026 [−0.034, −0.018] | −0.023 [−0.029, −0.016] |
+| Input 640 → 960 | −0.047 [−0.056, −0.038] | −0.038 [−0.045, −0.031] |
+| TensorRT fp16 (speed, no accuracy loss) | −0.001 [−0.002, 0.000] | −0.001 [−0.003, −0.000] |
+
+What remains is mostly occlusion. One camera does not see people behind
+shelves: against every person on the floor, TVD is 0.450 on tune and 0.557 on
+sealed. Phase 9 fuses several cameras to cover those gaps.
+
+External datasets, evaluation only, never tuned on:
+
+| Dataset | Metric | Value |
+|---|---|---|
+| WILDTRACK camera C5 (1.68 m high) | ground position error, boxes paired in the image | median 21.8 cm, p90 45.1 cm, recall 0.71 (target median ≤ 30 cm: met) |
+| WILDTRACK camera C5 | ground position error, people paired on the floor within 1 m | median 21.5 cm, p90 43.0 cm, recall 0.76 |
+| CAVIAR, 26 corridor clips | HOTA / IDF1 | 0.670 / 0.779 |
+| MOT17-02, 04, 09 | HOTA / IDF1 | 0.404 / 0.476 |
+
+Label-free metrics are computed from the tracks alone, so they can run on a
+camera without ground truth. Of the three, the share of tracks born away from
+the image border follows the true error most closely: Spearman 0.75 with TVD
+over the 10 scenes, and 0.49 over 265 blocks of 30 s. Occupancy conservation
+and mean track length correlate weakly (|ρ| ≤ 0.44). With 10 scenes these are
+indications, not proof.
+
+Speed, `space-usage bench`, 30 min on one 1080p camera with nothing else on the
+GPU (GTX 1650 Ti, 4 GB): 42.5 fps mean, 40.1 fps p5 (target ≥ 15), VRAM peak
+174 MB (target ≤ 3.5 GB).
+
 ## Live viewer
 
 `space-usage serve` hosts a page with the floor-plan heatmap of one camera: the
