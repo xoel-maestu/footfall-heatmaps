@@ -332,3 +332,25 @@ def test_detector_params_get_their_own_track_cache():
     assert cli.cache_key(low).startswith(cli.cache_key(base) + "-params")
     assert cli.detection_cache_key(base) == "yolox-s-960-onnx-cuda-stride1"
     assert cli.detection_cache_key(low).startswith("yolox-s-960-onnx-cuda-stride1-params")
+
+
+def test_the_phase_5_configs_change_one_thing_of_h1_best():
+    best = cli.load_config("configs/h1-best.yaml")
+
+    def changed(path):
+        c = cli.load_config(path)
+        return {k: v for k, v in vars(c).items() if vars(best)[k] != v}
+
+    assert changed("configs/h6a-activation.yaml") == {
+        "tracker_params": {"track_activation_threshold": 0.6}
+    }
+    assert changed("configs/h6c-buffer.yaml") == {"tracker_params": {"lost_track_buffer": 60}}
+    assert changed("configs/h6d-score-low.yaml") == {"detector_params": {"score_thr": 0.05}}
+    assert changed("configs/h6f-nms.yaml") == {"detector_params": {"nms_thr": 0.6}}
+    assert changed("configs/h7-stride2.yaml") == {"stride": 2}
+    assert changed("configs/h5-trt.yaml") == {"engine": "onnx-trt"}
+    assert changed("configs/h2a2-yolox-s-1280-trt.yaml") == {
+        "engine": "onnx-trt",
+        "input_size": 1280,
+    }
+    assert cli.load_config("configs/h5-best.yaml") == cli.load_config("configs/h5-trt.yaml")

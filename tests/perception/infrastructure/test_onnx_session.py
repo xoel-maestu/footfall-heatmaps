@@ -90,3 +90,33 @@ def test_tensorrt_runs_fp16_with_its_engines_cached_on_disk(tmp_path):
     assert options["trt_fp16_enable"] is True
     assert options["trt_engine_cache_enable"] is True
     assert options["trt_engine_cache_path"] == str(tmp_path)
+
+
+def test_without_the_tensorrt_group_the_engine_fails_with_the_install_command(monkeypatch):
+    import sys
+
+    from space_usage_heatmaps.perception.infrastructure import onnx_session
+
+    monkeypatch.setitem(sys.modules, "tensorrt_libs", None)  # import raises ImportError
+
+    with pytest.raises(OSError, match="--group tensorrt"):
+        onnx_session._preload_tensorrt()
+
+
+def test_onnx_trt_without_tensorrt_runs_on_cuda(monkeypatch, tmp_path, caplog):
+    """The whole chain of engine onnx-trt with a stand-in ONNX Runtime and no TensorRT."""
+    import sys
+    import types
+
+    from space_usage_heatmaps.perception.infrastructure.onnx_session import engine_chain
+
+    monkeypatch.setitem(sys.modules, "tensorrt_libs", None)
+    ort = types.SimpleNamespace(
+        InferenceSession=lambda path, providers: on(providers[0], FakeSession([]))
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, provider, rest = open_session(engine_chain(ort, tmp_path / "m.onnx", "onnx-trt"))
+
+    assert provider == CUDA and [p for p, _ in rest] == [CPU]
+    assert "tensorrt" in caplog.text
