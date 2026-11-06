@@ -65,3 +65,33 @@ def test_pooled_is_the_mean_over_scenes():
     assert pooled([{"hota": 0.4, "idf1": 0.5}, {"hota": 0.6, "idf1": 0.7}]) == pytest.approx(
         {"hota": 0.5, "idf1": 0.6}
     )
+
+
+def test_a_track_on_a_distractor_is_neither_rewarded_nor_penalised():
+    # MOT17 marks static people, reflections and the like as distractors
+    # (TrackEval's MOT17 preprocessing): a tracked box that matches one is
+    # removed, and the distractor itself is never a missed person.
+    s = truth()
+    distractor = s.track_ids == 2
+    marked = Samples(s.track_ids, s.frames, s.boxes, s.world, distractor=distractor)
+    only_one = Samples(
+        s.track_ids[~distractor], s.frames[~distractor], s.boxes[~distractor], s.world[~distractor]
+    )
+
+    with_box = tracking_metrics(marked, as_tracks(s, s.track_ids))
+    without = tracking_metrics(marked, as_tracks(only_one, only_one.track_ids))
+
+    assert with_box["hota"] == pytest.approx(1.0) and with_box["idf1"] == pytest.approx(1.0)
+    assert without == pytest.approx(with_box)
+
+
+def test_a_box_off_every_distractor_still_counts_as_a_false_positive():
+    s = truth()
+    marked = Samples(s.track_ids, s.frames, s.boxes, s.world, distractor=s.track_ids == 2)
+    t = as_tracks(s, s.track_ids)
+    far = t.boxes.copy()
+    far[s.track_ids == 2] += [500.0, 0, 500.0, 0]
+
+    m = tracking_metrics(marked, Tracks(t.track_ids, t.frames, far))
+
+    assert m["deta"] == pytest.approx(0.5)
