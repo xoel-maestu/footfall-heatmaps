@@ -103,3 +103,27 @@ def test_another_video_recomputes(tmp_path, capsys):
 
     assert run.runs == 2
     assert "video_bytes 7 != 8" in capsys.readouterr().err
+
+
+TRT = {"engine": "onnx-trt"}
+
+
+def test_detections_after_a_tensorrt_fallback_are_not_stored(tmp_path, capsys):
+    run = CountingDetection(["CUDAExecutionProvider"])
+
+    got = CachedDetections(run, tmp_path, META | TRT).detections("071", "645")
+    CachedDetections(run, tmp_path, META | TRT).detections("071", "645")
+
+    assert_same(got)
+    assert run.runs == 2
+    assert not list(tmp_path.glob("*.npz"))
+    assert "not TensorRT" in capsys.readouterr().err
+
+
+def test_detections_that_ran_on_tensorrt_are_stored(tmp_path):
+    run = CountingDetection(["TensorrtExecutionProvider"])
+
+    CachedDetections(run, tmp_path, META | TRT).detections("071", "645")
+    CachedDetections(run, tmp_path, META | TRT).detections("071", "645")
+
+    assert run.runs == 1

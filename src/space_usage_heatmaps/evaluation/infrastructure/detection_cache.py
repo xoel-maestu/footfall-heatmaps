@@ -10,7 +10,11 @@ import sys
 
 import numpy as np
 
-from space_usage_heatmaps.evaluation.infrastructure.track_cache import read_cache, stale
+from space_usage_heatmaps.evaluation.infrastructure.track_cache import (
+    mislabelled,
+    read_cache,
+    stale,
+)
 from space_usage_heatmaps.perception.domain.frame import Detections
 
 
@@ -50,6 +54,9 @@ class CachedDetections:
         box_frames = np.concatenate([np.full(len(d.scores), i) for i, d in run] + [[]]).astype(int)
         boxes = np.concatenate([d.boxes.reshape(-1, 4) for _, d in run] + [np.empty((0, 4))])
         scores = np.concatenate([d.scores for _, d in run] + [[]]).astype(float)
+        if (why := mislabelled(expected, self.last_run)) is not None:
+            self._log(f"cached detections {path.name}: {why}; not stored")
+            return run
         stored = expected | ({"run": self.last_run} if self.last_run else {})
         self.directory.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp.npz")

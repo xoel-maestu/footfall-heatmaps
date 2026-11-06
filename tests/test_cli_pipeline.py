@@ -222,6 +222,13 @@ def test_the_low_threshold_h3_configs_change_only_the_tracker_params():
         container.tracker_metadata(tracker, params)  # every name is the tracker's
 
 
+def _ran_on(detector, engine):
+    """The detector, with the providers a real one on engine reports."""
+    trt = engine == "onnx-trt"
+    detector.providers = ["TensorrtExecutionProvider" if trt else "CUDAExecutionProvider"]
+    return detector
+
+
 def _tiny(tmp_path, rows, monkeypatch, n=12):
     """The tiny scene and video; the detector is the truth, scored 0.3 on frame 5."""
 
@@ -241,7 +248,7 @@ def _tiny(tmp_path, rows, monkeypatch, n=12):
         container,
         "load_detector",
         lambda path, detector, params=None, engine=None: (
-            loaded.append((params, engine)) or Scored(rows)
+            loaded.append((params, engine)) or _ran_on(Scored(rows), engine)
         ),
     )
     return data, loaded

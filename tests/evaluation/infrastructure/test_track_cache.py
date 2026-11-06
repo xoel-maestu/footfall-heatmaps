@@ -164,3 +164,15 @@ def test_the_identity_of_each_input_is_checked_per_file(tmp_path, capsys):
 
     assert CountingSource.made == 2
     assert "video_bytes 100 != 101" in capsys.readouterr().err
+
+
+class FellBackSource(CountingSource):
+    last_run = {"providers": ["TensorrtExecutionProvider", "CUDAExecutionProvider"]}
+
+
+def test_tracks_after_a_tensorrt_fallback_are_not_stored(tmp_path, capsys):
+    t = CachedTrackSource(FellBackSource, tmp_path, {"engine": "onnx-trt"}).tracks("071", "645")
+
+    np.testing.assert_array_equal(t.frames, TRACKS.frames)
+    assert not list(tmp_path.glob("*.npz"))
+    assert "not TensorRT" in capsys.readouterr().err

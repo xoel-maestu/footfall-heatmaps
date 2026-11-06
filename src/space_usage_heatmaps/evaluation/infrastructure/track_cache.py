@@ -52,6 +52,9 @@ class CachedTrackSource:
         # How this computation went (the source's last_run, e.g. the provider the
         # detector ran on): stored and reported, not part of the recipe check.
         run = getattr(self._source, "last_run", None)
+        if (why := mislabelled(expected, run)) is not None:
+            self._log(f"cached tracks {path.name}: {why}; not stored")
+            return t
         stored = expected | ({"run": run} if run else {})
         self.directory.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp.npz")
@@ -60,6 +63,16 @@ class CachedTrackSource:
         tmp.replace(path)
         self.provenance[f"{scene}/{camera}"] = {"stored": stored, "unverified": []}
         return t
+
+
+def mislabelled(metadata, run):
+    """Why a result computed on run's providers must not be stored under
+    metadata, or None. An onnx-trt recipe is stored only if every frame ran on
+    TensorRT: a fallback to CUDA would replay as TensorRT under its key."""
+    providers = (run or {}).get("providers")
+    if metadata.get("engine") == "onnx-trt" and providers != ["TensorrtExecutionProvider"]:
+        return f"ran on {' then '.join(providers or ['unknown providers'])}, not TensorRT"
+    return None
 
 
 def read_cache(path, keys):
