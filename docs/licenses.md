@@ -143,6 +143,43 @@ Ultralytics reference recipe. It is imported only under
 | lap | 0.5.14 | BSD-2-Clause |
 | polars, psutil | 2.1.0, 7.2.2 | MIT, BSD-3-Clause |
 
+Transitive, pulled by the baseline and export groups (torch and ultralytics):
+
+| Distribution | Version | Licence | Pulled by |
+|---|---|---|---|
+| ultralytics-thop, ultralytics-platform | 2.2.4, 0.1.102 | AGPL-3.0 | ultralytics |
+| polars-runtime-32 | 2.1.0 | MIT | polars |
+| httpx, httpcore, h11, anyio | 0.28.1, 1.0.9, 0.16.0, 4.16.0 | BSD-3-Clause, BSD-3-Clause, MIT, MIT | ultralytics-platform |
+| filelock, fsspec, jinja2, markupsafe, networkx | 4.2.7, 2026.9.0, 3.1.6, 3.0.4, 3.7 | MIT, BSD-3-Clause, BSD, BSD-3-Clause, BSD-3-Clause | torch |
+| sympy, mpmath | 1.14.0, 1.3.0 | BSD | torch |
+| setuptools | 84.2.1 | MIT | torch, tensorboard |
+| triton | 3.8.0 | MIT | torch |
+| cuda-bindings, cuda-pathfinder | 13.4.4, 1.8.5 | Apache-2.0 | torch |
+| cuda-toolkit | 13.0.3.0 | not declared in its metadata (NVIDIA's metapackage of the CUDA wheels below) | torch |
+| nvidia-cuda-cupti, nvidia-cufile, nvidia-cusolver, nvidia-cusparse, nvidia-cusparselt-cu13, nvidia-nccl-cu13, nvidia-nvshmem-cu13 | lock versions | NVIDIA proprietary (CUDA EULA, redistributable) | torch, cuda-toolkit |
+| nvidia-nvtx | 13.0.85 | Apache 2.0 in its licence field, proprietary in its classifier | cuda-toolkit |
+
+Licences of this table were read from each wheel's metadata; where the
+installed or cached wheel was a different version than the lock, the licence
+is that wheel's, not re-checked for the locked one.
+
+## Development tools
+
+The `dev` group (`uv sync`, installed by `scripts/verify.sh` and CI): lint,
+tests and the layer check. Never imported by the package.
+
+| Distribution | Version | Licence | Why |
+|---|---|---|---|
+| ruff | 0.17.3 | MIT | lint and format |
+| pytest | 9.2.0 | MIT | tests |
+| iniconfig, pluggy | 2.3.1, 1.7.0 | MIT | pytest |
+| import-linter, grimp | 2.15, 3.18 | BSD-2-Clause | `scripts/check-layers.sh` |
+| click | 8.5.0 | BSD-3-Clause | import-linter |
+| typing-extensions | 4.16.0 | PSF-2.0 | import-linter, torch, onnx, grpcio, anyio |
+
+Windows-only markers in the lock, never installed on Linux: colorama
+(BSD; pytest, click, tqdm, loguru) and win32-setctime (loguru).
+
 ## Datasets
 
 Kept under `SPACE_USAGE_DATA_DIR`, never committed, used to measure only.
