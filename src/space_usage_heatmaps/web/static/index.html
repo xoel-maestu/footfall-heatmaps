@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D0F13" media="(prefers-color-scheme: dark)">
+<title>Floor occupancy</title>
+<style>
+:root {
+  --ink: #12151A;
+  --muted: #545B66;
+  --background: #FFFFFF;
+  --surface: #EEF0F3;
+  --line: #D5D9DF;
+  --accent: #087A50;
+  --ramp-0: #DDEFE6;
+  --ramp-1: #7CC4A0;
+  --ramp-2: #087A50;
+  --ramp-3: #03311F;
+  --floor: #F7F8FA;
+  --gap: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #EEF0F3;
+    --muted: #A9B0BA;
+    --background: #0D0F13;
+    --surface: #191C22;
+    --line: #2C313A;
+    --accent: #3FB884;
+    --ramp-0: #12382A;
+    --ramp-1: #1F7A52;
+    --ramp-2: #3FB884;
+    --ramp-3: #C9F2DD;
+    --floor: #13161B;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+html { touch-action: manipulation; }
+body {
+  background: var(--background);
+  color: var(--ink);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+header {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: 8px var(--gap); padding: 12px var(--gap); border-bottom: 1px solid var(--line);
+}
+h1 { font-size: 22px; font-weight: 600; margin: 0; text-wrap: balance; }
+#status { color: var(--muted); font-size: 13px; margin: 0; }
+#status[data-state="error"] { color: var(--ink); font-weight: 600; }
+main {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); padding: var(--gap);
+}
+@media (min-width: 960px) {
+  main { grid-template-columns: minmax(0, 1fr) 340px; height: calc(100vh - 54px); }
+}
+#map-wrap { position: relative; min-height: 240px; aspect-ratio: var(--map-aspect, 1); }
+@media (min-width: 960px) { #map-wrap { aspect-ratio: auto; min-height: 0; } }
+#map { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+aside { display: flex; flex-direction: column; gap: 20px; min-width: 0; overflow-y: auto; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+legend, .label { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; padding: 0; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.seg label {
+  flex: 1; display: flex; align-items: center; justify-content: center; min-height: 40px;
+  padding: 6px 10px; font-size: 13px; text-align: center; cursor: pointer;
+}
+.seg label:hover:not(:has(input:checked)) { background: var(--surface); }
+.seg label + label { border-left: 1px solid var(--line); }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg input:checked + span { font-weight: 600; }
+.seg label:has(input:checked) { background: var(--ink); color: var(--background); }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -4px; }
+input[type="date"], select {
+  width: 100%; min-height: 40px; padding: 6px 10px; font: inherit; font-size: 13px;
+  color: var(--ink); background: var(--background);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+input[type="date"]:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+select:disabled, input:disabled { opacity: 0.5; }
+#slot-picker { display: grid; gap: 8px; }
+#legend-bar {
+  height: 14px; border-radius: 4px; border: 1px solid var(--line);
+  background: linear-gradient(to right, var(--ramp-0), var(--ramp-1), var(--ramp-2), var(--ramp-3));
+}
+#legend-ticks { display: flex; justify-content: space-between; font-size: 13px; margin-top: 4px; }
+#legend-unit { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.swatch-empty {
+  display: inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-right: 6px;
+  background: var(--floor); border: 1px solid var(--line);
+}
+dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
+dt { color: var(--muted); }
+dd { margin: 0; text-align: right; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+</style>
+</head>
+<body data-camera="__CAMERA__">
+<header>
+  <h1>Floor occupancy, camera <span id="camera"></span></h1>
+  <p id="status" role="status" aria-live="polite">Loading…</p>
+</header>
+<main>
+  <div id="map-wrap">
+    <canvas id="map" role="img" aria-label="Occupancy heatmap over the floor grid"></canvas>
+  </div>
+  <aside>
+    <fieldset>
+      <legend>Source</legend>
+      <div class="seg">
+        <label><input type="radio" name="source" value="live" checked><span>Live</span></label>
+        <label><input type="radio" name="source" value="slot"><span>15-min slot</span></label>
+      </div>
+    </fieldset>
+    <fieldset id="slot-picker" disabled>
+      <legend>Slot (UTC)</legend>
+      <label class="label" for="slot-day">Day</label>
+      <input type="date" id="slot-day">
+      <label class="label" for="slot">Start</label>
+      <select id="slot"><option value="">No slots on this day</option></select>
+    </fieldset>
+    <fieldset>
+      <legend>Layer</legend>
+      <div class="seg">
+        <label><input type="radio" name="layer" value="dwell" checked><span>Dwell (person-seconds)</span></label>
+        <label><input type="radio" name="layer" value="passage"><span>Passage (people)</span></label>
+      </div>
+    </fieldset>
+    <div>
+      <div class="label" id="legend-title">Colour scale</div>
+      <div id="legend-bar" aria-hidden="true"></div>
+      <div id="legend-ticks"><span id="legend-min">0</span><span id="legend-max">0</span></div>
+      <div id="legend-unit"></div>
+      <p class="note"><span class="swatch-empty" aria-hidden="true"></span>Empty cell</p>
+    </div>
+    <dl aria-label="Summary of the layer shown">
+      <dt>Sum over cells</dt><dd id="sum-total">0</dd>
+      <dt>Cells above zero</dt><dd id="sum-cells">0</dd>
+      <dt>Highest cell</dt><dd id="sum-max">0</dd>
+      <dt>Cell size</dt><dd id="sum-cell">0</dd>
+      <dt>Data time</dt><dd id="sum-time">-</dd>
+    </dl>
+    <p class="note" id="layer-note"></p>
+  </aside>
+</main>
+<script>
+"use strict";
+const camera = document.body.dataset.camera;
+const UNITS = { dwell: "person-seconds", passage: "people" };
+const NOTES = {
+  live: "Live layer: 60 s half-life, held in memory only and never stored.",
+  slot: "Slot layer: cells with fewer than 5 distinct people read as empty.",
+};
+const $ = (id) => document.getElementById(id);
+const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false };
+const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
+const timeFmt = (t) => new Date(t * 1000).toISOString().slice(11, 19) + " UTC";
+$("camera").textContent = camera;
+
+function setStatus(text, error, quiet) {
+  // the live time changes every second: announced only on errors and source changes
+  $("status").setAttribute("aria-live", quiet && !error ? "off" : "polite");
+  $("status").textContent = text;
+  $("status").dataset.state = error ? "error" : "ok";
+}
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function hexRgb(h) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rampColour(f, stops) {
+  const x = Math.min(1, Math.max(0, f)) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(x));
+  const a = stops[i], b = stops[i + 1], w = x - i;
+  return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * w)).join(",")})`;
+}
+
+function draw() {
+  const canvas = $("map"), wrap = $("map-wrap"), d = state.data;
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (!d) return;
+  const [ny, nx] = d.shape, cell = d.cell_m, [ox, oy] = d.origin;
+  wrap.style.setProperty("--map-aspect", `${nx + 13} / ${ny + 10}`); // the map and its axes, on narrow screens
+  const pad = { l: 44, b: 32, t: 8, r: 8 };
+  const px = Math.max(1, Math.min((W - pad.l - pad.r) / nx, (H - pad.t - pad.b) / ny));
+  const mw = px * nx, mh = px * ny;
+  const x0 = pad.l + (W - pad.l - pad.r - mw) / 2, y0 = pad.t;
+  const grid = d[state.layer];
+  const stops = ["--ramp-0", "--ramp-1", "--ramp-2", "--ramp-3"].map((v) => hexRgb(cssVar(v)));
+  let max = 0, total = 0, cells = 0;
+  for (const row of grid) for (const v of row) { if (v > 0) { cells++; total += v; } if (v > max) max = v; }
+  ctx.fillStyle = cssVar("--floor");
+  ctx.fillRect(x0, y0, mw, mh);
+  for (let i = 0; i < ny; i++) {
+    for (let j = 0; j < nx; j++) {
+      const v = grid[i][j];
+      if (v <= 0) continue;
+      ctx.fillStyle = rampColour(v / max, stops);
+      // row 0 is the smallest y: drawn at the bottom, y grows up the screen
+      ctx.fillRect(x0 + j * px, y0 + (ny - 1 - i) * px, Math.ceil(px), Math.ceil(px));
+    }
+  }
+  // floor grid every 2 m, labelled in metres
+  ctx.strokeStyle = cssVar("--line"); ctx.lineWidth = 1;
+  ctx.fillStyle = cssVar("--muted"); ctx.font = "12px system-ui, sans-serif";
+  const step = 2, perStep = Math.round(step / cell), labelEvery = px * perStep < 28 ? 2 : 1;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let j = 0, k = 0; j <= nx; j += perStep, k++) {
+    const x = Math.round(x0 + j * px) + 0.5;
+    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + mh); ctx.stroke();
+    if (k % (2 * labelEvery) === 0) ctx.fillText(fmt.format(ox + j * cell), x, y0 + mh + 4);
+  }
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let i = 0, k = 0; i <= ny; i += perStep, k++) {
+    const y = Math.round(y0 + mh - i * px) + 0.5;
+    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + mw, y); ctx.stroke();
+    if (k % (2 * labelEvery) === 0) ctx.fillText(fmt.format(oy + i * cell), x0 - 6, y);
+  }
+  ctx.textAlign = "right"; ctx.textBaseline = "top";
+  ctx.fillText("x (m)", x0 + mw, y0 + mh + 18);
+  ctx.save(); ctx.translate(x0 - 34, y0); ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText("y (m)", 0, 0); ctx.restore();
+
+  const unit = UNITS[state.layer];
+  $("legend-title").textContent = state.layer === "dwell" ? "Dwell (person-seconds)" : "Passage (people)";
+  $("legend-max").textContent = fmt.format(max);
+  $("legend-unit").textContent = `Colour scale in ${unit} per cell, 0 to the highest cell shown`;
+  $("sum-total").textContent = `${fmt.format(total)} ${unit}`;
+  $("sum-cells").textContent = `${cells} of ${nx * ny}`;
+  $("sum-max").textContent = `${fmt.format(max)} ${unit}`;
+  $("sum-cell").textContent = `${cell} m`;
+  $("sum-time").textContent = d.label;
+  $("layer-note").textContent = NOTES[state.source];
+  canvas.setAttribute("aria-label",
+    `Heatmap of ${unit} over a ${fmt.format(nx * cell)} by ${fmt.format(ny * cell)} m floor grid: ` +
+    `${cells} cells above zero, highest ${fmt.format(max)} ${unit}`);
+}
+
+async function getJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+  return body;
+}
+
+async function pollLive() {
+  if (state.source !== "live" || state.busy || document.hidden) return;
+  state.busy = true;
+  try {
+    const d = await getJson(`/api/live?camera=${encodeURIComponent(camera)}`);
+    if (state.source !== "live") return;
+    state.data = { ...d, label: timeFmt(d.t) };
+    setStatus(`Live, updated ${timeFmt(d.t)}`, false, true);
+    draw();
+  } catch (e) {
+    setStatus(`Live layer unavailable: ${e.message}`, true);
+  } finally {
+    state.busy = false;
+  }
+}
+
+function dayBounds(day) {
+  const from = Date.parse(`${day}T00:00:00Z`) / 1000;
+  return [from, from + 86400];
+}
+
+async function loadSlots() {
+  const day = $("slot-day").value;
+  const select = $("slot");
+  select.replaceChildren();
+  if (!day) return;
+  const [from, to] = dayBounds(day);
+  try {
+    const d = await getJson(`/api/slots?camera=${encodeURIComponent(camera)}&from=${from}&to=${to}`);
+    state.slots = d.slots.map((s) => ({ ...s, cell_m: d.cell_m, origin: d.origin, shape: d.shape }));
+  } catch (e) {
+    state.slots = [];
+    setStatus(`Slots unavailable: ${e.message}`, true);
+  }
+  if (!state.slots.length) {
+    select.append(new Option("No slots on this day", ""));
+    select.disabled = true;
+  } else {
+    select.disabled = false;
+    for (const [i, s] of state.slots.entries()) {
+      const start = s.start.slice(11, 16), end = new Date(Date.parse(s.start) + 900000).toISOString().slice(11, 16);
+      const people = s.n_unique ? `${s.n_unique} people` : "under 5 people";
+      select.append(new Option(`${start} to ${end}, ${people}${s.incomplete ? ", incomplete" : ""}`, String(i)));
+    }
+    select.value = String(state.slots.length - 1);
+  }
+  showSlot();
+}
+
+function showSlot() {
+  if (state.source !== "slot") return;
+  const s = state.slots[Number($("slot").value)];
+  if (!s || $("slot").value === "") {
+    state.data = null; draw();
+    setStatus("No persisted slot on this day");
+    return;
+  }
+  const end = new Date(Date.parse(s.start) + 900000).toISOString().slice(11, 16);
+  state.data = { ...s, label: `${s.start.slice(0, 10)} ${s.start.slice(11, 16)} to ${end} UTC` };
+  setStatus(`Slot ${state.data.label}${s.incomplete ? ", incomplete" : ""}`);
+  draw();
+}
+
+function setSource(source) {
+  state.source = source;
+  $("slot-picker").disabled = source !== "slot";
+  clearInterval(state.timer);
+  if (source === "live") {
+    state.data = null; draw();
+    setStatus("Live, connecting…");
+    pollLive();
+    state.timer = setInterval(pollLive, 1000);
+  } else {
+    loadSlots();
+  }
+}
+
+for (const r of document.querySelectorAll('input[name="source"]')) r.addEventListener("change", () => setSource(r.value));
+for (const r of document.querySelectorAll('input[name="layer"]')) r.addEventListener("change", () => { state.layer = r.value; draw(); });
+$("slot-day").addEventListener("change", loadSlots);
+$("slot").addEventListener("change", showSlot);
+new ResizeObserver(draw).observe($("map-wrap"));
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+$("slot-day").value = new Date().toISOString().slice(0, 10);
+setSource("live");
+</script>
+</body>
+</html>
