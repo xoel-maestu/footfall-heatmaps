@@ -105,3 +105,65 @@ def test_serve_without_a_source_has_no_live_layer(tmp_path, setup):
         server.server_close()
 
     assert recording is None and e.value.code == 404
+
+
+@pytest.mark.parametrize("error", [RuntimeError("bug"), OSError("cannot open the source")])
+def test_a_recorder_that_dies_turns_live_into_a_503(tmp_path, setup, monkeypatch, error):
+    config, video = setup
+    args = parse(
+        [
+            "serve",
+            "--config",
+            str(config),
+            "--db",
+            str(tmp_path / "x.db"),
+            "--source",
+            str(video),
+            "--port",
+            "0",
+        ]
+    )
+
+    def crash(args, live, stop):
+        raise error
+
+    monkeypatch.setattr(cli, "run_record", crash)
+    monkeypatch.setattr(threading, "excepthook", lambda a: None)  # the traceback is expected
+    server, recording, stop = cli.start_serve(args)
+    serving(server)
+    try:
+        recording.join(timeout=30)
+        host, port = server.server_address[:2]
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(f"http://{host}:{port}/api/live?camera=7", timeout=5)
+    finally:
+        stop.set()
+        server.shutdown()
+        server.server_close()
+
+    assert e.value.code == 503 and "recorder stopped" in json.loads(e.value.read())["error"]
+
+
+@pytest.mark.parametrize(
+    "host, warned", [("127.0.0.1", False), ("localhost", False), ("0.0.0.0", True)]
+)
+def test_serve_warns_when_bound_beyond_this_machine(tmp_path, setup, capsys, host, warned):
+    config, _ = setup
+    args = parse(
+        [
+            "serve",
+            "--config",
+            str(config),
+            "--db",
+            str(tmp_path / "x.db"),
+            "--port",
+            "0",
+            "--host",
+            host,
+        ]
+    )
+
+    server, _, _ = cli.start_serve(args)
+    server.server_close()
+
+    assert ("warning" in capsys.readouterr().err) is warned

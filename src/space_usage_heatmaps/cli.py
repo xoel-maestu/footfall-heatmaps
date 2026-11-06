@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -346,6 +347,15 @@ def _until(stop, frames):
         yield frame
 
 
+def _is_loopback(host):
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def start_serve(args):
     """The viewer's server for the config's camera, and with --source the recorder
     in a thread of this process: the live layer stays in its memory, and the
@@ -356,6 +366,12 @@ def start_serve(args):
     spec = GridSpec.covering(*settings.extent_m, cell_m=settings.cell_m)
     live = LiveSource() if args.source else None
     server = make_server(args.host, args.port, settings.camera_id, spec, args.db, live)
+    if not _is_loopback(args.host):
+        print(
+            f"space-usage serve: warning: --host {args.host} opens the page and the live layer "
+            "to other machines, with no authentication",
+            file=sys.stderr,
+        )
     stop, recording = threading.Event(), None
     if args.source:
 
@@ -363,7 +379,11 @@ def start_serve(args):
             try:
                 run_record(args, live, stop)
             except CAMERA_ERRORS as e:
+                live.fail(e)
                 print(f"space-usage: error: {e}", file=sys.stderr)
+            except Exception as e:  # any other failure: /api/live answers 503, not a fading layer
+                live.fail(e)
+                raise
 
         recording = threading.Thread(target=record, name="recorder", daemon=True)
         recording.start()
