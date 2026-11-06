@@ -53,11 +53,17 @@ header {
 }
 h1 { font-size: 22px; font-weight: 600; margin: 0; text-wrap: balance; }
 #status { color: var(--muted); font-size: 13px; margin: 0; }
-#status[data-state="error"] { color: var(--ink); font-weight: 600; }
+#status[data-state="error"], #status[data-state="ended"] { color: var(--ink); font-weight: 600; }
 main {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); padding: var(--gap);
 }
 #map-wrap { position: relative; min-height: 240px; aspect-ratio: var(--map-aspect, 1); }
+#empty-note {
+  position: absolute; left: 50%; top: 40%; transform: translateX(-50%); margin: 0;
+  max-width: 90%; padding: 8px 12px; font-size: 13px; text-align: center;
+  background: var(--background); border: 1px solid var(--line); border-radius: 12px;
+}
+#empty-note[hidden] { display: none; }
 #map { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
 aside { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 @media (min-width: 960px) {
@@ -118,6 +124,7 @@ dd { margin: 0; text-align: right; }
 <main>
   <div id="map-wrap">
     <canvas id="map" role="img" aria-label="Occupancy heatmap over the floor grid"></canvas>
+    <p id="empty-note" role="note" hidden></p>
   </div>
   <aside>
     <fieldset>
@@ -166,6 +173,10 @@ const NOTES = {
     "Cells with fewer than 5 distinct people in the last 2 minutes read as empty.",
   slot: "Slot layer: cells with fewer than 5 distinct people read as empty.",
 };
+const EMPTY = {
+  live: "No cell reached 5 distinct people in the last 2 minutes.",
+  slot: "No cell reached 5 distinct people in this slot.",
+};
 const $ = (id) => document.getElementById(id);
 const desktop = window.matchMedia("(min-width: 960px)");
 const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false };
@@ -173,11 +184,12 @@ const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 const timeFmt = (t) => new Date(t * 1000).toISOString().slice(11, 19) + " UTC";
 $("camera").textContent = camera;
 
-function setStatus(text, error, quiet) {
+function setStatus(text, error, quiet, kind) {
   // the live time changes every second: announced only on errors and source changes
   $("status").setAttribute("aria-live", quiet && !error ? "off" : "polite");
+  if ($("status").textContent === text) return;
   $("status").textContent = text;
-  $("status").dataset.state = error ? "error" : "ok";
+  $("status").dataset.state = error ? "error" : kind || "ok";
 }
 
 function cssVar(name) {
@@ -204,6 +216,7 @@ function draw() {
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  $("empty-note").hidden = true;
   if (!d) return;
   const [ny, nx] = d.shape, cell = d.cell_m, [ox, oy] = d.origin;
   wrap.style.setProperty("--map-aspect", `${nx + 13} / ${ny + 10}`); // the map and its axes, on narrow screens
@@ -219,6 +232,8 @@ function draw() {
   const stops = ["--ramp-0", "--ramp-1", "--ramp-2", "--ramp-3"].map((v) => hexRgb(cssVar(v)));
   let max = 0, total = 0, cells = 0;
   for (const row of grid) for (const v of row) { if (v > 0) { cells++; total += v; } if (v > max) max = v; }
+  $("empty-note").hidden = cells > 0;
+  $("empty-note").textContent = EMPTY[state.source];
   ctx.fillStyle = cssVar("--floor");
   ctx.fillRect(x0, y0, mw, mh);
   for (let i = 0; i < ny; i++) {
@@ -280,7 +295,8 @@ async function pollLive() {
     const d = await getJson(`/api/live?camera=${encodeURIComponent(camera)}`);
     if (state.source !== "live") return;
     state.data = { ...d, label: timeFmt(d.t) };
-    setStatus(`Live, updated ${timeFmt(d.t)}`, false, true);
+    if (d.ended != null) setStatus(`Source ended at ${timeFmt(d.ended)}`, false, false, "ended");
+    else setStatus(`Live, updated ${timeFmt(d.t)}`, false, true);
     draw();
   } catch (e) {
     if (state.source !== "live") return;
@@ -360,6 +376,11 @@ new ResizeObserver(draw).observe($("map-wrap"));
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
 desktop.addEventListener("change", draw);
 $("slot-day").value = new Date().toISOString().slice(0, 10);
+// the picker opens on the day of the newest persisted slot, today when there is none
+getJson(`/api/slots/latest?camera=${encodeURIComponent(camera)}`)
+  .then((d) => { if (d.start) $("slot-day").value = d.start.slice(0, 10); })
+  .catch(() => {})
+  .finally(() => { if (state.source === "slot") loadSlots(); });
 setSource("live");
 </script>
 </body>
