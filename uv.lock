@@ -1143,6 +1143,7 @@ dependencies = [
     { name = "opencv-python-headless" },
     { name = "pot" },
     { name = "pyyaml" },
+    { name = "scipy" },
     { name = "trackers" },
 ]
 
@@ -1182,6 +1183,7 @@ requires-dist = [
     { name = "opencv-python-headless", specifier = ">=4.10" },
     { name = "pot", specifier = ">=0.9.5" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "scipy", specifier = ">=1.14" },
     { name = "trackers", specifier = "==2.6.1" },
 ]
 

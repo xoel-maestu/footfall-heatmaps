@@ -1,0 +1,16 @@
+# H3a (spec 8, hypothesis 3): configs/h1-best.yaml with OC-SORT in place of
+# ByteTrack. Same detections (the detection cache replays them).
+#
+# OC-SORT corrects the Kalman drift of a track that was lost behind a shelf
+# with the box it is found again (observation-centric re-update) and adds a
+# motion direction term to the IoU cost, for people who stop and turn.
+detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960
+engine: onnx-cuda      # ONNX Runtime, CUDA execution provider (CPU fallback is logged)
+tracker: ocsort        # roboflow trackers 2.6.1 OCSORTTracker, its defaults (the OC-SORT paper's)
+input_size: 960        # the exported model's fixed input
+foot_point: auto-track # as h1-best.yaml
+track_height_percentile: 0.9
+hidden_ratio: 0.88
+track_height_min_m: 1.0
+track_height_max_m: 2.0
+stride: 1

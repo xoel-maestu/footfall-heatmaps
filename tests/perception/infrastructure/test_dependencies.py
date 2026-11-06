@@ -12,6 +12,9 @@ IMPORT_ADAPTERS = """
 import sys
 import space_usage_heatmaps.perception.infrastructure.container
 import space_usage_heatmaps.perception.infrastructure.bytetrack_tracker
+import space_usage_heatmaps.perception.infrastructure.ocsort_tracker
+import space_usage_heatmaps.perception.infrastructure.ucmc_tracker
+import space_usage_heatmaps.evaluation.infrastructure.tracking_metrics
 import space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector
 import space_usage_heatmaps.perception.infrastructure.opencv_file_source
 import supervision, trackers

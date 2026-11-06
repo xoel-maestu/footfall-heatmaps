@@ -1,6 +1,7 @@
 """space-usage: command-line entry point (driving adapter)."""
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -199,8 +200,19 @@ def load_config(path):
 
 def cache_key(c):
     """Directory of a config's cached tracks; each file also stores the recipe
-    metadata and is recomputed when it no longer matches (track_cache)."""
-    return f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
+    metadata and is recomputed when it no longer matches (track_cache). Tracker
+    overrides get their own directory, so variants do not overwrite each other."""
+    key = f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
+    if not c.tracker_params:
+        return key
+    params = json.dumps(c.tracker_params, sort_keys=True).encode()
+    return f"{key}-params{hashlib.sha256(params).hexdigest()[:12]}"
+
+
+def detection_cache_key(c):
+    """Directory of a detector recipe's cached detections (detection_cache):
+    every tracker of that recipe replays them."""
+    return f"{c.detector}-{c.input_size}-{c.engine}-stride{c.stride}"
 
 
 def pipeline_of(config, reader, loop=False):
@@ -216,23 +228,76 @@ def pipeline_of(config, reader, loop=False):
             config.stride,
             data_dir() / "models",
             loop,
+            reader.camera(scene, camera).world_to_image,
+            config.tracker_params,
         )
 
     return build
 
 
+def pipeline_track_source(config, reader):
+    """Tracks of an onnx-cuda config: cached detections of its detector recipe,
+    then a fresh tracker on each video."""
+    import numpy as np
+
+    from space_usage_heatmaps.evaluation.infrastructure.detection_cache import CachedDetections
+    from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
+        PipelineDetections,
+        PipelineTrackSource,
+    )
+    from space_usage_heatmaps.perception.infrastructure import container
+
+    def detection_of(scene, camera):
+        return container.build_detection(
+            reader.video(scene, camera),
+            config.detector,
+            config.input_size,
+            config.stride,
+            data_dir() / "models",
+        )
+
+    def tracker_of(scene, camera):
+        return container.build_tracker(
+            config.tracker,
+            container.video_fps(reader.video(scene, camera)) / config.stride,
+            reader.camera(scene, camera).world_to_image,
+            config.tracker_params,
+        )
+
+    def video_identity(scene, camera):
+        return {"video_bytes": reader.video(scene, camera).stat().st_size}
+
+    def track_identity(scene, camera):
+        """The video, and for a tracker on the floor the camera's homography."""
+        if config.tracker != "ucmc":
+            return video_identity(scene, camera)
+        h = np.ascontiguousarray(reader.camera(scene, camera).world_to_image, dtype=float)
+        return video_identity(scene, camera) | {
+            "homography_sha256": hashlib.sha256(h.tobytes()).hexdigest()
+        }
+
+    detections = CachedDetections(
+        PipelineDetections(detection_of),
+        data_dir() / "cache" / "detections" / detection_cache_key(config),
+        container.detection_metadata(config.detector, config.input_size, config.stride),
+        identity=video_identity,
+    )
+    meta = container.pipeline_metadata(
+        config.detector, config.tracker, config.input_size, config.stride, config.tracker_params
+    )
+    directory = data_dir() / "cache" / "tracks" / cache_key(config)
+    return CachedTrackSource(
+        lambda: PipelineTrackSource(detections, tracker_of),
+        directory,
+        meta,
+        identity=track_identity,
+    )
+
+
 def track_source(config, reader):
     directory = data_dir() / "cache" / "tracks" / cache_key(config)
     if config.engine == "onnx-cuda":
-        from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
-            PipelineTrackSource,
-        )
-        from space_usage_heatmaps.perception.infrastructure.container import pipeline_metadata
-
-        meta = pipeline_metadata(config.detector, config.tracker, config.input_size, config.stride)
-        return CachedTrackSource(
-            lambda: PipelineTrackSource(pipeline_of(config, reader)), directory, meta
-        )
+        return pipeline_track_source(config, reader)
 
     def make():
         try:
@@ -284,6 +349,72 @@ def _rows(label, per_scene, pooled, scenes, width):
             print(f"{label:<{width}}{where:<10}{layer:<9}{blocks:>7}{cells}")
 
 
+# Spec 6 guard: HOTA and IDF1 may not drop more than this against the config compared to.
+GUARD_POINTS = 1.0
+GUARD_BROKEN = 3  # eval's exit code when the guard breaks (the report is still written)
+TRACKING = ["hota", "deta", "assa", "idf1"]
+
+
+def score_tracking(reader, scenes, names, runs):
+    """HOTA, DetA, AssA and IDF1 per config and scene in image space against the
+    camera's truth boxes, pooled as the mean over scenes; with two configs, the
+    difference first - second."""
+    from space_usage_heatmaps.evaluation.infrastructure.tracking_metrics import (
+        pooled,
+        tracking_metrics,
+    )
+
+    keys = [f"{scene}/{camera}" for scene, camera in scenes]
+    per = {n: {} for n in names}
+    for (scene, camera), key in zip(scenes, keys, strict=True):
+        samples = reader.samples(scene, camera)
+        for n, (_, source) in zip(names, runs, strict=True):
+            per[n][key] = tracking_metrics(samples, source.tracks(scene, camera))
+    result = {"scenes": per, "pooled": {n: pooled(list(per[n].values())) for n in names}}
+    if len(names) == 2:
+        a, b = names
+
+        def diff(x, y):
+            return {m: x[m] - y[m] for m in TRACKING}
+
+        result["delta"] = {
+            "of": names,
+            "scenes": {k: diff(per[a][k], per[b][k]) for k in keys},
+            "pooled": diff(result["pooled"][a], result["pooled"][b]),
+        }
+    return result
+
+
+def guard_holds(t):
+    """Whether HOTA and IDF1 dropped at most GUARD_POINTS; None without a comparison."""
+    if "delta" not in t:
+        return None
+    d = t["delta"]["pooled"]
+    return 100 * min(d["hota"], d["idf1"]) >= -GUARD_POINTS
+
+
+def _print_tracking(t, names, width):
+    print(
+        "\ntracking guards: HOTA (DetA, AssA) and IDF1 in image space against the "
+        "camera's truth boxes, TrackEval definitions; pooled = mean over scenes"
+    )
+    print(f"{'config':<{width}}{'scene':<10}{'':<9}" + "".join(f"{m:>8}" for m in TRACKING))
+    rows = [(n, t["scenes"][n], t["pooled"][n]) for n in names]
+    if "delta" in t:
+        rows.append(("delta", t["delta"]["scenes"], t["delta"]["pooled"]))
+    for label, scenes, pool in rows:
+        for where, m in [*scenes.items(), ("pooled", pool)]:
+            cells = "".join(f"{m[k]:>8.3f}" for k in TRACKING)
+            print(f"{label:<{width}}{where:<10}{'tracking':<9}{cells}")
+    if "delta" in t:
+        d = {k: 100 * v for k, v in t["delta"]["pooled"].items()}
+        holds = guard_holds(t)
+        print(
+            f"guard: HOTA {d['hota']:+.1f} points, IDF1 {d['idf1']:+.1f} points: "
+            + ("holds" if holds else f"BROKEN (more than {GUARD_POINTS:g} point lower)")
+        )
+
+
 def _estimates(table):
     return {layer: {m: vars(e) for m, e in metrics.items()} for layer, metrics in table.items()}
 
@@ -297,6 +428,8 @@ def run_eval_config(args):
     configs = [load_config(args.config)] + ([load_config(args.compare)] if args.compare else [])
     runs = [(c, track_source(c, reader)) for c in configs]
     r = evaluate_config(reader, SPLITS[args.split], runs, args.cell, n_resamples=args.resamples)
+    tracking = score_tracking(reader, SPLITS[args.split], names, runs)
+    tracking["guard_holds"] = guard_holds(tracking)
 
     print(
         f"{r.dataset}  split {args.split}  cell {r.cell_m} m  "
@@ -329,6 +462,7 @@ def run_eval_config(args):
             _rows(name, [s[i] for s in res.scenes], res.pooled[i], r.scenes, width)
         if res.delta_pooled is not None:
             _rows("delta", res.delta_scenes, res.delta_pooled, r.scenes, width)
+    _print_tracking(tracking, names, width)
 
     report = {
         "dataset": r.dataset,
@@ -341,6 +475,7 @@ def run_eval_config(args):
         "pooled": "unweighted mean over scenes, blocks resampled within each scene",
         "configs": {n: vars(c) for n, c in zip(names, configs, strict=True)},
         "scenes": [vars(run) for run in r.scenes],
+        "tracking": tracking,
         "tracks_provenance": {
             n: getattr(src, "provenance", None) for n, (_, src) in zip(names, runs, strict=True)
         },
@@ -377,6 +512,9 @@ def run_eval_config(args):
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     print(f"\nreport {path}")
+    if tracking["guard_holds"] is False:
+        print("space-usage: tracking guard broken", file=sys.stderr)
+        return GUARD_BROKEN
     return 0
 
 

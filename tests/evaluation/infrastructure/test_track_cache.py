@@ -134,3 +134,33 @@ def test_how_a_run_went_is_stored_and_reported_but_not_checked(tmp_path, capsys)
     assert CountingSource.made == 0  # "run" is not part of the recipe: still a hit
     assert first.provenance["071/645"]["stored"]["run"] == run
     assert again.provenance["071/645"]["stored"]["run"] == run
+
+
+def test_a_corrupt_cache_file_is_recomputed(tmp_path, capsys):
+    CountingSource.made = 0
+    (tmp_path / "scene_071_camera_645.npz").write_bytes(b"not a zip file")
+
+    CachedTrackSource(CountingSource, tmp_path, META).tracks("071", "645")
+
+    assert CountingSource.made == 1
+    assert "unreadable" in capsys.readouterr().err
+
+
+def test_the_identity_of_each_input_is_checked_per_file(tmp_path, capsys):
+    CountingSource.made = 0
+    size = {"video_bytes": 100}
+    CachedTrackSource(CountingSource, tmp_path, META, identity=lambda s, c: size).tracks(
+        "071", "645"
+    )
+    CachedTrackSource(CountingSource, tmp_path, META, identity=lambda s, c: size).tracks(
+        "071", "645"
+    )
+    assert CountingSource.made == 1
+
+    other = {"video_bytes": 101}
+    CachedTrackSource(CountingSource, tmp_path, META, identity=lambda s, c: other).tracks(
+        "071", "645"
+    )
+
+    assert CountingSource.made == 2
+    assert "video_bytes 100 != 101" in capsys.readouterr().err

@@ -102,3 +102,23 @@ def test_the_h4_auto_track_file_names_its_parameters_with_the_tuned_values():
         1.0,
         2.0,
     )
+
+
+def test_tracker_params_override_named_tracker_defaults():
+    cfg = RunConfig.from_mapping(
+        ITER0 | {"engine": "onnx-cuda", "tracker_params": {"conf_thresh": 0.1, "a1": 10}}
+    )
+
+    assert cfg.tracker_params == {"conf_thresh": 0.1, "a1": 10}
+    assert RunConfig.from_mapping(ITER0).tracker_params == {}
+
+
+@pytest.mark.parametrize("value", [[0.1], {"conf_thresh": "0.1"}, {"conf_thresh": True}, {1: 0.1}])
+def test_tracker_params_must_map_names_to_numbers(value):
+    with pytest.raises(ValueError, match="tracker_params"):
+        RunConfig.from_mapping(ITER0 | {"tracker_params": value})
+
+
+def test_tracker_params_need_the_onnx_cuda_pipeline():
+    with pytest.raises(ValueError, match="tracker_params.*onnx-cuda"):
+        RunConfig.from_mapping(ITER0 | {"tracker_params": {"conf_thresh": 0.1}})

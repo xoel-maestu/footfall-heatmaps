@@ -18,7 +18,8 @@ Default dependencies (`uv sync`) and the `runtime` group (`uv sync --group runti
 | pot | 0.9.7.post1 | MIT | earth mover's distance of the metrics |
 | pyyaml | 6.0.3 | MIT | `configs/*.yaml` |
 | opencv-python-headless | 5.0.0.93 | Apache-2.0 (bundles FFmpeg, LGPL-2.1) | video decoding, letterbox resize |
-| trackers | 2.6.1 | Apache-2.0 | ByteTrack (`ByteTrackTracker`) |
+| trackers | 2.6.1 | Apache-2.0 | ByteTrack (`ByteTrackTracker`) and OC-SORT (`OCSORTTracker`); its port of TrackEval's HOTA and IDF1 (TrackEval is MIT) for the tracking guards of `space-usage eval` |
+| scipy | 1.18.1 | BSD-3-Clause | Hungarian assignment of the floor-plane tracker (`ucmc_tracker.py`); also pulled by pot and trackers |
 | onnxruntime-gpu | 1.31.1 | MIT | runs the YOLOX, D-FINE and RF-DETR ONNX models (`runtime` group) |
 | nvidia-ml-py | 13.615.71 | BSD | VRAM in `space-usage bench` (`runtime` group) |
 | pillow | 13.0.0 | MIT-CMU | D-FINE's letterbox resize, its official bilinear filter (`runtime` group; also pulled by matplotlib) |
@@ -28,7 +29,6 @@ Transitive, pulled by the ones above:
 | Distribution | Licence | Pulled by |
 |---|---|---|
 | supervision | MIT | trackers (its `Detections` type) |
-| scipy | BSD-3-Clause | pot, trackers (Hungarian assignment) |
 | matplotlib, contourpy, cycler, kiwisolver, fonttools, pyparsing, python-dateutil | PSF-based (matplotlib), BSD, MIT | supervision; not called here |
 | requests, urllib3, idna, charset-normalizer, certifi | Apache-2.0, MIT, BSD-3-Clause, MIT, MPL-2.0 | supervision, trackers; not called here |
 | tqdm | MPL-2.0 AND MIT | supervision |
@@ -59,6 +59,12 @@ Notes:
   helpers, which nothing here calls;
   `tests/perception/infrastructure/test_dependencies.py` checks that the
   perception adapters never import it and that the lock never installs it.
+
+Code written here after a published method:
+
+| Module | After | Licence of the original | How |
+|---|---|---|---|
+| `perception/infrastructure/ucmc_tracker.py` | UCMCTrack, github.com/corfyi/UCMCTrack at `7851a49` (Copyright (c) 2023 Kefu Yi) | MIT | own implementation of its tracker and floor mapping, read but not copied; its filterpy and lap dependencies replaced by numpy and scipy |
 
 ## Model weights
 

@@ -32,8 +32,10 @@ DEFAULTS = {
 
 
 class ByteTrackTracker:
-    def __init__(self, frame_rate):
-        self.parameters = {**DEFAULTS, "frame_rate": frame_rate}
+    def __init__(self, frame_rate, **params):
+        if unknown := sorted(set(params) - set(DEFAULTS)):
+            raise ValueError(f"bytetrack has no parameters {unknown}; it takes {sorted(DEFAULTS)}")
+        self.parameters = {**DEFAULTS, **params, "frame_rate": frame_rate}
         self._tracker = trackers.ByteTrackTracker(**self.parameters)
 
     def update(self, boxes, scores, frame_index):
