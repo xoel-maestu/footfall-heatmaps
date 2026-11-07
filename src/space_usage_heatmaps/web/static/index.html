@@ -218,6 +218,22 @@ function rampColour(f, stops) {
   return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * w)).join(",")})`;
 }
 
+// colour-scale:begin
+// The colour scale of a layer: capped at the 99th percentile (nearest rank) of
+// the cells above zero, so a few very hot cells do not wash out the rest of the
+// map; cells above the cap are drawn at full colour and counted for the legend.
+function colourScale(grid) {
+  const values = [];
+  let max = 0, total = 0;
+  for (const row of grid) for (const v of row) if (v > 0) { values.push(v); total += v; if (v > max) max = v; }
+  if (!values.length) return { max: 0, cap: 0, above: 0, cells: 0, total: 0 };
+  values.sort((a, b) => a - b);
+  const cap = values[Math.ceil(0.99 * values.length) - 1];
+  const above = values.length - 1 - values.lastIndexOf(cap);
+  return { max, cap, above, cells: values.length, total };
+}
+// colour-scale:end
+
 function draw() {
   const canvas = $("map"), wrap = $("map-wrap"), d = state.data;
   const dpr = window.devicePixelRatio || 1;
@@ -240,8 +256,7 @@ function draw() {
   }
   const grid = d[state.layer];
   const stops = ["--ramp-0", "--ramp-1", "--ramp-2", "--ramp-3"].map((v) => hexRgb(cssVar(v)));
-  let max = 0, total = 0, cells = 0;
-  for (const row of grid) for (const v of row) { if (v > 0) { cells++; total += v; } if (v > max) max = v; }
+  const { max, cap, above, cells, total } = colourScale(grid);
   $("empty-note").hidden = cells > 0;
   $("empty-note").textContent = EMPTY[state.source];
   ctx.fillStyle = cssVar("--floor");
@@ -250,7 +265,7 @@ function draw() {
     for (let j = 0; j < nx; j++) {
       const v = grid[i][j];
       if (v <= 0) continue;
-      ctx.fillStyle = rampColour(v / max, stops);
+      ctx.fillStyle = rampColour(v / cap, stops);
       // row 0 is the smallest y: drawn at the bottom, y grows up the screen
       ctx.fillRect(x0 + j * px, y0 + (ny - 1 - i) * px, Math.ceil(px), Math.ceil(px));
     }
@@ -278,8 +293,11 @@ function draw() {
 
   const unit = UNITS[state.layer];
   $("legend-title").textContent = state.layer === "dwell" ? "Dwell (person-seconds)" : "Passage (people)";
-  $("legend-max").textContent = fmt.format(max);
-  $("legend-unit").textContent = `Colour scale in ${unit} per cell, 0 to the highest cell shown`;
+  $("legend-max").textContent = above ? `${fmt.format(cap)} (p99)` : fmt.format(max);
+  $("legend-unit").textContent = above
+    ? `Colour scale in ${unit} per cell, capped at the 99th percentile of the cells above zero; ` +
+      `${above} ${above === 1 ? "cell" : "cells"} above it drawn at full colour`
+    : `Colour scale in ${unit} per cell, 0 to the highest cell shown`;
   $("sum-total").textContent = `${fmt.format(total)} ${unit}`;
   $("sum-cells").textContent = `${cells} of ${nx * ny}`;
   $("sum-max").textContent = `${fmt.format(max)} ${unit}`;
