@@ -1051,8 +1051,12 @@ ASSOCIATION_CONFIG = "configs/e2b-association.yaml"
 # detect once a second.
 WILDTRACK_RECIPE = BASELINE_CONFIG
 WILDTRACK_BLOCK_S = 10.0  # 400 frames at 2 fps: 20 blocks of 10 s (30 s would give 7)
-# Pre-registered E2b target (reports/iterations-phase10.md), pooled mc-IDF1.
-MC_IDF1_TARGET = None
+# Pre-registered E2b target (reports/iterations-phase10.md, 2026-11-07, before
+# any association ran): pooled mc-IDF1 >= baseline + 1/2 (oracle - baseline),
+# .45 on NVIDIA (tune: .114 + .5 x .681); on WILDTRACK from its own baseline
+# and oracle, never tuned there.
+MC_IDF1_TARGET = 0.45
+MC_IDF1_GAP_SHARE = 0.5
 MC_IDF1_MIN_DELTA = 0.01  # spec 8 acceptance: CI excludes 0 and |delta| >= .01
 IDENTITY_LABELS = ("associated", "baseline")
 
@@ -1135,16 +1139,16 @@ def run_eval_identity(args):
     print(f"{'delta':<12}{'pooled':<12}{_ci(d, 24)}  (delta associated - baseline, paired)")
     accepted = d.lo is not None and (d.lo > 0 or d.hi < 0) and abs(d.value) >= MC_IDF1_MIN_DELTA
     pooled = r.idf1.pooled[0].value
-    met = None if MC_IDF1_TARGET is None else pooled >= MC_IDF1_TARGET
+    target = MC_IDF1_TARGET
+    if args.dataset == "wildtrack":
+        base, oracle = r.idf1.pooled[1].value, r.idf1.pooled[2].value
+        target = base + MC_IDF1_GAP_SHARE * (oracle - base)
+    met = pooled >= target
     print(
         f"acceptance (CI excludes 0, |delta| >= {MC_IDF1_MIN_DELTA}): "
         + ("accepted" if accepted else "not accepted")
         + "; target "
-        + (
-            "not registered"
-            if MC_IDF1_TARGET is None
-            else f"mc-IDF1 >= {MC_IDF1_TARGET:.3f}: {'met' if met else 'missed'}"
-        )
+        + f"mc-IDF1 >= {target:.3f}: {'met' if met else 'missed'}"
     )
     print(
         "\npassage side effect: distinct global ids per cell (associated) against the E2a "
@@ -1194,7 +1198,7 @@ def run_eval_identity(args):
             | {"delta": est(d)},
         },
         "acceptance": {"min_delta": MC_IDF1_MIN_DELTA, "accepted": bool(accepted)},
-        "target": {"value": MC_IDF1_TARGET, "met": met},
+        "target": {"value": target, "met": bool(met)},
         "dwell_unchanged": all(v == 0 for v in dwell_delta),
         "passage": {
             truth: {

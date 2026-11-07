@@ -161,11 +161,14 @@ def evaluate_identity(
     seed=0,
     cameras=None,
     oracle=False,
+    passage_resamples=None,
     map=map,
 ):
     """scenes: scene ids; run: (RunConfig, TrackSource) of every camera;
     associations: name -> Association, at least two (delta = first - second);
-    scorer: floor_identity's signature; cameras: default every calibrated one."""
+    scorer: floor_identity's signature; cameras: default every calibrated one;
+    passage_resamples: the passage bootstrap's (default n_resamples; its EMD
+    makes each resample slow, so a sweep may score point values only)."""
     if len(associations) < 2:
         raise ValueError("two associations at least: the method and its baseline")
     names = (*associations, *(("oracle",) if oracle else ()))
@@ -278,7 +281,12 @@ def evaluate_identity(
         scenes=report_scenes,
         idf1=identity_bootstrap(idf1_blocks, n_resamples=n_resamples, seed=seed),
         passage={
-            t: block_bootstrap(b, n_resamples=n_resamples, seed=seed, map=map)
+            t: block_bootstrap(
+                b,
+                n_resamples=n_resamples if passage_resamples is None else passage_resamples,
+                seed=seed,
+                map=map,
+            )
             for t, b in passage_blocks.items()
         },
         fused=fused_grids,
