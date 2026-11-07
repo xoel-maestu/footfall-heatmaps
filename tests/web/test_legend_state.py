@@ -37,7 +37,7 @@ def test_no_data_clears_every_number():
 
 def test_no_data_clears_the_fused_details():
     s = legend_state(None, source="fused")
-    assert (s["sum-cameras"], s["sum-fusion"]) == ("-", "-")
+    assert (s["sum-cameras"], s["sum-fusion"], s["sum-passage-ids"]) == ("-", "-", "-")
 
 
 def test_no_data_keeps_the_note_of_the_source_shown():
@@ -59,3 +59,11 @@ def test_data_fills_the_legend_and_summary():
 def test_a_map_with_no_cell_above_zero_shows_zeros_not_dashes():
     s = legend_state(slot([[0.0, 0.0]]))
     assert (s["sum-cells"], s["sum-max"]) == ("0 of 2", "0 person-seconds")
+
+
+def test_the_fused_passage_says_which_ids_it_counts():
+    ids = run_js(["passage-ids"], "[passageIds('global'), passageIds(undefined)]")
+    assert ids == [
+        "distinct cross-camera ids (floor co-location)",
+        "each camera's own tracks, weighted",
+    ]

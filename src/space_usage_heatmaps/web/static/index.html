@@ -163,6 +163,7 @@ dd { margin: 0; text-align: right; }
       <dt>Data time</dt><dd id="sum-time">-</dd>
       <dt class="fused-only" hidden>Cameras fused</dt><dd class="fused-only" id="sum-cameras" hidden>-</dd>
       <dt class="fused-only" hidden>Overlap weighting</dt><dd class="fused-only" id="sum-fusion" hidden>-</dd>
+      <dt class="fused-only" hidden>Passage counts</dt><dd class="fused-only" id="sum-passage-ids" hidden>-</dd>
     </dl>
     <p class="note" id="layer-note"></p>
   </aside>
@@ -246,7 +247,7 @@ function legendState(d, layer, source) {
   };
   if (!d) {
     for (const id of ["legend-min", "legend-max", "sum-total", "sum-cells", "sum-max", "sum-cell",
-      "sum-time", "sum-cameras", "sum-fusion"]) out[id] = "-";
+      "sum-time", "sum-cameras", "sum-fusion", "sum-passage-ids"]) out[id] = "-";
     out["legend-unit"] = "";
     return out;
   }
@@ -417,6 +418,16 @@ const WEIGHTING = {
   sum: () => "none (cameras added)",
 };
 
+// passage-ids:begin
+// What the fused passage layer counts: cross-camera ids (eval --metric mc-idf1
+// export) or the cameras' own track counts mixed by the overlap weights.
+function passageIds(kind) {
+  return kind === "global"
+    ? "distinct cross-camera ids (floor co-location)"
+    : "each camera's own tracks, weighted";
+}
+// passage-ids:end
+
 async function loadFused() {
   try {
     const d = await getJson("/api/fused");
@@ -424,6 +435,7 @@ async function loadFused() {
     state.data = { ...d, label: d.period };
     $("sum-cameras").textContent = `${d.cameras.length} (${d.cameras.join(", ")})`;
     $("sum-fusion").textContent = WEIGHTING[d.fusion.weighting](d.fusion);
+    $("sum-passage-ids").textContent = passageIds(d.passage_ids);
     setStatus(`Fused map of scene ${d.scene}, ${d.cameras.length} cameras, ${d.period}`);
   } catch (e) {
     state.data = null;
