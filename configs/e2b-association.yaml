@@ -1,0 +1,35 @@
+# Phase 10 (E2b): the E2a scene (per-camera recipe of configs/e2a-stride2.yaml on every
+# calibrated camera, fused as configs/e2a-fusion.yaml) plus cross-camera ids from floor
+# co-location (eval --cameras all --metric mc-idf1).
+detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960
+engine: onnx-trt       # ONNX Runtime, TensorRT execution provider, fp16
+tracker: bytetrack     # roboflow trackers 2.6.1 ByteTrackTracker, its defaults
+input_size: 960        # the exported model's fixed input
+foot_point: auto-track # as h1-yolox-s.yaml
+track_height_percentile: 0.9
+hidden_ratio: 0.88
+track_height_min_m: 1.0
+track_height_max_m: 2.0
+stride: 2
+
+# occupancy.domain.fusion: how covering cameras are weighed per cell. Chosen on
+# tune 071-075 by pooled full@joint TVD (reports/iterations-phase9.md):
+# visibility weighting, power 1, the visibility ratio measured on 2 m zones.
+fusion:
+  weighting: visibility
+  power: 1
+  zone_m: 2.0
+
+# occupancy.domain.association: cross-camera global ids from floor co-location,
+# no appearance. Chosen on tune 071-075 by the rule pre-registered in
+# reports/iterations-phase10.md (highest pooled mc-IDF1 among the accepted
+# variants A1-A4; sweep in reports/e2b-sweep-tune.json): A4, colocate with a
+# 1 m gate plus a 2 s handover.
+association:
+  method: colocate
+  gate_m: 1.0
+  min_overlap_s: 1.0
+  min_close: 0.5
+  handover_s: 2.0
+  handover_speed_mps: 1.5
+  handover_radius_m: 0.5
