@@ -225,3 +225,20 @@ def test_serve_shows_a_fused_export(tmp_path, setup):
 
     assert recording is None
     assert fused["dwell"] == [[0.0, 9.0]] and fused["k"] == 5  # 2 people: suppressed
+
+
+def test_serve_refuses_a_fused_export_with_global_id_passage(tmp_path, setup):
+    # The E2b export's passage counts cross-camera ids, less accurate than E2a's:
+    # the viewer's passage layer stays E2a.
+    config, _ = setup
+    export = tmp_path / "fused.json"
+    export.write_text(json.dumps({"passage_ids": "global", "dwell": [[0]], "passage": [[0]]}))
+
+    args = parse(
+        ["serve", "--config", str(config), "--db", str(tmp_path / "x.db"), "--port", "0"]
+        + ["--fused", str(export)]
+    )
+
+    with pytest.raises(ValueError, match="global.*E2a"):  # main prints it, exit 1
+        server, _, _ = cli.start_serve(args)
+        server.server_close()

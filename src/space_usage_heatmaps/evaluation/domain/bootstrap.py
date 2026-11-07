@@ -104,14 +104,7 @@ def block_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95, map=map):
     n_preds = len(scenes[0].preds)
     if any(len(s.preds) != n_preds for s in scenes):
         raise ValueError("every scene needs the same predictions")
-    draws = []
-    for s in scenes:
-        n_blocks = s.truth.dwell.shape[0]
-        counts = np.zeros((n_resamples + 1, n_blocks))
-        counts[0] = 1
-        picks = rng.integers(0, n_blocks, size=(n_resamples, n_blocks))
-        np.add.at(counts, (np.arange(1, n_resamples + 1)[:, None], picks), 1)
-        draws.append(counts)
+    draws = [_block_counts(rng, s.truth.dwell.shape[0], n_resamples) for s in scenes]
     # values[draw, scene, pred, layer, metric]; draw 0 is the whole run.
     values = np.stack(list(map(scene_values, scenes, draws)), axis=1)
     pooled = values.mean(axis=1)
@@ -133,6 +126,73 @@ def block_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95, map=map):
         pooled=result.pooled,
         delta_scenes=[_table(delta[:, i], alpha, clip=False) for i in range(len(scenes))],
         delta_pooled=_table(delta.mean(axis=1), alpha, clip=False),
+    )
+
+
+def _block_counts(rng, n_blocks, n_resamples):
+    """counts[draw, block]: how many times each block is drawn; draw 0 is the
+    whole run (every block once)."""
+    counts = np.zeros((n_resamples + 1, n_blocks))
+    counts[0] = 1
+    picks = rng.integers(0, n_blocks, size=(n_resamples, n_blocks))
+    np.add.at(counts, (np.arange(1, n_resamples + 1)[:, None], picks), 1)
+    return counts
+
+
+@dataclass(frozen=True)
+class IdentityBlocks:
+    """A prediction's identity counts per block (evaluation.infrastructure.floor_identity)."""
+
+    idtp: np.ndarray  # (blocks,)
+    n_truth: np.ndarray  # (blocks,)
+    n_pred: np.ndarray  # (blocks,)
+
+
+@dataclass(frozen=True)
+class IdentityResult:
+    scenes: list[list[Estimate]]  # [scene][pred] IDF1
+    pooled: list[Estimate]  # [pred], mean over scenes
+    delta_scenes: list[Estimate] | None  # preds[0] - preds[1]
+    delta_pooled: Estimate | None
+
+
+def identity_bootstrap(scenes, n_resamples=1000, seed=0, level=0.95):
+    """IDF1 of each prediction per scene and pooled (mean over scenes), with the
+    paired block bootstrap of block_bootstrap (same draws for a given seed and
+    block counts). scenes: [(IdentityBlocks per prediction)]. Each resample
+    sums the drawn blocks' counts: the truth-to-prediction assignment stays
+    the whole run's, so the interval leaves out the assignment's own variance."""
+    rng = np.random.default_rng(seed)
+    alpha = (1 - level) / 2 * 100
+    values = []  # [scene] (draws, preds)
+    for preds in scenes:
+        c = _block_counts(rng, len(preds[0].idtp), n_resamples)
+        v = []
+        for p in preds:
+            total = c @ p.n_truth + c @ p.n_pred
+            v.append(np.divide(2 * (c @ p.idtp), total, out=np.zeros(len(c)), where=total > 0))
+        values.append(np.column_stack(v))
+    values = np.stack(values, axis=1)  # (draws, scenes, preds)
+    n_preds = values.shape[2]
+    pooled = values.mean(axis=1)
+    unit = (0.0, 1.0)
+    result = IdentityResult(
+        scenes=[
+            [estimate(values[:, i, p], alpha, unit) for p in range(n_preds)]
+            for i in range(values.shape[1])
+        ],
+        pooled=[estimate(pooled[:, p], alpha, unit) for p in range(n_preds)],
+        delta_scenes=None,
+        delta_pooled=None,
+    )
+    if n_preds < 2:
+        return result
+    delta = values[:, :, 0] - values[:, :, 1]
+    return IdentityResult(
+        result.scenes,
+        result.pooled,
+        [estimate(delta[:, i], alpha) for i in range(delta.shape[1])],
+        estimate(delta.mean(axis=1), alpha),
     )
 
 

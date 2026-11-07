@@ -5,9 +5,9 @@
 
 Only what `space-usage eval --dataset` reads, into SPACE_USAGE_DATA_DIR
 (default ~/datasets/space-usage-heatmaps), never into the repo:
-- wildtrack: calibrations, annotations and camera C5's frames, read by HTTP
-  range from the official 6.8 GB zip (whose offsets above 4 GiB wrap: it was
-  written without zip64);
+- wildtrack: calibrations, annotations and the frames of cameras C1-C7
+  (multi-camera IDs, phase 10), read by HTTP range from the official 6.8 GB
+  zip (whose offsets above 4 GiB wrap: it was written without zip64);
 - caviar: the 26 corridor-view clips of the second set and their ground truth;
 - mot17: train sequences 02, 04 and 09 (FRCNN copy), by HTTP range from
   the official 5.9 GB MOT17.zip;
@@ -37,7 +37,11 @@ HOSTS = {"documents.epfl.ch", "homepages.inf.ed.ac.uk", "motchallenge.net"}
 WILDTRACK_ZIP = (
     "https://documents.epfl.ch/groups/c/cv/cvlab-unit/www/data/Wildtrack/Wildtrack_dataset_full.zip"
 )
-WILDTRACK = ["calibrations/", "annotations_positions/", "Image_subsets/C5/"]
+WILDTRACK = [
+    "calibrations/",
+    "annotations_positions/",
+    *(f"Image_subsets/C{k}/" for k in range(1, 8)),
+]
 CAVIAR_PAGE = "https://homepages.inf.ed.ac.uk/rbf/CAVIARDATA1/"
 CAVIAR_FILE = re.compile(r'href="\.\./(CAVIARDATA2/[A-Za-z0-9]+cor/[A-Za-z0-9]+\.(?:mpg|xml))"')
 MOT17_ZIP = "https://motchallenge.net/data/MOT17.zip"

@@ -223,3 +223,12 @@ def test_a_truncated_video_leaves_no_file(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="truncated"):
         fd.fetch_hf(HF_URL, dest)
     assert not list(tmp_path.iterdir())
+
+
+def test_wildtrack_fetches_the_frames_of_all_seven_cameras():
+    """Phase 10 scores multi-camera IDs on every WILDTRACK view, not only C5."""
+    fd = _module()
+
+    frames = [p for p in fd.WILDTRACK if p.startswith("Image_subsets/")]
+
+    assert frames == [f"Image_subsets/C{k}/" for k in range(1, 8)]
