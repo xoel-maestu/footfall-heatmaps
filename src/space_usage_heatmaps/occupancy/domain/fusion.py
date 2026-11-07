@@ -95,7 +95,17 @@ def fusion_weights(grids, fusion=DEFAULT):
 
 
 def _zones(a, k):
-    """Each cell takes the sum of its k x k block (cameras, ny, nx)."""
+    """Each cell takes the sum of its k x k block (cameras, ny, nx).
+
+    Known bias (phase 9 review, kept as chosen on tune and confirmed on sealed):
+    a camera's block sum holds only the cells it covers (the others are zero in
+    `seen`), so a camera that covers part of a block gets a lower ratio there
+    than the camera covering all of it, even on the cells it sees well. This
+    lowers the weights of cameras at the edges of their coverage. Normalising
+    by the number of covered cells in the block is a candidate for a later
+    iteration, tuned on tune only (reports/iterations-phase9.md)."""
+    # The sum, not the mean over covered cells: the bias above is part of the
+    # method chosen on tune; changing it now would be choosing on sealed.
     n, ny, nx = a.shape
     py, px = -(-ny // k) * k, -(-nx // k) * k
     padded = np.pad(a, ((0, 0), (0, py - ny), (0, px - nx)))
