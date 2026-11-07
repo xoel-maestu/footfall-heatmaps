@@ -128,6 +128,21 @@ def test_handover_respects_the_gap_and_the_distance():
     assert len({ga[0], gl[0], gj[0]}) == 3
 
 
+def test_handover_never_joins_two_tracks_of_one_camera_alive_together():
+    # Track 1's floor points end at frame 39, but the tracker keeps it alive with
+    # no floor point up to frame 60; track 2 of the same camera starts at 45 on
+    # the same spot. They are two people at once, never one.
+    ids, frames, xy = track(1, range(0, 61), 0.0, 0.0)
+    xy[40:] = np.nan
+    a = camera("a", (ids, frames, xy), track(2, range(45, 90), 0.0, 0.0))
+    fragment = camera("b", track(1, range(0, 40), 9.0, 0), track(2, range(45, 90), 9.0, 0))
+
+    ga, gb = associate([a, fragment], Association("colocate", handover_s=2.0), FPS)
+
+    assert ga[0] != ga[-1]
+    assert gb[0] == gb[-1]  # a fragment of one camera's track still continues
+
+
 def test_merged_points_are_one_per_id_and_frame_at_the_mean():
     a = camera("a", track(1, [0, 1], 0.0, 0.0))
     b = camera("b", track(1, [1, 2], 1.0, 0.0))

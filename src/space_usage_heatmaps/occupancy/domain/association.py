@@ -22,7 +22,8 @@ them (two people in different places).
 handover_s (optional): after the co-location, a cluster that starts at most
 handover_s after another one ended, within handover_radius_m plus
 handover_speed_mps times the gap of where it ended, continues it (each end and
-each start used once, nearest first). It joins handovers between cameras that
+each start used once, nearest first), under the same rule against two tracks of
+one camera alive at the same time. It joins handovers between cameras that
 do not overlap and fragments of one camera's track.
 
 Privacy: the global ids exist only in memory during evaluation; nothing here
@@ -212,13 +213,17 @@ def associate(cameras, association, fps):
         if _compatible(xs, ys, track_cam, first, last, conflict):
             clusters.join(a, b)
     if association.handover_s is not None:
-        _handover(cameras, rows, clusters, n, association, fps)
+        _handover(cameras, rows, clusters, association, fps, (track_cam, first, last, conflict))
     root = np.array([clusters.find(k) for k in range(n)])
     return [root[r] for r in rows]
 
 
-def _handover(cameras, rows, clusters, n, association, fps):
-    """Join a cluster that starts where and soon after another one ended."""
+def _handover(cameras, rows, clusters, association, fps, tracks):
+    """Join a cluster that starts where and soon after another one ended. Its
+    start and end are its first and last floor point; a join must still pass
+    _compatible on tracks = (track_cam, first, last, conflict), whose first and
+    last are every row's: a track with no floor point is still alive."""
+    n = len(tracks[0])
     root = np.array([clusters.find(k) for k in range(n)])
     ids, frames, xy = merge_points(cameras, [root[r] for r in rows])
     if not len(ids):
@@ -239,7 +244,8 @@ def _handover(cameras, rows, clusters, n, association, fps):
         a, b = e[k], s[k]
         if a in used_end or b in used_start:
             continue
-        if clusters.find(cid[a]) == clusters.find(cid[b]):
+        ra, rb = clusters.find(cid[a]), clusters.find(cid[b])
+        if ra == rb or not _compatible(clusters.members[ra], clusters.members[rb], *tracks):
             continue
         used_end.add(a)
         used_start.add(b)
