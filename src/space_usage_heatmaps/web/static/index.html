@@ -171,16 +171,6 @@ dd { margin: 0; text-align: right; }
 "use strict";
 const camera = document.body.dataset.camera;
 const hasFused = document.body.dataset.fused === "1";
-const UNITS = { dwell: "person-seconds", passage: "people" };
-const NOTES = {
-  live: "Live layer: 60 s half-life, held in memory only and never stored. " +
-    "Cells with fewer than 5 distinct people in the last 2 minutes read as empty.",
-  slot: "Slot layer: cells with fewer than 5 distinct people read as empty.",
-  fused: "Fused scene layer: every camera's grid of this scene on one floor. Where cameras " +
-    "overlap, each cell is a weighted average of the cameras that cover it, so a person seen " +
-    "by several cameras is counted once. From an evaluation export of the whole video; cells " +
-    "with fewer than 5 distinct people read as empty.",
-};
 const EMPTY = {
   live: "No cell reached 5 distinct people in the last 2 minutes.",
   slot: "No cell reached 5 distinct people in this slot.",
@@ -189,7 +179,6 @@ const EMPTY = {
 const $ = (id) => document.getElementById(id);
 const desktop = window.matchMedia("(min-width: 960px)");
 const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false };
-const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 const timeFmt = (t) => new Date(t * 1000).toISOString().slice(11, 19) + " UTC";
 const cameraEl = $("camera");
 cameraEl.textContent = camera;
@@ -234,6 +223,54 @@ function colourScale(grid) {
 }
 // colour-scale:end
 
+// legend-state:begin
+const UNITS = { dwell: "person-seconds", passage: "people" };
+const NOTES = {
+  live: "Live layer: 60 s half-life, held in memory only and never stored. " +
+    "Cells with fewer than 5 distinct people in the last 2 minutes read as empty.",
+  slot: "Slot layer: cells with fewer than 5 distinct people read as empty.",
+  fused: "Fused scene layer: every camera's grid of this scene on one floor. Where cameras " +
+    "overlap, each cell is a weighted average of the cameras that cover it, so a person seen " +
+    "by several cameras is counted once. From an evaluation export of the whole video; cells " +
+    "with fewer than 5 distinct people read as empty.",
+};
+const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
+
+// The legend and summary texts, by element id, for the data shown. With no data
+// every number reads as a dash: an empty map never keeps the previous map's numbers.
+function legendState(d, layer, source) {
+  const unit = UNITS[layer];
+  const out = {
+    "legend-title": layer === "dwell" ? "Dwell (person-seconds)" : "Passage (people)",
+    "layer-note": NOTES[source],
+  };
+  if (!d) {
+    for (const id of ["legend-min", "legend-max", "sum-total", "sum-cells", "sum-max", "sum-cell",
+      "sum-time", "sum-cameras", "sum-fusion"]) out[id] = "-";
+    out["legend-unit"] = "";
+    return out;
+  }
+  const [ny, nx] = d.shape;
+  const { max, cap, above, cells, total } = colourScale(d[layer]);
+  out["legend-min"] = "0";
+  out["legend-max"] = above ? `${fmt.format(cap)} (p99)` : fmt.format(max);
+  out["legend-unit"] = above
+    ? `Colour scale in ${unit} per cell, capped at the 99th percentile of the cells above zero; ` +
+      `${above} ${above === 1 ? "cell" : "cells"} above it drawn at full colour`
+    : `Colour scale in ${unit} per cell, 0 to the highest cell shown`;
+  out["sum-total"] = `${fmt.format(total)} ${unit}`;
+  out["sum-cells"] = `${cells} of ${nx * ny}`;
+  out["sum-max"] = `${fmt.format(max)} ${unit}`;
+  out["sum-cell"] = `${d.cell_m} m`;
+  out["sum-time"] = d.label;
+  return out;
+}
+// legend-state:end
+
+function showLegend(d) {
+  for (const [id, text] of Object.entries(legendState(d, state.layer, state.source))) $(id).textContent = text;
+}
+
 function draw() {
   const canvas = $("map"), wrap = $("map-wrap"), d = state.data;
   const dpr = window.devicePixelRatio || 1;
@@ -243,7 +280,11 @@ function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
   $("empty-note").hidden = true;
-  if (!d) return;
+  showLegend(d);
+  if (!d) {
+    canvas.setAttribute("aria-label", "Occupancy heatmap: no data");
+    return;
+  }
   const [ny, nx] = d.shape, cell = d.cell_m, [ox, oy] = d.origin;
   wrap.style.setProperty("--map-aspect", `${nx + 13} / ${ny + 10}`); // the map and its axes, on narrow screens
   const pad = { l: 44, b: 32, t: 8, r: 8 };
@@ -256,7 +297,7 @@ function draw() {
   }
   const grid = d[state.layer];
   const stops = ["--ramp-0", "--ramp-1", "--ramp-2", "--ramp-3"].map((v) => hexRgb(cssVar(v)));
-  const { max, cap, above, cells, total } = colourScale(grid);
+  const { max, cap, cells } = colourScale(grid);
   $("empty-note").hidden = cells > 0;
   $("empty-note").textContent = EMPTY[state.source];
   ctx.fillStyle = cssVar("--floor");
@@ -292,18 +333,6 @@ function draw() {
   ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText("y (m)", 0, 0); ctx.restore();
 
   const unit = UNITS[state.layer];
-  $("legend-title").textContent = state.layer === "dwell" ? "Dwell (person-seconds)" : "Passage (people)";
-  $("legend-max").textContent = above ? `${fmt.format(cap)} (p99)` : fmt.format(max);
-  $("legend-unit").textContent = above
-    ? `Colour scale in ${unit} per cell, capped at the 99th percentile of the cells above zero; ` +
-      `${above} ${above === 1 ? "cell" : "cells"} above it drawn at full colour`
-    : `Colour scale in ${unit} per cell, 0 to the highest cell shown`;
-  $("sum-total").textContent = `${fmt.format(total)} ${unit}`;
-  $("sum-cells").textContent = `${cells} of ${nx * ny}`;
-  $("sum-max").textContent = `${fmt.format(max)} ${unit}`;
-  $("sum-cell").textContent = `${cell} m`;
-  $("sum-time").textContent = d.label;
-  $("layer-note").textContent = NOTES[state.source];
   canvas.setAttribute("aria-label",
     `Heatmap of ${unit} over a ${fmt.format(nx * cell)} by ${fmt.format(ny * cell)} m floor grid: ` +
     `${cells} cells above zero, highest ${fmt.format(max)} ${unit}`);

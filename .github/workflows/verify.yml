@@ -22,6 +22,10 @@ jobs:
           fetch-depth: 0
       # verify.sh needs uv once there is a pyproject.toml.
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      # The viewer's JavaScript tests run in node; with CI set they fail without it.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
       # One gate: scripts/verify.sh decides what "verified" means here.
       - run: ./scripts/verify.sh
       # Secret scan of the commits this run brings in. --redact keeps values

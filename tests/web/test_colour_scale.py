@@ -4,26 +4,13 @@ A few very hot cells must not wash out the rest of the map: the scale is capped
 at the 99th percentile (nearest rank) of the cells above zero, and the cells
 above the cap are counted for the legend."""
 
-import json
-import re
-import shutil
-import subprocess
+from tests.web.page_js import js, needs_node, run_js
 
-import pytest
-
-from space_usage_heatmaps.web.server import PAGE
-
-NODE = shutil.which("node")
-pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
+pytestmark = needs_node
 
 
 def colour_scale(grid):
-    page = PAGE.read_text()
-    block = re.search(r"// colour-scale:begin\n(.*?)// colour-scale:end", page, re.S)
-    assert block, "index.html has no colourScale block between the colour-scale markers"
-    script = f"{block.group(1)}\nconsole.log(JSON.stringify(colourScale({json.dumps(grid)})));"
-    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
-    return json.loads(out.stdout)
+    return run_js(["colour-scale"], f"colourScale({js(grid)})")
 
 
 def test_cap_is_the_99th_percentile_of_the_cells_above_zero():
