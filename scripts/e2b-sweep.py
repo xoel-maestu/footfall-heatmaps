@@ -7,7 +7,8 @@ camera, per-camera recipe and fusion of configs/e2b-association.yaml from the
 cached tracks (CPU only). Each variant is scored against the baseline (every
 camera track its own global id) with the paired block bootstrap of mc-IDF1
 (30 s blocks, 1000 resamples). The passage side effect is scored on
-the whole run only (point values): its EMD makes the bootstrap slow. A1-A3 first; A4 adds the handover to the best
+the whole run only (point values): its EMD makes the bootstrap slow.
+A1-A3 first; A4 adds the handover to the best
 of them by pooled mc-IDF1. The selection rule is the pre-registered one: the
 variant with the highest pooled mc-IDF1 among those the acceptance rule
 accepts (CI of the delta excludes 0, delta >= .01).
