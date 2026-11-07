@@ -11,6 +11,9 @@ GET /api/slots?camera=&from=&to=
                        or epoch seconds, clamped to [0, END_OF_TIME]
 GET /api/slots/latest?camera=
                        {"start": the newest persisted slot start, or null}
+GET /api/fused         the fused floor map of a scene's cameras (serve --fused, an
+                       export of eval --cameras), k-suppressed again here (R5); 404
+                       without one
 """
 
 import html
@@ -23,7 +26,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+import numpy as np
+
 from space_usage_heatmaps.occupancy.application.read_slots import read_slots
+from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, suppress
 from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
 PAGE = Path(__file__).parent / "static" / "index.html"
@@ -140,10 +146,23 @@ def slots_payload(camera_id, spec, slots):
     }
 
 
-def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time):
-    """A ThreadingHTTPServer for one camera; live is a LiveSource or None."""
+def fused_payload(export, k=K_MIN_PEOPLE):
+    """The export with both layers suppressed below k, whatever the file says."""
+    dwell, passage = suppress(np.asarray(export["dwell"]), np.asarray(export["passage"]), k)
+    return export | {"k": k, "dwell": _grid(dwell), "passage": _grid(passage)}
 
-    page = PAGE.read_text().replace("__CAMERA__", html.escape(camera_id)).encode()
+
+def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time, fused=None):
+    """A ThreadingHTTPServer for one camera; live is a LiveSource or None;
+    fused, an eval --cameras export (dict) of a scene's fused map, or None."""
+
+    page = (
+        PAGE.read_text()
+        .replace("__CAMERA__", html.escape(camera_id))
+        .replace("__FUSED__", "0" if fused is None else "1")
+        .encode()
+    )
+    fused_body = None if fused is None else fused_payload(fused)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -151,6 +170,10 @@ def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time
             query = {k: v[-1] for k, v in parse_qs(url.query).items()}
             if url.path in ("/", "/index.html"):
                 return self._send(200, "text/html; charset=utf-8", page)
+            if url.path == "/api/fused":
+                if fused_body is None:
+                    return self._json(404, {"error": "no fused map: start serve with --fused"})
+                return self._json(200, fused_body)
             if url.path not in ("/api/live", "/api/slots", "/api/slots/latest"):
                 return self._json(404, {"error": "not found"})
             if query.get("camera") != camera_id:

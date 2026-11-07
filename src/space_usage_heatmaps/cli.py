@@ -169,6 +169,19 @@ SUITES = ("e1-final",)
 
 
 def run_eval(args):
+    if args.cameras:
+        if args.source or args.suite or args.dataset:
+            print("space-usage: error: --cameras goes with --config only", file=sys.stderr)
+            return 2
+        if bool(args.scene) == bool(args.split):
+            print("space-usage: error: --cameras needs --scene or --split", file=sys.stderr)
+            return 2
+        return run_eval_fusion(args)
+    if not (args.source or args.config or args.suite):
+        print(
+            "space-usage: error: one of --source, --config, --suite or --cameras", file=sys.stderr
+        )
+        return 2
     if args.suite:
         from space_usage_heatmaps.e1_final import run_e1_final
 
@@ -220,9 +233,22 @@ BASELINE_MISSING = (
 
 
 def load_config(path):
-    """The pipeline recipe of a config; its run section is space-usage run's."""
+    """The pipeline recipe of a config; its run section is space-usage run's,
+    its fusion section eval --cameras' (load_fusion)."""
     d = yaml.safe_load(Path(path).read_text())
-    return RunConfig.from_mapping({k: v for k, v in d.items() if k != "run"})
+    return RunConfig.from_mapping({k: v for k, v in d.items() if k not in ("run", "fusion")})
+
+
+def load_fusion(path):
+    """A config's fusion section: weighting, power (.inf allowed), zone_m."""
+    from space_usage_heatmaps.occupancy.domain.fusion import Fusion
+
+    d = (yaml.safe_load(Path(path).read_text()) or {}).get("fusion")
+    if not isinstance(d, dict):
+        raise ValueError(f"config {path}: no fusion section (weighting, power, zone_m)")
+    if unknown := sorted(set(d) - {"weighting", "power", "zone_m"}):
+        raise ValueError(f"config {path}: unknown fusion keys {unknown}")
+    return Fusion(**d)
 
 
 @dataclass(frozen=True)
@@ -377,7 +403,8 @@ def start_serve(args):
     settings = load_run_settings(args.config)
     spec = GridSpec.covering(*settings.extent_m, cell_m=settings.cell_m)
     live = LiveSource() if args.source else None
-    server = make_server(args.host, args.port, settings.camera_id, spec, args.db, live)
+    fused = json.loads(Path(args.fused).read_text()) if args.fused else None
+    server = make_server(args.host, args.port, settings.camera_id, spec, args.db, live, fused=fused)
     if not _is_loopback(args.host):
         print(
             f"space-usage serve: warning: --host {args.host} opens the page and the live layer "
@@ -443,13 +470,14 @@ def cache_key(c):
     return key + _params_suffix(c.tracker_params) if c.tracker_params else key
 
 
-def detection_cache_key(c):
+def detection_cache_key(c, stride=1):
     """Directory of a detector recipe's cached detections (detection_cache):
     every tracker, stride and higher score threshold of that recipe replays
-    them, so they hold every frame at the cache's score floor."""
+    them, so they hold every frame at the cache's score floor. With a stride,
+    those of every stride-th frame only, for a camera without every-frame ones."""
     from space_usage_heatmaps.perception.infrastructure.container import cache_params
 
-    key = f"{c.detector}-{c.input_size}-{c.engine}-stride1"
+    key = f"{c.detector}-{c.input_size}-{c.engine}-stride{stride}"
     params = cache_params(c.detector, c.detector_params)
     return key + _params_suffix(params) if params else key
 
@@ -482,7 +510,10 @@ def pipeline_track_source(config, reader):
     tracker on each video and the skipped frames filled."""
     import numpy as np
 
-    from space_usage_heatmaps.evaluation.infrastructure.detection_cache import CachedDetections
+    from space_usage_heatmaps.evaluation.infrastructure.detection_cache import (
+        CachedDetections,
+        StridedDetections,
+    )
     from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
         PipelineDetections,
         PipelineTrackSource,
@@ -492,16 +523,19 @@ def pipeline_track_source(config, reader):
 
     cached = container.cache_params(config.detector, config.detector_params)
 
-    def detection_of(scene, camera):
-        return container.build_detection(
-            reader.video(scene, camera),
-            config.detector,
-            config.input_size,
-            1,
-            data_dir() / "models",
-            params=cached,
-            engine=config.engine,
-        )
+    def detection_at(stride):
+        def detection_of(scene, camera):
+            return container.build_detection(
+                reader.video(scene, camera),
+                config.detector,
+                config.input_size,
+                stride,
+                data_dir() / "models",
+                params=cached,
+                engine=config.engine,
+            )
+
+        return detection_of
 
     def tracker_of(scene, camera):
         return container.build_tracker(
@@ -523,12 +557,19 @@ def pipeline_track_source(config, reader):
             "homography_sha256": hashlib.sha256(h.tobytes()).hexdigest()
         }
 
-    detections = CachedDetections(
-        PipelineDetections(detection_of),
-        data_dir() / "cache" / "detections" / detection_cache_key(config),
-        container.detection_metadata(config.detector, config.input_size, 1, cached, config.engine),
-        identity=video_identity,
-    )
+    def cache_at(stride):
+        return CachedDetections(
+            PipelineDetections(detection_at(stride)),
+            data_dir() / "cache" / "detections" / detection_cache_key(config, stride),
+            container.detection_metadata(
+                config.detector, config.input_size, stride, cached, config.engine
+            ),
+            identity=video_identity,
+        )
+
+    detections = cache_at(1)
+    if config.stride > 1:
+        detections = StridedDetections(detections, cache_at(config.stride))
     meta = container.pipeline_metadata(
         config.detector,
         config.tracker,
@@ -801,6 +842,179 @@ def run_eval_config(args):
     return 0
 
 
+# eval --cameras: the fused map (E2a) and the single-camera baseline it is compared to.
+FUSION_CONFIG = "configs/e2a-fusion.yaml"
+BASELINE_CONFIG = "configs/h5-best.yaml"
+# Spec 7 targets as recalibrated after iteration 0 (iterations.md), dwell at 0.5 m.
+TARGETS = {"mass_error": 0.10, "tvd": 0.30, "wape_zone": 0.30, "emd_m": 1.2}
+FUSION_TITLES = {
+    "full@joint": "every person, on the joint coverage of the fused cameras (E2a target)",
+    "visible@joint": "people at least one fused camera sees, on the joint coverage",
+    "full@anchor": "every person, on the baseline camera's coverage (E1 full@coverage)",
+    "visible@anchor": "people the baseline camera sees, on its coverage (E1 visible@coverage)",
+    "full@overlap": "every person, on cells two or more cameras cover (double counting)",
+}
+
+
+def _fusion_dict(f):
+    return {"weighting": f.weighting, "power": _inf(f.power), "zone_m": f.zone_m}
+
+
+def _inf(v):
+    return "inf" if isinstance(v, float) and math.isinf(v) else v
+
+
+def fused_export(scene, cameras, grid, fusion, config):
+    """The fused map of a whole video as the viewer shows it: k-suppressed (R5)."""
+    from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, suppress
+
+    dwell, passage = suppress(grid.dwell, grid.passage, K_MIN_PEOPLE)
+    spec = grid.spec
+    return {
+        "scene": scene,
+        "cameras": list(cameras),
+        "config": config,
+        "fusion": _fusion_dict(fusion),
+        "period": "the whole video",
+        "k": K_MIN_PEOPLE,
+        "cell_m": spec.cell_m,
+        "origin": [spec.origin_x, spec.origin_y],
+        "shape": [spec.ny, spec.nx],
+        "dwell": dwell.round(3).tolist(),
+        "passage": passage.round(3).tolist(),
+    }
+
+
+def _anchor_of(scene):
+    for pairs in SPLITS.values():
+        for s, camera in pairs:
+            if s == scene:
+                return camera
+    raise ValueError(f"scene {scene} is in no split: no single-camera baseline camera")
+
+
+def run_eval_fusion(args):
+    from types import SimpleNamespace
+
+    from space_usage_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
+
+    config_path = args.config or FUSION_CONFIG
+    compare_path = args.compare or BASELINE_CONFIG
+    fusion = load_fusion(config_path)
+    reader = NvidiaMtmcReader(data_dir())
+    scenes = SPLITS[args.split] if args.split else ((args.scene, _anchor_of(args.scene)),)
+    cameras = None if args.cameras == "all" else args.cameras.split(",")
+    names = [config_name(config_path), config_name(compare_path)]
+    configs = [load_config(config_path), load_config(compare_path)]
+    runs = [(c, track_source(c, reader)) for c in configs]
+    from concurrent.futures import ProcessPoolExecutor
+
+    with ProcessPoolExecutor(max(1, min(len(scenes), (os.cpu_count() or 2) // 2))) as pool:
+        r = evaluate_fusion(
+            reader,
+            scenes,
+            runs[0],
+            runs[1],
+            args.cell,
+            fusion,
+            args.resamples,
+            cameras=cameras,
+            map=pool.map,
+        )
+    where = f"split {args.split}" if args.split else f"scene {args.scene}"
+    print(
+        f"{r.dataset}  {where}  cell {r.cell_m} m  fusion {_fusion_dict(fusion)}  "
+        f"paired block bootstrap: {r.block_s:g} s blocks, {r.n_resamples} resamples, 95 % CI"
+    )
+    print(f"fused = {names[0]}, single = {names[1]}; delta = fused - single, paired")
+    for s in r.scenes:
+        print(
+            f"scene {s.scene}: cameras {', '.join(s.cameras)} fused ({len(s.cameras)}), "
+            f"single-camera baseline {s.anchor}; joint coverage {s.joint_cells} cells, overlap "
+            f"{s.overlap_cells}, baseline coverage {s.anchor_cells}; {s.samples} tracked boxes, "
+            f"{s.dropped} outside grid, {s.blocks} blocks; unseen by every fused camera "
+            f"{s.occlusion_joint:.3f} of the joint dwell, by the baseline camera "
+            f"{s.occlusion_anchor:.3f} of its own"
+        )
+    rows = [SimpleNamespace(scene=s.scene, camera=s.anchor, blocks=s.blocks) for s in r.scenes]
+    width = len("single") + 2
+    for truth, res in r.results.items():
+        print(f"\n{truth}: {FUSION_TITLES[truth]}")
+        print(
+            f"{'map':<{width}}{'scene':<10}{'layer':<9}{'blocks':>7}"
+            + "".join(f"{m:>22}" for m in METRICS)
+        )
+        for i, label in enumerate(("fused", "single")):
+            _rows(label, [sc[i] for sc in res.scenes], res.pooled[i], rows, width)
+        _rows("delta", res.delta_scenes, res.delta_pooled, rows, width)
+    if "full@overlap" in r.results:
+        e = r.results["full@overlap"].pooled[0]["dwell"]["mass_error"]
+        added = [s.sum_overlap_mass_error for s in r.scenes]
+        print(
+            "\noverlap mass error (dwell, every person, cells 2+ cameras cover): "
+            f"{_ci(e, 0).strip()} (target <= 0.10: {'met' if e.value <= 0.10 else 'missed'}); "
+            f"adding the cameras instead: {sum(added) / len(added):.3f}"
+        )
+    joint = r.results["full@joint"].pooled[0]["dwell"]
+    targets = {
+        m: {
+            "target": t,
+            "value": joint[m].value,
+            "met": joint[m].value is not None and joint[m].value <= t,
+        }
+        for m, t in TARGETS.items()
+    }
+    print(
+        "spec 7 targets on full@joint, fused dwell: "
+        + ", ".join(
+            f"{m} {v['value']:.3f} (<= {v['target']:g}: {'met' if v['met'] else 'missed'})"
+            for m, v in targets.items()
+        )
+    )
+    tag = f"-{args.split}-" if args.split else f"-s{args.scene}-"
+    report = {
+        "dataset": r.dataset,
+        "split": args.split,
+        "scene": args.scene,
+        "cell_m": r.cell_m,
+        "block_s": r.block_s,
+        "n_resamples": r.n_resamples,
+        "level": 0.95,
+        "interval": INTERVAL,
+        "source_sha256": source_sha256(),
+        "fusion": _fusion_dict(fusion),
+        "configs": {"fused": names[0], "single": names[1]},
+        "scenes": [vars(s) | {"cameras": list(s.cameras)} for s in r.scenes],
+        "targets": targets,
+        "results": {
+            truth: {
+                "scenes": {
+                    s.scene: {
+                        "fused": _estimates(t[0]),
+                        "single": _estimates(t[1]),
+                        "delta": _estimates(d),
+                    }
+                    for s, t, d in zip(r.scenes, res.scenes, res.delta_scenes, strict=True)
+                },
+                "pooled": {
+                    "fused": _estimates(res.pooled[0]),
+                    "single": _estimates(res.pooled[1]),
+                    "delta": _estimates(res.delta_pooled),
+                },
+            }
+            for truth, res in r.results.items()
+        },
+    }
+    path = write_report(
+        Path("reports") / f"fusion-{'-vs-'.join(names)}{tag}{r.cell_m}m.json", report
+    )
+    for s in r.scenes:
+        export = fused_export(s.scene, s.cameras, r.fused[s.scene], fusion, names[0])
+        write_report(Path("reports") / f"fused-s{s.scene}-{names[0]}.json", export)
+    print(f"\nreport {path}; fused maps reports/fused-s<scene>-{names[0]}.json (k={5})")
+    return 0
+
+
 # External datasets (spec 5): evaluation only, never tuned on; each one's
 # licence is in docs/licenses.md.
 EXTERNAL = ("wildtrack", "caviar", "mot17")
@@ -1032,7 +1246,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="space-usage")
     sub = parser.add_subparsers(dest="command", required=True)
     ev = sub.add_parser("eval", help="score a heatmap source against ground truth")
-    how = ev.add_mutually_exclusive_group(required=True)
+    how = ev.add_mutually_exclusive_group()
     how.add_argument("--source", choices=SOURCES, help="oracle: ground truth as the prediction")
     how.add_argument("--config", help="run configuration, e.g. configs/iter0.yaml")
     how.add_argument(
@@ -1040,12 +1254,19 @@ def main(argv=None):
         choices=SUITES,
         help="e1-final: the E1 report of configs/h5-best.yaml, reports/e1-final.json and .md",
     )
-    ev.add_argument("--scene", help="with --source: scene id, e.g. 071")
+    ev.add_argument(
+        "--cameras",
+        help=f"all, or ids separated by commas: fuse a scene's cameras (--scene or --split; "
+        f"--config defaults to {FUSION_CONFIG}, --compare to {BASELINE_CONFIG})",
+    )
+    ev.add_argument("--scene", help="with --source or --cameras: scene id, e.g. 071")
     ev.add_argument("--camera", help="with --source: camera id, e.g. 645, or all")
     ev.add_argument(
         "--foot-point", choices=FOOT_POINTS, help="with --source gt-boxes: default bottom"
     )
-    ev.add_argument("--split", choices=sorted(SPLITS), help="with --config: scenes to score")
+    ev.add_argument(
+        "--split", choices=sorted(SPLITS), help="with --config or --cameras: scenes to score"
+    )
     ev.add_argument("--compare", help="with --config: second configuration, paired difference")
     ev.add_argument(
         "--dataset",
@@ -1067,6 +1288,9 @@ def main(argv=None):
     se.add_argument("--db", required=True, help="SQLite file of the slots")
     se.add_argument("--source", help="video file or rtsp:// stream to record in this process")
     se.add_argument("--start", help="video file: UTC start, e.g. 2026-11-06T09:10:00Z")
+    se.add_argument(
+        "--fused", help="a fused scene map of eval --cameras (reports/fused-s<scene>-<config>.json)"
+    )
     se.add_argument("--host", default="127.0.0.1", help="address to bind (default 127.0.0.1)")
     se.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)

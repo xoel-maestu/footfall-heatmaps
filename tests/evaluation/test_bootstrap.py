@@ -185,3 +185,14 @@ def test_each_metric_is_clipped_to_its_own_domain(metric, draws, bounds):
     assert (unclipped.lo < lo) if lo is not None else (unclipped.hi > hi)
     assert (e.lo == lo) if lo is not None else (e.hi == hi)
     assert e.value == draws[0]
+
+
+def test_scenes_can_be_scored_in_parallel_with_the_same_result():
+    from concurrent.futures import ThreadPoolExecutor
+
+    scenes = [scene(0, other_walk), scene(1, doubled)]
+    serial = block_bootstrap(scenes, n_resamples=50, seed=3)
+    with ThreadPoolExecutor(2) as pool:
+        parallel = block_bootstrap(scenes, n_resamples=50, seed=3, map=pool.map)
+
+    assert parallel == serial
