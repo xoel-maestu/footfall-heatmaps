@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import yaml
 
@@ -169,6 +170,20 @@ SUITES = ("e1-final",)
 
 
 def run_eval(args):
+    if args.metric == "mc-idf1":
+        if not args.cameras:
+            print("space-usage: error: --metric mc-idf1 goes with --cameras", file=sys.stderr)
+            return 2
+        if args.source or args.suite or args.compare:
+            print("space-usage: error: --metric mc-idf1 takes --config only", file=sys.stderr)
+            return 2
+        if args.dataset not in (None, "wildtrack"):
+            print("space-usage: error: --metric mc-idf1 takes --dataset wildtrack", file=sys.stderr)
+            return 2
+        if args.dataset is None and bool(args.scene) == bool(args.split):
+            print("space-usage: error: --cameras needs --scene or --split", file=sys.stderr)
+            return 2
+        return run_eval_identity(args)
     if args.cameras:
         if args.source or args.suite or args.dataset:
             print("space-usage: error: --cameras goes with --config only", file=sys.stderr)
@@ -234,9 +249,11 @@ BASELINE_MISSING = (
 
 def load_config(path):
     """The pipeline recipe of a config; its run section is space-usage run's,
-    its fusion section eval --cameras' (load_fusion)."""
+    its fusion section eval --cameras' (load_fusion), its association section
+    eval --metric mc-idf1's (load_association)."""
     d = yaml.safe_load(Path(path).read_text())
-    return RunConfig.from_mapping({k: v for k, v in d.items() if k not in ("run", "fusion")})
+    sections = ("run", "fusion", "association")
+    return RunConfig.from_mapping({k: v for k, v in d.items() if k not in sections})
 
 
 def load_fusion(path):
@@ -249,6 +266,20 @@ def load_fusion(path):
     if unknown := sorted(set(d) - {"weighting", "power", "zone_m"}):
         raise ValueError(f"config {path}: unknown fusion keys {unknown}")
     return Fusion(**d)
+
+
+def load_association(path):
+    """A config's association section (occupancy.domain.association.Association)."""
+    from dataclasses import fields as dataclass_fields
+
+    from space_usage_heatmaps.occupancy.domain.association import Association
+
+    d = (yaml.safe_load(Path(path).read_text()) or {}).get("association")
+    if not isinstance(d, dict):
+        raise ValueError(f"config {path}: no association section (method, gate_m, ...)")
+    if unknown := sorted(set(d) - {f.name for f in dataclass_fields(Association)}):
+        raise ValueError(f"config {path}: unknown association keys {unknown}")
+    return Association(**d)
 
 
 @dataclass(frozen=True)
@@ -894,8 +925,6 @@ def _anchor_of(scene):
 
 
 def run_eval_fusion(args):
-    from types import SimpleNamespace
-
     from space_usage_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
 
     config_path = args.config or FUSION_CONFIG
@@ -1012,6 +1041,186 @@ def run_eval_fusion(args):
         export = fused_export(s.scene, s.cameras, r.fused[s.scene], fusion, names[0])
         write_report(Path("reports") / f"fused-s{s.scene}-{names[0]}.json", export)
     print(f"\nreport {path}; fused maps reports/fused-s<scene>-{names[0]}.json (k={5})")
+    return 0
+
+
+# eval --cameras --metric mc-idf1: cross-camera ids on the floor (E2b).
+ASSOCIATION_CONFIG = "configs/e2b-association.yaml"
+# WILDTRACK's per-camera recipe: the E1 one at stride 1, as phase 8 scored it.
+# Its frames are 2 fps; stride 2 (a GPU budget for ~150 NVIDIA videos) would
+# detect once a second.
+WILDTRACK_RECIPE = BASELINE_CONFIG
+WILDTRACK_BLOCK_S = 10.0  # 400 frames at 2 fps: 20 blocks of 10 s (30 s would give 7)
+# Pre-registered E2b target (reports/iterations-phase10.md), pooled mc-IDF1.
+MC_IDF1_TARGET = None
+MC_IDF1_MIN_DELTA = 0.01  # spec 8 acceptance: CI excludes 0 and |delta| >= .01
+IDENTITY_LABELS = ("associated", "baseline")
+
+
+def _assoc_dict(a):
+    return {f: getattr(a, f) for f in a.__dataclass_fields__}
+
+
+def run_eval_identity(args):
+    from concurrent.futures import ProcessPoolExecutor
+
+    from space_usage_heatmaps.evaluation.application.evaluate_config import BLOCK_S
+    from space_usage_heatmaps.evaluation.application.evaluate_identity import evaluate_identity
+    from space_usage_heatmaps.evaluation.infrastructure.floor_identity import floor_identity
+    from space_usage_heatmaps.occupancy.domain.association import NONE
+
+    config_path = args.config or ASSOCIATION_CONFIG
+    fusion, association = load_fusion(config_path), load_association(config_path)
+    name = config_name(config_path)
+    if args.dataset == "wildtrack":
+        from space_usage_heatmaps.evaluation.infrastructure import wildtrack_reader
+
+        reader = wildtrack_reader.WildtrackReader(data_dir())
+        scenes, recipe_path, block_s = [wildtrack_reader.SCENE], WILDTRACK_RECIPE, WILDTRACK_BLOCK_S
+        where, tag = "all cameras", "wildtrack"
+    else:
+        reader = NvidiaMtmcReader(data_dir())
+        scenes = [s for s, _ in SPLITS[args.split]] if args.split else [args.scene]
+        recipe_path, block_s = config_path, BLOCK_S
+        where = f"split {args.split}" if args.split else f"scene {args.scene}"
+        tag = args.split or f"s{args.scene}"
+    config = load_config(recipe_path)
+    source = track_source(config, reader)
+    cameras = None if args.cameras == "all" else args.cameras.split(",")
+    with ProcessPoolExecutor(max(1, min(len(scenes), (os.cpu_count() or 2) // 2))) as pool:
+        r = evaluate_identity(
+            reader,
+            scenes,
+            (config, source),
+            fusion,
+            dict(zip(IDENTITY_LABELS, (association, NONE), strict=True)),
+            floor_identity,
+            cell=args.cell,
+            block_s=block_s,
+            n_resamples=args.resamples,
+            cameras=cameras,
+            oracle=True,
+            map=pool.map,
+        )
+    print(
+        f"{r.dataset}  {where}  multi-camera IDF1 on the floor: TrackEval identity, floor "
+        f"distance gate {r.gate_m} m; truth: people at least one camera sees, on the joint "
+        f"coverage; paired block bootstrap: {r.block_s:g} s blocks, {r.n_resamples} "
+        "resamples, 95 % CI"
+    )
+    print(
+        f"association {_assoc_dict(association)}; per-camera recipe {config_name(recipe_path)}"
+        "\nassociated = its global ids; baseline = every camera track its own id; oracle = "
+        "camera tracks joined by their true person (a reference: it reads the truth)"
+    )
+    for s in r.scenes:
+        ids = ", ".join(f"{k} {v}" for k, v in s.global_ids.items())
+        print(
+            f"scene {s.scene}: cameras {', '.join(s.cameras)} ({len(s.cameras)}); "
+            f"{s.truth_people} people, {s.truth_points} truth points on {s.joint_cells} "
+            f"joint cells; {s.camera_tracks} camera tracks; global ids: {ids}"
+        )
+    print(f"\n{'ids':<12}{'scene':<12}{'mc-IDF1':>24}{'IDP':>8}{'IDR':>8}")
+    for i, label in enumerate(r.names):
+        for k, s in enumerate(r.scenes):
+            c = s.counts[label]
+            print(
+                f"{label:<12}{s.scene:<12}{_ci(r.idf1.scenes[k][i], 24)}"
+                f"{c['idp']:>8.3f}{c['idr']:>8.3f}"
+            )
+        print(f"{label:<12}{'pooled':<12}{_ci(r.idf1.pooled[i], 24)}")
+    for k, s in enumerate(r.scenes):
+        print(f"{'delta':<12}{s.scene:<12}{_ci(r.idf1.delta_scenes[k], 24)}")
+    d = r.idf1.delta_pooled
+    print(f"{'delta':<12}{'pooled':<12}{_ci(d, 24)}  (delta associated - baseline, paired)")
+    accepted = d.lo is not None and (d.lo > 0 or d.hi < 0) and abs(d.value) >= MC_IDF1_MIN_DELTA
+    pooled = r.idf1.pooled[0].value
+    met = None if MC_IDF1_TARGET is None else pooled >= MC_IDF1_TARGET
+    print(
+        f"acceptance (CI excludes 0, |delta| >= {MC_IDF1_MIN_DELTA}): "
+        + ("accepted" if accepted else "not accepted")
+        + "; target "
+        + (
+            "not registered"
+            if MC_IDF1_TARGET is None
+            else f"mc-IDF1 >= {MC_IDF1_TARGET:.3f}: {'met' if met else 'missed'}"
+        )
+    )
+    print(
+        "\npassage side effect: distinct global ids per cell (associated) against the E2a "
+        "fused map; both carry the E2a fused dwell"
+    )
+    rows = [SimpleNamespace(scene=s.scene, camera="joint", blocks=s.blocks) for s in r.scenes]
+    for truth, res in r.passage.items():
+        print(f"{truth}:")
+        for i, label in enumerate(("global", "e2a")):
+            _rows(label, [sc[i] for sc in res.scenes], res.pooled[i], rows, 8)
+        _rows("delta", res.delta_scenes, res.delta_pooled, rows, 8)
+    dwell_delta = [
+        e.value
+        for res in r.passage.values()
+        for e in res.delta_pooled["dwell"].values()
+        if e.value is not None
+    ]
+    print(f"dwell unchanged by ids: {all(v == 0 for v in dwell_delta)}")
+
+    def est(e):
+        return vars(e)
+
+    report = {
+        "dataset": r.dataset,
+        "where": where,
+        "metric": "mc-idf1",
+        "gate_m": r.gate_m,
+        "cell_m": r.cell_m,
+        "block_s": r.block_s,
+        "n_resamples": r.n_resamples,
+        "level": 0.95,
+        "interval": INTERVAL,
+        "truth": "people at least one fused camera sees, on the joint coverage",
+        "source_sha256": source_sha256(),
+        "config": name,
+        "recipe": config_name(recipe_path),
+        "association": _assoc_dict(association),
+        "fusion": _fusion_dict(fusion),
+        "scenes": [vars(s) | {"cameras": list(s.cameras)} for s in r.scenes],
+        "idf1": {
+            "scenes": {
+                s.scene: {label: est(r.idf1.scenes[k][i]) for i, label in enumerate(r.names)}
+                | {"delta": est(r.idf1.delta_scenes[k])}
+                for k, s in enumerate(r.scenes)
+            },
+            "pooled": {label: est(r.idf1.pooled[i]) for i, label in enumerate(r.names)}
+            | {"delta": est(d)},
+        },
+        "acceptance": {"min_delta": MC_IDF1_MIN_DELTA, "accepted": bool(accepted)},
+        "target": {"value": MC_IDF1_TARGET, "met": met},
+        "dwell_unchanged": all(v == 0 for v in dwell_delta),
+        "passage": {
+            truth: {
+                "scenes": {
+                    s.scene: {
+                        "global": _estimates(t[0]),
+                        "e2a": _estimates(t[1]),
+                        "delta": _estimates(dt),
+                    }
+                    for s, t, dt in zip(r.scenes, res.scenes, res.delta_scenes, strict=True)
+                },
+                "pooled": {
+                    "global": _estimates(res.pooled[0]),
+                    "e2a": _estimates(res.pooled[1]),
+                    "delta": _estimates(res.delta_pooled),
+                },
+            }
+            for truth, res in r.passage.items()
+        },
+    }
+    path = write_report(Path("reports") / f"mc-idf1-{name}-{tag}-{r.cell_m}m.json", report)
+    for s in r.scenes:
+        export = fused_export(s.scene, s.cameras, r.fused[s.scene], fusion, name)
+        export |= {"passage_ids": "global", "association": _assoc_dict(association)}
+        write_report(Path("reports") / f"fused-s{s.scene}-{name}.json", export)
+    print(f"\nreport {path}; fused maps reports/fused-s<scene>-{name}.json (global-id passage)")
     return 0
 
 
@@ -1272,6 +1481,13 @@ def main(argv=None):
         "--dataset",
         choices=EXTERNAL,
         help="with --config: an external evaluation-only dataset instead of --split",
+    )
+    ev.add_argument(
+        "--metric",
+        choices=("heatmap", "mc-idf1"),
+        default="heatmap",
+        help=f"with --cameras: mc-idf1 scores cross-camera ids on the floor (E2b; --config "
+        f"defaults to {ASSOCIATION_CONFIG}; --dataset wildtrack for WILDTRACK)",
     )
     ev.add_argument("--resamples", type=int, default=1000, help=argparse.SUPPRESS)
     ev.add_argument("--cell", type=float, choices=[0.25, 0.5, 1.0], default=0.5)
