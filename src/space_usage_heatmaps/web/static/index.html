@@ -419,13 +419,9 @@ const WEIGHTING = {
 };
 
 // passage-ids:begin
-// What the fused passage layer counts: cross-camera ids (eval --metric mc-idf1
-// export) or the cameras' own track counts mixed by the overlap weights.
-function passageIds(kind) {
-  return kind === "global"
-    ? "distinct cross-camera ids (floor co-location)"
-    : "each camera's own tracks, weighted";
-}
+// What the fused passage layer counts: E2a's per-camera track counts mixed by
+// the overlap weights. serve --fused refuses a global-id passage (less accurate).
+const PASSAGE_IDS = "each camera's ids, weighted as in E2a";
 // passage-ids:end
 
 async function loadFused() {
@@ -435,7 +431,7 @@ async function loadFused() {
     state.data = { ...d, label: d.period };
     $("sum-cameras").textContent = `${d.cameras.length} (${d.cameras.join(", ")})`;
     $("sum-fusion").textContent = WEIGHTING[d.fusion.weighting](d.fusion);
-    $("sum-passage-ids").textContent = passageIds(d.passage_ids);
+    $("sum-passage-ids").textContent = PASSAGE_IDS;
     setStatus(`Fused map of scene ${d.scene}, ${d.cameras.length} cameras, ${d.period}`);
   } catch (e) {
     state.data = null;

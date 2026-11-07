@@ -1224,7 +1224,10 @@ def run_eval_identity(args):
         export = fused_export(s.scene, s.cameras, r.fused[s.scene], fusion, name)
         export |= {"passage_ids": "global", "association": _assoc_dict(association)}
         write_report(Path("reports") / f"fused-s{s.scene}-{name}.json", export)
-    print(f"\nreport {path}; fused maps reports/fused-s<scene>-{name}.json (global-id passage)")
+    print(
+        f"\nreport {path}; fused maps reports/fused-s<scene>-{name}.json (global-id "
+        "passage: serve --fused refuses them, its passage layer is E2a)"
+    )
     return 0
 
 

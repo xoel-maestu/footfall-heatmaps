@@ -61,9 +61,6 @@ def test_a_map_with_no_cell_above_zero_shows_zeros_not_dashes():
     assert (s["sum-cells"], s["sum-max"]) == ("0 of 2", "0 person-seconds")
 
 
-def test_the_fused_passage_says_which_ids_it_counts():
-    ids = run_js(["passage-ids"], "[passageIds('global'), passageIds(undefined)]")
-    assert ids == [
-        "distinct cross-camera ids (floor co-location)",
-        "each camera's own tracks, weighted",
-    ]
+def test_the_fused_passage_says_it_counts_each_cameras_ids():
+    # serve --fused refuses a global-id passage: the layer is always E2a's.
+    assert run_js(["passage-ids"], "PASSAGE_IDS") == "each camera's ids, weighted as in E2a"

@@ -155,6 +155,11 @@ def fused_payload(export, k=K_MIN_PEOPLE):
 def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time, fused=None):
     """A ThreadingHTTPServer for one camera; live is a LiveSource or None;
     fused, an eval --cameras export (dict) of a scene's fused map, or None."""
+    if fused is not None and fused.get("passage_ids") == "global":
+        raise ValueError(
+            "the fused export's passage counts global ids (eval --metric mc-idf1), less "
+            "accurate than E2a's; serve the E2a fused export (eval --cameras) instead"
+        )
 
     page = (
         PAGE.read_text()
