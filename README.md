@@ -8,7 +8,9 @@ plan, never images or identities. Python, runs locally on a modest NVIDIA GPU.
 Camera 645 of scene 071 at 2x speed (`scripts/demo-gif.py`): the foot point of
 each person in the image, the same positions on the floor plan, and the dwell
 accumulated since the video started, shown only in cells at least 5 people
-have crossed. Synthetic scene: NVIDIA PhysicalAI-SmartSpaces, CC BY 4.0.
+have crossed. Synthetic scene, adapted (overlays, resized) from
+[NVIDIA PhysicalAI-SmartSpaces](https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces),
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## Results (E1, one camera)
 

@@ -11,7 +11,7 @@ Tracks come from the config's track source (the cache when it has them), so no
 detector runs. Usage:
 
     uv run --no-sync python scripts/demo-gif.py --scene 071 --camera 645 \\
-        --start 600 --seconds 12 --speed 2 --fps 10 --out docs/media/demo.gif
+        --start 602 --seconds 12 --speed 2 --fps 10 --out docs/media/demo.gif
 """
 
 import argparse
@@ -34,7 +34,7 @@ CAPTION = (
     "0.5 m cells, the camera's",
     "dwell since the video started (a cell shows once 5 people have been in it), the current "
     "positions and its field of view (outline). {speed:g}x speed.",
-    "Synthetic scene: NVIDIA PhysicalAI-SmartSpaces, CC BY 4.0.",
+    "Synthetic scene, adapted (overlays, resized) from NVIDIA PhysicalAI-SmartSpaces, CC BY 4.0.",
 )
 
 
