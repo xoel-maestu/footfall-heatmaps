@@ -426,3 +426,98 @@ def test_a_stride_prefers_every_frame_detections_when_they_exist(tmp_path, rows,
     assert [p.name for p in (data / "cache/detections").iterdir()] == [
         "yolox-s-640-onnx-cuda-stride1"
     ]
+
+
+def _cache_files(data):
+    """Every cache file under the data dir: path -> (bytes, mtime_ns)."""
+    return {
+        p: (p.read_bytes(), p.stat().st_mtime_ns)
+        for p in sorted((data / "cache").rglob("*"))
+        if p.is_file()
+    }
+
+
+def _recording_trackers(monkeypatch):
+    """The frames each fresh tracker is fed and the frame rate it is built with."""
+    fed, rates = [], []
+    real = container.build_tracker
+
+    def recording(tracker, frame_rate, *args, **kwargs):
+        rates.append(frame_rate)
+        t = real(tracker, frame_rate, *args, **kwargs)
+        update = t.update
+        t.update = lambda boxes, scores, i: fed.append(i) or update(boxes, scores, i)
+        return t
+
+    monkeypatch.setattr(container, "build_tracker", recording)
+    return fed, rates
+
+
+def test_a_subsampled_stride_keeps_every_kth_cached_stride_2_frame(tmp_path, rows, monkeypatch):
+    data, loaded = _tiny(tmp_path, rows, monkeypatch)
+    (tmp_path / "half.yaml").write_text(CONFIG.replace("stride: 1", "stride: 2"))
+    assert cli.main(["eval", "--config", "half.yaml", "--split", "tiny", "--resamples", "5"]) == 0
+    before = _cache_files(data)
+    fed, rates = _recording_trackers(monkeypatch)
+    half = cli.load_config("half.yaml")
+    six = cli.RunConfig(**{**vars(half), "stride": 6})
+    reader = cli.NvidiaMtmcReader(data)
+
+    cli.track_source(six, reader, detections_stride=2).tracks("001", "7")
+
+    assert fed == [0, 6]  # every third of the cached frames 0, 2, 4, 6, 8, 10
+    assert rates == [container.video_fps(reader.video("001", "7")) / 6]  # 30 / stride at 30 fps
+    assert len(loaded) == 1  # no detector ran
+    after = _cache_files(data)
+    assert {p: after[p] for p in before} == before  # nothing existing rewritten
+    key = cli.cache_key(six, detections_stride=2)
+    assert key not in {cli.cache_key(six), cli.cache_key(half)}
+    new = set(after) - set(before)
+    assert new == {data / "cache/tracks" / key / "scene_001_camera_7.npz"}
+    _, meta = _tracks(data, key)
+    assert meta["stride"] == 6 and meta["detections_stride"] == 2
+
+
+def test_a_subsampled_stride_reads_every_frame_detections_the_same_way(tmp_path, rows, monkeypatch):
+    data, loaded = _tiny(tmp_path, rows, monkeypatch)
+    assert _eval(tmp_path, "every", "") == 0
+    fed, rates = _recording_trackers(monkeypatch)
+    four = cli.RunConfig(**{**vars(cli.load_config("every.yaml")), "stride": 4})
+
+    cli.track_source(four, cli.NvidiaMtmcReader(data), detections_stride=2).tracks("001", "7")
+
+    assert fed == [0, 4, 8]  # every second stride-2 frame of the every-frame cache
+    assert len(loaded) == 1
+
+
+def test_a_subsampled_stride_never_runs_the_detector(tmp_path, rows, monkeypatch):
+    data, loaded = _tiny(tmp_path, rows, monkeypatch)
+    (tmp_path / "four.yaml").write_text(CONFIG.replace("stride: 1", "stride: 4"))
+    four = cli.load_config("four.yaml")
+    source = cli.track_source(four, cli.NvidiaMtmcReader(data), detections_stride=2)
+
+    try:
+        source.tracks("001", "7")
+    except OSError as e:
+        assert "no cached detections" in str(e)
+    else:
+        raise AssertionError("a camera without cached detections must fail")
+    assert loaded == [] and not (data / "cache/detections").exists()
+
+
+def test_a_subsampled_stride_is_a_multiple_of_the_cached_one(tmp_path):
+    five = cli.RunConfig(**{**vars(cli.load_config("configs/e2a-stride2.yaml")), "stride": 5})
+
+    try:
+        cli.track_source(five, None, detections_stride=2)
+    except ValueError as e:
+        assert "multiple" in str(e)
+    else:
+        raise AssertionError("stride 5 cannot subsample stride-2 detections")
+
+
+def test_the_cached_stride_itself_keeps_its_existing_cache():
+    two = cli.load_config("configs/e2a-stride2.yaml")
+
+    assert cli.cache_key(two, detections_stride=2) == cli.cache_key(two)
+    assert cli.cache_key(two) == "yolox-s-bytetrack-960-onnx-trt-stride2"
