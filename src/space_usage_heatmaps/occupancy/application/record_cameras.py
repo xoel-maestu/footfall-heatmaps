@@ -15,6 +15,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
+from space_usage_heatmaps.perception.application.track_video import fill_between
+from space_usage_heatmaps.perception.domain.frame import TrackedBoxes
 
 
 @dataclass
@@ -25,12 +27,39 @@ class CameraPipe:
     time_of: Callable  # frame -> UTC epoch seconds
     seconds: float  # dwell per tracked box: stride / fps
     heights: object = None  # auto-track: this camera's TrackHeights, made on its first frame
+    processed: int = 0  # frames of this camera through the detector so far
 
 
 def record_cameras(feed, detector, pipes, config, recorder, until=None, on_frame=None):
     """pipes: camera id -> CameraPipe; on_frame(camera id) after each processed
-    frame. How many frames ran, every camera together."""
+    frame. How many frames ran, every camera together.
+
+    With a stride, each camera's skipped frames get their boxes back as the
+    evaluation's fill_stride gives them (a box moves linearly to its next
+    processed box, or stays), each worth one source frame of dwell. So the
+    recorded dwell and passage are the evaluated recipe's. A camera's samples
+    lag one processed frame; its last one is flushed when the feed ends."""
+    stride = config.stride
+    pending = {}  # camera id -> (its last processed TrackedBoxes, the frame's time)
     count = 0
+
+    def emit(camera_id, a, b):
+        p, (boxes_a, t_a) = pipes[camera_id], a
+        frame_s = p.seconds / stride
+        for t in fill_between(boxes_a, b, stride):
+            k = t.frame_index - boxes_a.frame_index
+            xs, ys, _ = camera_floor_points(
+                p.cam,
+                t.boxes.reshape(-1, 4),
+                config.foot_point,
+                config.person_height_m,
+                config.min_implied_height_m,
+                t.track_ids,
+                np.full(len(t.track_ids), t.frame_index),
+                p.heights,
+            )
+            recorder.add(camera_id, t_a + k * frame_s, t.track_ids, xs, ys, frame_s)
+
     try:
         for camera_id, frame in feed:
             if frame is None:
@@ -42,22 +71,20 @@ def record_cameras(feed, detector, pipes, config, recorder, until=None, on_frame
             d = p.mask.apply(detector.detect(frame))
             ids, boxes = p.tracker.update(d.boxes, d.scores, frame.index)
             ids, boxes = np.asarray(ids, int), np.asarray(boxes, float).reshape(-1, 4)
-            xs, ys, _ = camera_floor_points(
-                p.cam,
-                boxes,
-                config.foot_point,
-                config.person_height_m,
-                config.min_implied_height_m,
-                ids,
-                np.full(len(ids), frame.index),
-                p.heights,
-            )
-            recorder.add(camera_id, p.time_of(frame), ids, xs, ys, p.seconds)
+            # processed frames are stride source frames apart, whatever the source numbers them
+            n = p.processed
+            p.processed += 1
+            current = TrackedBoxes(n * stride, ids, boxes)
+            if camera_id in pending:
+                emit(camera_id, pending[camera_id], current)
+            pending[camera_id] = (current, p.time_of(frame))
             count += 1
             if on_frame is not None:
                 on_frame(camera_id)
             if until is not None and until():
                 break
+        for camera_id, a in pending.items():
+            emit(camera_id, a, None)
     finally:
         recorder.close()
     return count

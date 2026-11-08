@@ -58,15 +58,17 @@ def fill_stride(
     previous = None
     for current in tracked:
         if previous is not None:
-            yield from _fill(previous, current, stride)
+            yield from fill_between(previous, current, stride)
         previous = current
     if previous is not None:
-        yield from _fill(previous, None, stride, end)
+        yield from fill_between(previous, None, stride, end)
 
 
-def _fill(
+def fill_between(
     a: TrackedBoxes, b: TrackedBoxes | None, stride: int, end: int | None = None
 ) -> Iterator[TrackedBoxes]:
+    """Processed frame a and the frames up to the next processed frame b (None:
+    a was the last), as fill_stride gives them."""
     yield a
     gap = stride if b is None else min(stride, b.frame_index - a.frame_index)
     if end is not None:
