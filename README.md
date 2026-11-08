@@ -153,3 +153,19 @@ distinct people, so a cell shows only where at least one camera saw 5 or more
 distinct people. A slot's people count is the largest count of any one camera,
 because ids are per camera. The page shows the fused live layer and slots, the
 fusion, and each camera's state and processed frame rate.
+
+## What k=5 does and does not guarantee
+
+k=5 counts distinct track ids per cell, not verified people. Measured on tune
+scenes 071-075 at the product recipe (`scripts/k-chains-sweep.py`, one slot per
+camera), a shown cell has fewer than 5 true people in it in 19 % of the cells of
+a single-camera slot (22190 shown cells, 79 cameras), 18 % of a fused slot, and
+58 % of the live layer's 2-minute windows. Most of these cells have 5 or more
+people within 1.5 m (the rate falls to 5 % with that tolerance): foot-point
+error spreads a person over neighbouring 0.5 m cells.
+
+Counting k on stitched chains instead of raw ids (`k_count: chains` in a run
+section or a site config; the stitch runs when the slot closes, and nothing per
+track is stored) lowers the slot rate only from 19.4 % to 18.0 % per camera and
+from 17.8 % to 16.2 % fused. It is off by default (`k_count: ids`), and the
+live layer always counts raw ids.
