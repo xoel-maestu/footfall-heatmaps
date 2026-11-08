@@ -81,6 +81,7 @@ def main(out):
         "values": "whole-run point values, no CI; pooled = unweighted mean over scenes",
         "variants": variants,
     }
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(report, indent=2) + "\n")
     print(f"written {out}")
 
