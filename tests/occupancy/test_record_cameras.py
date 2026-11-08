@@ -82,22 +82,22 @@ def test_until_stops_the_frames_and_still_closes():
 
     n = record_cameras(
         feed, Crowd(), {"a": pipe(IdPerBox())}, CONFIG, log,
-        until=lambda: len(seen) >= 3, on_frame=seen.append,
+        until=lambda: len(seen) >= 3, on_frame=lambda c, f: seen.append(c),
     )  # fmt: skip
 
     assert n == 3 and len(log.added) == 3 and log.closed  # the last frame is flushed
 
 
-def test_on_frame_sees_each_processed_camera():
+def test_on_frame_sees_each_processed_frame_and_each_drop():
     seen = []
-    feed = [("a", frame(0)), ("b", frame(0))]
+    feed = [("a", frame(0)), ("b", None), ("b", frame(3))]
 
     record_cameras(
         feed, Crowd(), {"a": pipe(IdPerBox()), "b": pipe(IdPerBox())}, CONFIG, Log(),
-        on_frame=seen.append,
+        on_frame=lambda c, f: seen.append((c, None if f is None else f.index)),
     )  # fmt: skip
 
-    assert seen == ["a", "b"]
+    assert seen == [("a", 0), ("b", None), ("b", 3)]
 
 
 class Walker:

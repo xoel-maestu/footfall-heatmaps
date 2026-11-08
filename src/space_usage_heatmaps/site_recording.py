@@ -60,6 +60,7 @@ RECENT_FRAMES = 30  # the viewer's per-camera rate: over a camera's last frames
 WINDOW_S = 10  # stats: a live source caps a camera at its own rate (30 / stride), so per-second
 # counts jitter around it by the bin edges; 10 s windows show whether it keeps up
 STALLED_S = 5.0  # the viewer: a camera with no frame for this long reads as stalled
+DEFAULT_STREAM_FPS = 30.0  # a stream down at start: its tracker's rate until it says
 
 
 @dataclass(frozen=True)
@@ -198,7 +199,15 @@ def load_weights(site):
 
 class CameraMeter:
     """Processed frames per camera: per-second counts for the stats file, the
-    last frames' times for the viewer. Counts and times only."""
+    last frames' times for the viewer. Counts and times only.
+
+    Streams (after streams()): each processed frame's stream time (its PTS)
+    against the clock. Lag is the clock minus the stream time since the first
+    frame of the connection, so it grows when decoding or OpenCV's buffer falls
+    behind the stream. Lost frames are the source frames the stream time spans
+    that were never decoded: per connection, span x fps minus stride x (processed
+    frames - 1 + frames replaced unread). A reconnect, or a stream time that
+    goes back, starts a new connection."""
 
     def __init__(self, cameras, clock=time.monotonic):
         self.clock = clock
@@ -210,14 +219,49 @@ class CameraMeter:
         self.bins = {c: collections.Counter() for c in self.cameras}
         self.recent = {c: collections.deque(maxlen=RECENT_FRAMES) for c in self.cameras}
         self.feed_stats = {}
+        self.fps, self.stride = {}, 1
+        self.lags = {c: [] for c in self.cameras}  # (seconds since start, lag)
+        self.lost = dict.fromkeys(self.cameras, 0)
+        self.restarts = dict.fromkeys(self.cameras, 0)
+        self.connection = {}  # camera id -> the open connection's first and last frame
 
-    def tick(self, camera_id):
+    def streams(self, fps, stride):
+        """Measure lag and lost frames: camera id -> source fps, the stride."""
+        self.fps, self.stride = dict(fps), stride
+
+    def tick(self, camera_id, stream_s=None):
         now = self.clock()
         if self.start is None:
             self.start = now
         self.frames[camera_id] += 1
         self.bins[camera_id][int(now - self.start)] += 1
         self.recent[camera_id].append(now)
+        if stream_s is None or camera_id not in self.fps:
+            return
+        skipped = self.feed_stats.get(camera_id, {}).get("dropped", 0)
+        k = self.connection.get(camera_id)
+        if k is not None and stream_s < k["last"]:
+            self.restart(camera_id)
+            k = None
+        if k is None:
+            k = self.connection[camera_id] = {
+                "clock": now, "first": stream_s, "frames": 0, "skipped": skipped,
+            }  # fmt: skip
+        k["last"], k["frames"], k["skipped_now"] = stream_s, k["frames"] + 1, skipped
+        lag = (now - k["clock"]) - (stream_s - k["first"])
+        self.lags[camera_id].append((now - self.start, lag))
+
+    def restart(self, camera_id):
+        """A drop: the next frame opens a new connection with its own stream time."""
+        k = self.connection.pop(camera_id, None)
+        if k is not None:
+            self.lost[camera_id] += self._lost(camera_id, k)
+            self.restarts[camera_id] += 1
+
+    def _lost(self, camera_id, k):
+        spanned = round((k["last"] - k["first"]) * self.fps[camera_id])
+        decoded = self.stride * (k["frames"] - 1 + k["skipped_now"] - k["skipped"])
+        return max(0, spanned - decoded)
 
     def status(self):
         now = self.clock()
@@ -244,6 +288,7 @@ class CameraMeter:
                     "processed_frames": self.frames[c],
                     "frames_skipped": s.get("dropped", 0),
                     "source_drops": s.get("drops", 0),
+                    "source_errors": s.get("errors", 0),
                 }
             )
         return out
@@ -268,15 +313,47 @@ class CameraMeter:
                     "processed_fps_p5_10s": _p5_windows(rates, WINDOW_S),
                     "frames_skipped": s.get("dropped", 0),
                     "source_drops": s.get("drops", 0),
+                    "source_errors": s.get("errors", 0),
                 }
+                | self._stream_report(c)
             )
         p5 = [c["processed_fps_p5"] for c in cameras if c["processed_fps_p5"] is not None]
-        return {
+        out = {
             "timed_seconds": len(seconds),
             "warm_up_s": WARM_UP_S,
             "processed_fps_p5_min": min(p5) if p5 else None,
-            "cameras": cameras,
         }
+        if self.fps:
+            out |= {
+                "lag_p95_max_s": _max(cameras, "lag_p95_s"),
+                "lag_slope_max_s_per_min": _max(cameras, "lag_slope_s_per_min"),
+                "lost_frames_total": sum(c["lost_frames"] for c in cameras),
+            }
+        return out | {"cameras": cameras}
+
+    def _stream_report(self, c):
+        """Lag after the warm-up: p95, max and its slope over the run (a bounded
+        lag has a slope near 0); lost frames, counting the open connection."""
+        if c not in self.fps:
+            return {}
+        k = self.connection.get(c)
+        lost = self.lost[c] + (self._lost(c, k) if k is not None else 0)
+        lags = np.array([x for x in self.lags[c] if x[0] >= WARM_UP_S], float).reshape(-1, 2)
+        slope = None
+        if len(lags) > 1 and np.ptp(lags[:, 0]) > 0:
+            slope = round(float(np.polyfit(lags[:, 0], lags[:, 1], 1)[0]) * 60, 4)
+        return {
+            "lag_p95_s": round(float(np.percentile(lags[:, 1], 95)), 3) if len(lags) else None,
+            "lag_max_s": round(float(lags[:, 1].max()), 3) if len(lags) else None,
+            "lag_slope_s_per_min": slope,
+            "lost_frames": lost,
+            "stream_restarts": self.restarts[c],
+        }
+
+
+def _max(cameras, key):
+    values = [c[key] for c in cameras if c.get(key) is not None]
+    return max(values) if values else None
 
 
 def _p5_windows(rates, n):
@@ -286,6 +363,25 @@ def _p5_windows(rates, n):
         return None
     means = np.asarray(rates[: windows * n]).reshape(windows, n).mean(axis=1)
     return round(float(np.percentile(means, 5)), 2)
+
+
+def _stream_maker(url, stride, open_source, wait):
+    """(make(on_drop), fps, up) of a live camera. The first connection opens now
+    for the stream's fps; a camera down at start gets DEFAULT_STREAM_FPS and
+    connects when it comes up (reconnecting_frames' backoff), so it never stops
+    the site. wait(seconds) is the backoff sleep."""
+    first = []
+    with contextlib.suppress(Exception):  # down at start: retried like a drop
+        first.append(open_source(url, stride))
+    fps = first[0].fps if first else DEFAULT_STREAM_FPS
+
+    def open_stream():
+        return first.pop() if first else open_source(url, stride)
+
+    def make(on_drop):
+        return reconnecting_frames(open_stream, wait, on_drop)
+
+    return make, fps, bool(first)
 
 
 def _inputs(site, stop):
@@ -316,14 +412,13 @@ def _inputs(site, stop):
         mask = PrivacyMask(c.masks.get("image") or (), c.masks.get("floor") or (),
                            cam.world_to_image)  # fmt: skip
         if c.stream:
-            first = [OpenCvStreamSource(c.source, config.stride)]
-            fps = first[0].fps
-
-            def open_stream(first=first, url=c.source):
-                return first.pop() if first else OpenCvStreamSource(url, config.stride)
-
-            def make(on_drop, open_stream=open_stream):
-                return reconnecting_frames(open_stream, stop.wait, on_drop)
+            make, fps, up = _stream_maker(c.source, config.stride, OpenCvStreamSource, stop.wait)
+            if not up:  # the URL may carry credentials: name the camera only
+                print(
+                    f"site {site.id}: camera {c.id} is down at start; the others record "
+                    "and it connects when it comes up",
+                    file=sys.stderr,
+                )
 
             def time_of(frame):
                 return time.time()
@@ -349,10 +444,20 @@ def _drive(site, recorder, stop, meter, until=None):
     if callable(recorder):
         recorder = recorder(coverage)
     meter.recording = True
+    if site.streams:
+        stride = site.config.stride
+        meter.streams({c: stride / p.seconds for c, p in pipes.items()}, stride)
+
+    def on_frame(camera_id, frame):
+        if frame is None:
+            meter.restart(camera_id)
+        else:
+            meter.tick(camera_id, frame.timestamp if site.streams else None)
+
     feed = round_robin_feed(sources, paced=not site.streams, stop=stop, stats=meter.feed_stats)
     try:
         n = record_cameras(
-            feed, detector, pipes, site.config, recorder, until=until, on_frame=meter.tick
+            feed, detector, pipes, site.config, recorder, until=until, on_frame=on_frame
         )
     finally:
         stopped = stop.is_set()

@@ -14,13 +14,23 @@ turn, so the detector is only ever called from one thread.
   skipped in that round. on_drop() from a source (reconnecting_frames) is
   served as (camera id, None) in that camera's turn.
 
-Sources: camera id -> make(on_drop) -> an iterator of Frame. A reader's
-error is raised in the consumer. The feed ends when every source ended, or
-when stop is set.
+Sources: camera id -> make(on_drop) -> an iterator of Frame. The feed ends
+when every source ended, or when stop is set.
+
+Errors: in a paced replay a reader's error is raised in the consumer (a replay
+that skips part of a file is not the recipe). Live, one camera's error never
+stops the others: it counts in that camera's errors, is served as a drop
+(None, so its open slots are marked incomplete), and the camera is made again
+after a backoff (1 s doubling to 30 s, back to 1 s once a frame arrived). Its
+frame indices go on from the last one served, so its tracker sees one sequence.
 """
 
 import queue
 import threading
+import time
+from dataclasses import replace
+
+from space_usage_heatmaps.perception.application.reconnect import FIRST_DELAY_S, MAX_DELAY_S
 
 WAIT_S = 0.05  # live: how long the consumer waits when no camera has a new frame
 JOIN_S = 5.0  # how long a closed feed waits for each reader to release its source
@@ -32,16 +42,30 @@ class _Error:
         self.error = error
 
 
-def round_robin_feed(sources, paced, stop=None, stats=None):
+def round_robin_feed(sources, paced, stop=None, stats=None, sleep=None):
     """Starts the readers now; returns the generator of (camera id, frame or None).
     stats: a dict that gets camera id -> {"dropped": frames replaced unread,
-    "drops": source drops}, updated as it runs."""
+    "drops": source drops, "errors": live source errors}, updated as it runs.
+    sleep(seconds): the backoff wait before a failed live camera is made again
+    (default: waits on stop)."""
     stop = stop or threading.Event()
     done = threading.Event()  # the consumer is gone: readers stop
     stats = {} if stats is None else stats
     cameras = list(sources)
     for c in cameras:
-        stats[c] = {"dropped": 0, "drops": 0}
+        stats[c] = {"dropped": 0, "drops": 0, "errors": 0}
+
+    def ended():
+        return stop.is_set() or done.is_set()
+
+    def backoff(seconds):
+        if sleep is not None:
+            sleep(seconds)
+            return
+        until = time.monotonic() + seconds  # waits in slices, so a closed feed is seen too
+        while not ended() and time.monotonic() < until:
+            stop.wait(WAIT_S)
+
     if paced:
         boxes = {c: queue.Queue(maxsize=2) for c in cameras}
     else:
@@ -69,14 +93,34 @@ def round_robin_feed(sources, paced, stop=None, stats=None):
                 with arrived:
                     arrived.notify()
 
-        try:
-            for frame in sources[c](on_drop):
-                if stop.is_set() or done.is_set():
-                    return
-                put(c, frame)
-            put(c, _END)
-        except Exception as e:  # handed to the consumer, which raises it
-            put(c, _Error(e))
+        if paced:
+            try:
+                for frame in sources[c](on_drop):
+                    if ended():
+                        return
+                    put(c, frame)
+                put(c, _END)
+            except Exception as e:  # handed to the consumer, which raises it
+                put(c, _Error(e))
+            return
+        delay, offset, last = FIRST_DELAY_S, 0, -1
+        while not ended():
+            try:
+                for frame in sources[c](on_drop):
+                    if ended():
+                        return
+                    delay = FIRST_DELAY_S
+                    frame = replace(frame, index=frame.index + offset)
+                    last = frame.index
+                    put(c, frame)
+                put(c, _END)
+                return
+            except Exception:  # this camera only: the others keep recording
+                stats[c]["errors"] += 1
+                on_drop()
+                backoff(delay)
+                delay = min(2 * delay, MAX_DELAY_S)
+                offset = last + 1
 
     threads = [threading.Thread(target=read, args=(c,), name=f"source-{c}", daemon=True)
                for c in cameras]  # fmt: skip

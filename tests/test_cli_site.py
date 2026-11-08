@@ -220,3 +220,110 @@ def test_the_meter_reports_per_second_rates_after_the_warm_up():
     )  # linear 5th pct of 14 x 4 and one 1
     assert r["processed_fps_p5_min"] == a["processed_fps_p5"]
     assert a["processed_fps_p5_10s"] == pytest.approx(3.7)  # one 10 s window, 5..14: 37 frames
+
+
+class ScriptedStream:
+    """A live source (OpenCvStreamSource's shape) driven by a script per URL:
+    each connection takes the next entry, "down" (opening raises SourceDropped),
+    or (frames, then) where then is "end" or "error" (a non-drop error)."""
+
+    scripts = {}
+
+    def __init__(self, url, stride):
+        from space_usage_heatmaps.perception.domain.ports import SourceDropped
+
+        step = self.scripts[url].pop(0)
+        if step == "down":
+            raise SourceDropped(f"cannot open stream {url}")
+        self.n, self.then, self.fps = *step, 25.0
+
+    def frames(self):
+        import time
+
+        from space_usage_heatmaps.perception.domain.frame import Frame
+
+        for i in range(self.n):
+            time.sleep(0.002)
+            yield Frame(i, i / self.fps, np.zeros((4, 4, 3), np.uint8))
+        if self.then == "error":
+            raise RuntimeError("decoder error")
+
+
+def test_a_stream_down_at_start_does_not_stop_the_site_and_connects_later():
+    ScriptedStream.scripts = {"rtsp://x/c": ["down", "down", (3, "end")]}
+    waits = []
+    make, fps, up = site_recording._stream_maker("rtsp://x/c", 10, ScriptedStream, waits.append)
+
+    assert not up and fps == site_recording.DEFAULT_STREAM_FPS
+    drops = []
+    got = [f.index for f in make(lambda: drops.append(1))]
+    assert got == [0, 1, 2] and drops == [1] and waits == [1]  # one failed reconnect
+
+
+def test_one_failing_camera_leaves_the_others_recording_and_its_slots_incomplete():
+    from space_usage_heatmaps.perception.infrastructure.round_robin_feed import round_robin_feed
+    from tests.occupancy.test_record_camera import CONFIG, Crowd, IdPerBox
+    from tests.occupancy.test_record_cameras import Log, pipe
+
+    ScriptedStream.scripts = {
+        "rtsp://x/a": [(40, "end")],
+        "rtsp://x/b": [(3, "error"), (3, "end")],  # fails while recording
+        "rtsp://x/c": ["down", "down", (3, "end")],  # down at start
+    }
+    sources, ups = {}, {}
+    for c in "abc":
+        sources[c], _, ups[c] = site_recording._stream_maker(
+            f"rtsp://x/{c}", 1, ScriptedStream, lambda s: None
+        )
+    stats, log = {}, Log()
+    feed = round_robin_feed(sources, paced=False, stats=stats, sleep=lambda s: None)
+
+    n = record_cameras_of(feed, {c: pipe(IdPerBox()) for c in "abc"}, CONFIG, log, Crowd())
+
+    assert ups == {"a": True, "b": True, "c": False}
+    assert sorted(set(log.dropped)) == ["b", "c"] and "a" not in log.dropped
+    assert stats["b"]["errors"] == 1 and stats["c"]["drops"] == 1
+    added = {c: sum(1 for a in log.added if a[0] == c) for c in "abc"}
+    assert added["a"] >= 30 and added["b"] >= 4 and added["c"] >= 1
+    assert n == sum(added.values()) and log.closed
+
+
+def record_cameras_of(feed, pipes, config, log, detector):
+    from space_usage_heatmaps.occupancy.application.record_cameras import record_cameras
+
+    return record_cameras(feed, detector, pipes, config, log)
+
+
+def test_the_meter_measures_stream_lag_and_lost_frames():
+    now = [0.0]
+    meter = site_recording.CameraMeter(["a", "b"], clock=lambda: now[0])
+    meter.streams({"a": 30.0, "b": 30.0}, stride=10)
+    meter.feed_stats = {"a": {"dropped": 0}, "b": {"dropped": 0}}
+    ts = 100.0
+    for k in range(3 * 60):  # 60 s at 3 processed fps, keeping pace: no lag
+        now[0] = k / 3
+        meter.tick("a", ts + k / 3)
+    ts = 50.0
+    for k in range(3 * 60):  # each frame comes 10 % late: OpenCV's buffer grows
+        now[0] = 1.1 * k / 3
+        meter.tick("b", ts)
+        ts += 1 / 3
+        if k == 90:
+            ts += 1.0  # 30 source frames lost
+        if k == 120:
+            meter.feed_stats["b"]["dropped"] += 1  # one frame replaced unread: not lost
+            ts += 1 / 3
+    meter.restart("a")  # a reconnect: a new connection, its own stream time
+    for k in range(3):
+        now[0] = 60 + k / 3
+        meter.tick("a", k / 3)
+
+    a, b = meter.report()["cameras"]
+
+    assert a["lost_frames"] == 0 and a["stream_restarts"] == 1
+    assert a["lag_p95_s"] == pytest.approx(0, abs=1e-6)
+    assert a["lag_slope_s_per_min"] == pytest.approx(0, abs=1e-6)
+    assert b["lost_frames"] == 30 and b["stream_restarts"] == 0
+    assert b["lag_slope_s_per_min"] > 3  # grows: the lag is not bounded
+    r = meter.report()
+    assert r["lag_slope_max_s_per_min"] == b["lag_slope_s_per_min"]

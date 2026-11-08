@@ -2,7 +2,10 @@
 
 The connection opens in the constructor. Failing to open, or a read that
 fails, raises SourceDropped: for a live stream an end is a drop, and
-reconnecting_frames opens a new one.
+reconnecting_frames opens a new one. A frame's timestamp is its stream time
+(the decoder's PTS, in seconds), so the recorder can measure how far processing
+lags the stream and which source frames never arrived; a stream that gives no
+PTS falls back to its frame count over fps.
 """
 
 import cv2
@@ -32,7 +35,8 @@ class OpenCvStreamSource:
                 if not ok:
                     raise SourceDropped(f"stream {self.url} stopped")
                 if image is not None:
-                    yield Frame(i, i / self.fps, image)
+                    pts_ms = self.cap.get(cv2.CAP_PROP_POS_MSEC)
+                    yield Frame(i, pts_ms / 1000 if pts_ms > 0 else i / self.fps, image)
                 i += 1
         finally:
             self.cap.release()

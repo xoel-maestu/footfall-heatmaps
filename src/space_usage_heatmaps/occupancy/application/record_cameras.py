@@ -31,8 +31,9 @@ class CameraPipe:
 
 
 def record_cameras(feed, detector, pipes, config, recorder, until=None, on_frame=None):
-    """pipes: camera id -> CameraPipe; on_frame(camera id) after each processed
-    frame. How many frames ran, every camera together.
+    """pipes: camera id -> CameraPipe; on_frame(camera id, frame) after each
+    processed frame, and with None for a drop. How many frames ran, every
+    camera together.
 
     With a stride, each camera's skipped frames get their boxes back as the
     evaluation's fill_stride gives them (a box moves linearly to its next
@@ -64,6 +65,8 @@ def record_cameras(feed, detector, pipes, config, recorder, until=None, on_frame
         for camera_id, frame in feed:
             if frame is None:
                 recorder.mark_incomplete(camera_id)
+                if on_frame is not None:
+                    on_frame(camera_id, None)
                 continue
             p = pipes[camera_id]
             if p.heights is None:
@@ -80,7 +83,7 @@ def record_cameras(feed, detector, pipes, config, recorder, until=None, on_frame
             pending[camera_id] = (current, p.time_of(frame))
             count += 1
             if on_frame is not None:
-                on_frame(camera_id)
+                on_frame(camera_id, frame)
             if until is not None and until():
                 break
         for camera_id, a in pending.items():

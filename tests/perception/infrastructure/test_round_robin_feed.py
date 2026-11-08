@@ -81,3 +81,57 @@ def test_a_live_drop_is_a_none_frame_of_that_camera():
     got = [(c, None if f is None else f.index) for c, f in feed]
 
     assert got == [("a", 0), ("a", None), ("a", 1)]
+
+
+class Flaky:
+    """A live source whose connections follow a script: per call, how many
+    frames it gives before it raises (an int), or None to give them and end."""
+
+    def __init__(self, script, period=0.002):
+        self.script, self.period, self.calls = list(script), period, 0
+
+    def __call__(self, on_drop):
+        n, fails = self.script[self.calls]
+        self.calls += 1
+        for i in range(n):
+            time.sleep(self.period)
+            yield Frame(i, i / 10, None)
+        time.sleep(self.period)
+        if fails:
+            raise RuntimeError("decoder error")
+
+
+def test_a_failing_live_camera_is_retried_with_backoff_and_the_others_keep_going():
+    delays = []
+
+    def sleep(s):
+        delays.append(s)
+        time.sleep(0.001)
+
+    sources = {
+        "ok": Flaky([(40, False)]),
+        "broken": Flaky([(2, True), (3, True), (2, False)]),  # fails twice while recording
+        "down": Flaky([(0, True), (0, True), (0, True), (2, False)]),  # down at start
+    }
+    stats = {}
+    got = list(round_robin_feed(sources, paced=False, stats=stats, sleep=sleep))
+
+    by = {c: [None if f is None else f.index for k, f in got if k == c] for c in sources}
+    assert len([i for i in by["ok"] if i is not None]) >= 30  # ran on through both failures
+    assert by["broken"].count(None) == 2 and by["down"].count(None) == 3
+    assert sources["broken"].calls == 3 and sources["down"].calls == 4
+    real = [i for i in by["broken"] if i is not None]
+    assert real == sorted(real) and len(set(real)) == len(real)  # indices go on after a retry
+    assert stats["broken"]["errors"] == 2 and stats["down"]["errors"] == 3
+    assert stats["ok"]["errors"] == 0
+    # backoff doubles while a camera stays down and starts over once a frame arrived
+    assert sorted(delays) == sorted([1, 1] + [1, 2, 4])
+
+
+def test_a_paced_replay_still_raises_a_source_error():
+    def broken(on_drop):
+        raise OSError("cannot read video x")
+        yield
+
+    with pytest.raises(OSError, match="cannot read"):
+        list(round_robin_feed({"a": broken, "b": frames(3)}, paced=True, sleep=lambda s: None))
