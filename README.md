@@ -70,6 +70,16 @@ Speed, `space-usage bench`, 30 min on one 1080p camera with nothing else on the
 GPU (GTX 1650 Ti, 4 GB): 42.5 fps mean, 40.1 fps p5 (target ≥ 15), VRAM peak
 174 MB (target ≤ 3.5 GB).
 
+Cameras per GPU (`scripts/multicam-bench.py`): 8 cameras at stride 10 (3
+processed frames a second per 30 fps camera), with one shared TensorRT detector
+in one process, 10 min on scene 071's videos, p5 3.87 processed fps per camera,
+VRAM peak 174 MB as NVML reports it for the process, which matches nvidia-smi
+(device memory used rose by 177 MiB over the idle baseline in a 2 min, 8-camera
+rerun), on the same GTX 1650 Ti. Stride 10 is the largest stride
+whose fused dwell map holds against stride 2 (`scripts/stride-sweep.py`; TVD
++.004 tune, +.005 sealed). 15 cameras do not fit (p5 2.14,
+`reports/multicam-bench-stride10-n15.json`).
+
 ## Live viewer
 
 `space-usage serve` hosts a page with the floor-plan heatmap of one camera: the

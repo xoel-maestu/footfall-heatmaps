@@ -496,15 +496,20 @@ def _params_suffix(params):
     return f"-params{hashlib.sha256(data).hexdigest()[:12]}"
 
 
-def cache_key(c):
+def cache_key(c, detections_stride=None):
     """Directory of a config's cached tracks; each file also stores the recipe
     metadata and is recomputed when it no longer matches (track_cache). Tracker
     and detector overrides get their own directory, so variants do not
-    overwrite each other."""
+    overwrite each other, and so do tracks replayed from coarser cached
+    detections (detections_stride, pipeline_track_source)."""
     key = f"{c.detector}-{c.tracker}-{c.input_size}-{c.engine}-stride{c.stride}"
     if c.detector_params:
-        return key + _params_suffix({"tracker": c.tracker_params, "detector": c.detector_params})
-    return key + _params_suffix(c.tracker_params) if c.tracker_params else key
+        key += _params_suffix({"tracker": c.tracker_params, "detector": c.detector_params})
+    elif c.tracker_params:
+        key += _params_suffix(c.tracker_params)
+    if detections_stride not in (None, c.stride):
+        key += f"-from-stride{detections_stride}"
+    return key
 
 
 def detection_cache_key(c, stride=1):
@@ -541,10 +546,29 @@ def pipeline_of(config, reader, loop=False):
     return build
 
 
-def pipeline_track_source(config, reader):
+class _NoDetections:
+    """The detector stand-in of a replay-only run: a cache miss is an error."""
+
+    def __init__(self, stride):
+        self.stride = stride
+        self.last_run = None
+
+    def detections(self, scene, camera):
+        raise OSError(
+            f"no cached detections of scene {scene} camera {camera} at stride 1 or "
+            f"{self.stride}; a subsampled stride replays caches only"
+        )
+
+
+def pipeline_track_source(config, reader, detections_stride=None):
     """Tracks of a pipeline config: cached detections of its detector recipe on
     every frame, its stride and score threshold applied to them, then a fresh
-    tracker on each video and the skipped frames filled."""
+    tracker on each video and the skipped frames filled.
+
+    detections_stride: replay the cached detections of that stride instead
+    (every frame's where a camera has them), keeping every config.stride /
+    detections_stride-th cached frame, and never run the detector. The tracks
+    get their own cache (cache_key)."""
     import numpy as np
 
     from space_usage_heatmaps.evaluation.infrastructure.detection_cache import (
@@ -604,9 +628,6 @@ def pipeline_track_source(config, reader):
             identity=video_identity,
         )
 
-    detections = cache_at(1)
-    if config.stride > 1:
-        detections = StridedDetections(detections, cache_at(config.stride))
     meta = container.pipeline_metadata(
         config.detector,
         config.tracker,
@@ -616,7 +637,28 @@ def pipeline_track_source(config, reader):
         config.detector_params,
         config.engine,
     )
-    directory = data_dir() / "cache" / "tracks" / cache_key(config)
+    if detections_stride in (None, config.stride):
+        detections = cache_at(1)
+        if config.stride > 1:
+            detections = StridedDetections(detections, cache_at(config.stride))
+    else:
+        if config.stride % detections_stride:
+            raise ValueError(
+                f"stride {config.stride} is not a multiple of the cached stride {detections_stride}"
+            )
+
+        def replay_at(stride):
+            cache = cache_at(stride)
+            return CachedDetections(
+                _NoDetections(detections_stride),
+                cache.directory,
+                cache.metadata,
+                identity=video_identity,
+            )
+
+        detections = StridedDetections(replay_at(1), replay_at(detections_stride))
+        meta |= {"detections_stride": detections_stride}
+    directory = data_dir() / "cache" / "tracks" / cache_key(config, detections_stride)
     selected = SelectedDetections(
         detections, config.stride, container.min_score(config.detector, config.detector_params)
     )
@@ -628,10 +670,13 @@ def pipeline_track_source(config, reader):
     )
 
 
-def track_source(config, reader):
+def track_source(config, reader, detections_stride=None):
+    """detections_stride: pipeline configs only, see pipeline_track_source."""
     directory = data_dir() / "cache" / "tracks" / cache_key(config)
     if config.engine != "ultralytics":
-        return pipeline_track_source(config, reader)
+        return pipeline_track_source(config, reader, detections_stride)
+    if detections_stride is not None:
+        raise ValueError("detections_stride needs a pipeline engine")
 
     def make():
         try:
