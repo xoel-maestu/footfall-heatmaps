@@ -86,7 +86,7 @@ def warm_all(strides, split):
             )
 
 
-def score(item):
+def score(item, pool_map=map):
     """Stride S against stride 2 on one split: the paired fused evaluation."""
     stride, split = item
     t0 = time.time()
@@ -101,6 +101,7 @@ def score(item):
         load_fusion(RECIPE),
         RESAMPLES,
         seed=0,
+        map=pool_map,
         compare_run=run_at(CACHED_STRIDE, reader),
     )
     joint = r.results["full@joint"]
@@ -201,7 +202,8 @@ def sweep(out):
 def sealed(stride, out):
     t0 = time.time()
     warm_all((stride,), "sealed")
-    res = score((stride, "sealed"))
+    with ProcessPoolExecutor(len(SPLITS["sealed"])) as pool:
+        res = score((stride, "sealed"), pool.map)
     print(line(res), flush=True)
     write(out, header("sealed") | {"stride": res, "seconds": round(time.time() - t0)})
     print(out)
