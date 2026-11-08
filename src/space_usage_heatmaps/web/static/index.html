@@ -117,7 +117,8 @@ dd { margin: 0; text-align: right; }
 .site-only[hidden] { display: none; }
 #cameras { width: 100%; border-collapse: collapse; font-size: 13px; }
 #cameras th, #cameras td { padding: 6px 8px 6px 0; text-align: right; border-bottom: 1px solid var(--line); }
-#cameras th { font-weight: 600; color: var(--muted); vertical-align: bottom; }
+#cameras td, #cameras tbody th { vertical-align: top; }
+#cameras thead th { font-weight: 600; color: var(--muted); vertical-align: bottom; }
 #cameras th:first-child, #cameras td:first-child, #cameras th:nth-child(2), #cameras td:nth-child(2) { text-align: left; }
 #cameras td[data-state="stalled"], #cameras td[data-state="ended"] { font-weight: 600; }
 #cameras-note { margin-top: 6px; }
