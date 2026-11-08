@@ -537,6 +537,10 @@ function setSource(source) {
   if (source === "fused") {
     state.data = null; draw();
     loadFused();
+  } else if (source === "live" && isSite && !state.recording) {
+    // a server that only reads the slots has no live layer: say so, do not poll for one
+    state.noData = NO_DATA.live; state.data = null; draw();
+    setStatus("Stored slots only: no live layer in this process");
   } else if (source === "live") {
     state.data = null; draw();
     setStatus("Live, connecting…");
@@ -566,6 +570,7 @@ if (isSite) {
   loadSite().then((d) => {
     // a server that only reads the slots opens on them; a recording one on the live layer
     const recording = d && d.cameras.some((c) => c.state !== "not recording");
+    state.recording = Boolean(recording);
     const source = recording ? "live" : "slot";
     document.querySelector(`input[name="source"][value="${source}"]`).checked = true;
     setSource(source);
