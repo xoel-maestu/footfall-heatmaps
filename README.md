@@ -3,6 +3,13 @@
 Builds anonymous foot-traffic heatmaps from fixed cameras: positions on a floor
 plan, never images or identities. Python, runs locally on a modest NVIDIA GPU.
 
+![One camera's video beside its floor plan: a dot at each person's foot point, and the dwell map building up](docs/media/demo.gif)
+
+Camera 645 of scene 071 at 2x speed (`scripts/demo-gif.py`): the foot point of
+each person in the image, the same positions on the floor plan, and the dwell
+accumulated since the video started, shown only in cells at least 5 people
+have crossed. Synthetic scene: NVIDIA PhysicalAI-SmartSpaces, CC BY 4.0.
+
 ## Results (E1, one camera)
 
 `uv run space-usage eval --suite e1-final` writes the full report to
