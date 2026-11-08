@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from space_usage_heatmaps.evaluation.application.evaluate_oracle import (
     TRUTHS,
     build_ground_truth_grid,
-    camera_floor_points,
+    recipe_floor_points,
 )
 from space_usage_heatmaps.evaluation.domain.bootstrap import (
     BootstrapResult,
@@ -71,18 +71,9 @@ def evaluate_config(reader, scenes, runs, cell, n_resamples=1000, seed=0):
             keep = (t.frames >= first) & (t.frames <= last)
             # Floor points on every row, then keep the scored frames: the causal
             # track height sees the same history as the live path (bench).
-            xs, ys, _ = camera_floor_points(
-                cam,
-                t.boxes,
-                config.foot_point,
-                config.person_height_m,
-                config.min_implied_height_m,
-                t.track_ids,
-                t.frames,
-                config.track_heights(),
-            )
+            ids, xs, ys, _ = recipe_floor_points(cam, t, config)
             xs, ys = xs[keep], ys[keep]
-            preds.append(layers(t.track_ids[keep], t.frames[keep], xs, ys, cam.fps))
+            preds.append(layers(ids[keep], t.frames[keep], xs, ys, cam.fps))
             counts.append((int(keep.sum()), preds[-1].dropped, int((~keep).sum())))
         for name, tr, mask in (
             ("visible@coverage", visible, gt.coverage),

@@ -22,6 +22,7 @@ from space_usage_heatmaps.evaluation.application.evaluate_oracle import (
     SOURCES,
     TRUTHS,
     evaluate_oracle,
+    stitched_tracks,
 )
 from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
 from space_usage_heatmaps.evaluation.domain.splits import SPLITS
@@ -345,6 +346,11 @@ def run_record(args, live=None, stop=None):
     )
 
     config, settings = load_config(args.config), load_run_settings(args.config)
+    if config.stitch is not None:
+        raise ValueError(
+            f"config {args.config}: stitch joins tracks across later frames, an evaluation "
+            "step; space-usage run records the tracker's own ids"
+        )
     cam = calibration_of(settings.calibration)
     spec = GridSpec.covering(*settings.extent_m, cell_m=settings.cell_m)
     mask = PrivacyMask(
@@ -696,8 +702,11 @@ def score_tracking(reader, scenes, names, runs):
     per = {n: {} for n in names}
     for (scene, camera), key in zip(scenes, keys, strict=True):
         samples = reader.samples(scene, camera)
-        for n, (_, source) in zip(names, runs, strict=True):
-            per[n][key] = tracking_metrics(samples, source.tracks(scene, camera))
+        for n, (config, source) in zip(names, runs, strict=True):
+            tracks = source.tracks(scene, camera)
+            if config.stitch is not None:  # the ids the floor scores, stitched
+                tracks = stitched_tracks(reader.camera(scene, camera), tracks, config)
+            per[n][key] = tracking_metrics(samples, tracks)
     result = {"scenes": per, "pooled": {n: pooled(list(per[n].values())) for n in names}}
     if len(names) == 2:
         a, b = names
@@ -1329,6 +1338,13 @@ def dataset_eval(dataset, config_path):
         return None
     name = config_name(config_path)
     config = load_config(config_path)
+    stitch = None
+    if config.stitch is not None:
+        if reader.camera(*scenes[0]).world_to_image is None:
+            reason = f"{reader.name} has no floor calibration: ids as the tracker gave them"
+            stitch, config = {"applied": False, "reason": reason}, replace(config, stitch=None)
+        else:
+            stitch = {"applied": True, **config.stitch}
     source = track_source(config, reader)
     report = {
         "dataset": reader.name,
@@ -1336,7 +1352,7 @@ def dataset_eval(dataset, config_path):
         "config_name": name,
         "config": vars(config),
         "scenes": [f"{scene}/{camera}" for scene, camera in scenes],
-    }
+    } | ({} if stitch is None else {"stitch": stitch})
     if dataset == "wildtrack":
         scene, camera = scenes[0]
         plane, g = wildtrack_ground_error(reader, scene, camera, config, source)

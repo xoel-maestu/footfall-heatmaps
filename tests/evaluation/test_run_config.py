@@ -157,3 +157,22 @@ def test_a_stride_needs_the_own_pipeline_which_fills_the_skipped_frames():
     assert RunConfig.from_mapping(PIPELINE | {"stride": 2}).stride == 2
     with pytest.raises(ValueError, match="stride"):
         RunConfig.from_mapping(ITER0 | {"stride": 2})
+
+
+def test_a_stitch_section_gives_the_tracklet_stitcher():
+    from space_usage_heatmaps.occupancy.domain.stitching import Stitch
+
+    cfg = RunConfig.from_mapping(ITER0 | {"stitch": {"gap_s": 5, "radius_m": 1.0}})
+
+    assert cfg.stitch == {"gap_s": 5, "radius_m": 1.0}
+    assert cfg.stitcher() == Stitch(gap_s=5, radius_m=1.0, v_max_mps=1.5)
+    assert RunConfig.from_mapping(ITER0).stitcher() is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [{"gap_s": 0, "radius_m": 1.0}, {"gap_s": 2}, {"gap_s": 2, "radius_m": 1, "appearance": 1}, 2],
+)
+def test_an_invalid_stitch_section_is_an_error(value):
+    with pytest.raises(ValueError, match="stitch"):
+        RunConfig.from_mapping(ITER0 | {"stitch": value})

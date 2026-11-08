@@ -12,6 +12,7 @@ from space_usage_heatmaps.floorplan.domain.foot_point import (
     TRACK_HEIGHT_PERCENTILE,
     TrackHeights,
 )
+from space_usage_heatmaps.occupancy.domain.stitching import Stitch
 
 BASELINE = "ultralytics"  # the iteration 0 recipe
 # The perception pipeline on ONNX Runtime: CUDA (fp32) or TensorRT (fp16).
@@ -48,6 +49,14 @@ class RunConfig:
     # Overrides of the detector's thresholds (score_thr, nms_thr), fractions;
     # the detector adapter checks the names.
     detector_params: dict = field(default_factory=dict)
+    # Optional intra-camera tracklet stitching after the tracker (occupancy.
+    # domain.stitching): gap_s, radius_m, v_max_mps. It relabels track ids on
+    # the floor and leaves the cached tracks as they are.
+    stitch: dict | None = None
+
+    def stitcher(self):
+        """The config's Stitch, or None without a stitch section."""
+        return None if self.stitch is None else Stitch(**self.stitch)
 
     def track_heights(self):
         """A fresh auto-track height estimator with this config's parameters."""
@@ -86,7 +95,13 @@ class RunConfig:
             raise ValueError(
                 "config: detector_params must map parameter names to numbers in (0, 1)"
             )
-        optional = {n for n in names if n not in required} - {"tracker_params", "detector_params"}
+        if cfg.stitch is not None:
+            _check_stitch(cfg.stitch)
+        optional = {n for n in names if n not in required} - {
+            "tracker_params",
+            "detector_params",
+            "stitch",
+        }
         for name in sorted(optional & set(d) - set(FOOT_POINT_KEYS[cfg.foot_point])):
             raise ValueError(
                 f"config: {name} does not apply to foot_point {cfg.foot_point} "
@@ -115,6 +130,15 @@ class RunConfig:
         if not _positive_int(cfg.input_size) or cfg.input_size % 32:
             raise ValueError("config: input_size must be a positive multiple of 32")
         return cfg
+
+
+def _check_stitch(d):
+    keys = {"gap_s", "radius_m", "v_max_mps"}
+    if not isinstance(d, dict) or not {"gap_s", "radius_m"} <= set(d) <= keys:
+        raise ValueError("config: stitch must map gap_s, radius_m and optionally v_max_mps")
+    if not all(_number(v, -1, float("inf")) for v in d.values()):
+        raise ValueError("config: stitch values must be numbers")
+    Stitch(**d)
 
 
 def _number(v, low, high, closed_high=False):

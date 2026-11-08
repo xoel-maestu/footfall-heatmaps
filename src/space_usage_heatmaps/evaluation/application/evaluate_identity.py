@@ -32,7 +32,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from space_usage_heatmaps.evaluation.application.evaluate_config import BLOCK_S
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
+from space_usage_heatmaps.evaluation.application.evaluate_oracle import recipe_floor_points
 from space_usage_heatmaps.evaluation.domain.bootstrap import (
     BlockLayers,
     IdentityBlocks,
@@ -89,20 +89,11 @@ class IdentityReport:
 def _camera(reader, scene, camera, config, source, spec):
     cam = reader.camera(scene, camera)
     t = source.tracks(scene, camera)
-    xs, ys, _ = camera_floor_points(
-        cam,
-        t.boxes,
-        config.foot_point,
-        config.person_height_m,
-        config.min_implied_height_m,
-        t.track_ids,
-        t.frames,
-        config.track_heights(),
-    )
+    ids, xs, ys, _ = recipe_floor_points(cam, t, config)
     coverage = Homography(cam.world_to_image).sees(*spec.cell_centres(), cam.width, cam.height)
     return (
         cam.fps,
-        CameraTracks(str(camera), t.track_ids, t.frames, np.column_stack([xs, ys])),
+        CameraTracks(str(camera), ids, t.frames, np.column_stack([xs, ys])),
         coverage,
     )
 
