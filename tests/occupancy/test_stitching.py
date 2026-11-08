@@ -165,8 +165,8 @@ def test_invalid_parameters_are_errors(kwargs):
 
 
 def test_the_predicted_speed_is_capped_at_v_max():
-    a = still(1, range(0, 50), 0.0, 0.0)
-    a[2][-1] = [1.0, 0.0]  # a jump of 1 m in one frame: 10 m/s
+    a = still(1, range(48, 50), 0.0, 0.0)
+    a[2][-1] = [1.0, 0.0]  # two frames, a jump of 1 m: 10 m/s
     # 1.1 s gap: capped at 1.5 m/s the prediction is x 2.65; at 10 m/s, x 12.
     b = still(2, range(60, 100), 2.65, 0.0)
 
