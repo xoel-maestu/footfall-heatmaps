@@ -343,8 +343,12 @@ def _drive(site, recorder, stop, meter, until=None):
             feed, detector, pipes, site.config, recorder, until=until, on_frame=meter.tick
         )
     finally:
+        stopped = stop.is_set()
+        stop.set()  # a stream reader waiting to reconnect wakes up and leaves
         feed.close()
         meter.ended = True
+    if not stopped:
+        stop.clear()  # the sources ended on their own: serve tells "ended" from "stopped"
     return n, recorder
 
 

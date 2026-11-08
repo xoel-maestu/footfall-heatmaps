@@ -23,6 +23,7 @@ import queue
 import threading
 
 WAIT_S = 0.05  # live: how long the consumer waits when no camera has a new frame
+JOIN_S = 5.0  # how long a closed feed waits for each reader to release its source
 _END = object()
 
 
@@ -117,7 +118,9 @@ def round_robin_feed(sources, paced, stop=None, stats=None):
                     with arrived:
                         arrived.wait(WAIT_S)
         finally:
-            done.set()
+            done.set()  # readers stop at their next frame or wait, and release their source
+            for t in threads:
+                t.join(timeout=JOIN_S)
 
     return feed()
 

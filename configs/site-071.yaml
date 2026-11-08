@@ -1,0 +1,69 @@
+# Improvements plan, phase 5: every calibrated camera of NVIDIA MTMC scene 071
+# as one site, replayed from its video files (file-paced, no frame dropped).
+#
+#   uv run space-usage calibrate --site configs/site-071.yaml
+#   uv run space-usage run --site configs/site-071.yaml --db data/site-071.db
+#   uv run space-usage serve --site configs/site-071.yaml --db data/site-071.db
+#
+# Relative sources and the weights file are under the data dir
+# (SPACE_USAGE_DATA_DIR, default ~/datasets/space-usage-heatmaps).
+site: "071"
+recipe: configs/e2a-record.yaml
+stride: 10            # phase 3: 8 cameras keep up with 30 fps sources at stride 10
+extent_m: [-17.8, -20.9, 18.3, 22.1]  # the scene's floor; snaps to 2 m blocks: 76 x 92 cells
+cell_m: 0.5
+retention_days: 90
+start_utc: 2026-11-06T09:00:00Z      # video files: the wall time of their first frame
+fusion:               # W1 (phase 4): visibility, power 2, on 2 m zones
+  weighting: visibility
+  power: 2
+  zone_m: 2.0
+  weights: sites/071/weights.npz      # frozen by space-usage calibrate
+calibration:
+  minutes: 15         # the whole 13.3-min videos
+cameras:
+  - id: "635"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0635/video.mp4
+    calibration: nvidia-mtmc/071/635
+  - id: "636"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0636/video.mp4
+    calibration: nvidia-mtmc/071/636
+  - id: "637"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0637/video.mp4
+    calibration: nvidia-mtmc/071/637
+  - id: "638"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0638/video.mp4
+    calibration: nvidia-mtmc/071/638
+  - id: "639"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0639/video.mp4
+    calibration: nvidia-mtmc/071/639
+  - id: "640"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0640/video.mp4
+    calibration: nvidia-mtmc/071/640
+  - id: "641"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0641/video.mp4
+    calibration: nvidia-mtmc/071/641
+  - id: "642"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0642/video.mp4
+    calibration: nvidia-mtmc/071/642
+  - id: "643"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0643/video.mp4
+    calibration: nvidia-mtmc/071/643
+  - id: "644"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0644/video.mp4
+    calibration: nvidia-mtmc/071/644
+  - id: "645"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0645/video.mp4
+    calibration: nvidia-mtmc/071/645
+  - id: "646"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0646/video.mp4
+    calibration: nvidia-mtmc/071/646
+  - id: "647"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0647/video.mp4
+    calibration: nvidia-mtmc/071/647
+  - id: "648"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0648/video.mp4
+    calibration: nvidia-mtmc/071/648
+  - id: "650"
+    source: nvidia/MTMC_Tracking_2024/test/scene_071/camera_0650/video.mp4
+    calibration: nvidia-mtmc/071/650
