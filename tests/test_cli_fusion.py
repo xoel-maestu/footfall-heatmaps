@@ -109,3 +109,24 @@ def test_covered_cells_parses_and_is_reported_only_when_on(fused_scene):
         "covered_cells": True,
     }
     assert "covered_cells" not in cli._fusion_dict(off)  # earlier reports unchanged
+
+
+def test_covered_alpha_parses_and_is_reported_only_when_above_zero(fused_scene):
+    (fused_scene / "alpha.yaml").write_text(
+        RECIPE + "fusion:\n  weighting: visibility\n  power: 2\n  zone_m: 2.0\n"
+        "  covered_alpha: 0.5\n"
+    )
+    (fused_scene / "zero.yaml").write_text(
+        RECIPE + "fusion:\n  weighting: visibility\n  power: 2\n  zone_m: 2.0\n  covered_alpha: 0\n"
+    )
+
+    on, zero = cli.load_fusion("alpha.yaml"), cli.load_fusion("zero.yaml")
+
+    assert on.covered_alpha == 0.5
+    assert cli._fusion_dict(on) == {
+        "weighting": "visibility",
+        "power": 2,
+        "zone_m": 2.0,
+        "covered_alpha": 0.5,
+    }
+    assert cli._fusion_dict(zero) == {"weighting": "visibility", "power": 2, "zone_m": 2.0}

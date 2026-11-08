@@ -193,3 +193,65 @@ def test_covered_cells_needs_visibility_on_zones():
         Fusion("visibility", 1, None, covered_cells=True)
     with pytest.raises(ValueError, match="covered_cells"):
         Fusion("mean", 1, 2.0, covered_cells=True)
+
+
+# Improvements plan, phase 6, H1: partial covered-cell normalisation. The zone
+# dwell is divided by zone_cells ** (1 - alpha) * covered_cells ** alpha.
+
+
+def _random_cameras(seed=1, size=8):
+    rng = np.random.default_rng(seed)
+    spec = GridSpec(origin_x=0.0, origin_y=0.0, cell_m=0.5, nx=size + 2, ny=size)
+    return [
+        CameraGrid(
+            str(i),
+            Grid(spec, rng.random((size, size + 2)), np.zeros((size, size + 2)), 0),
+            rng.random((size, size + 2)) > 0.4,
+        )
+        for i in range(3)
+    ]
+
+
+def test_covered_alpha_zero_is_byte_identical_to_w1():
+    cams = _random_cameras()
+    w1 = Fusion("visibility", 2, 2.0)
+    zero = Fusion("visibility", 2, 2.0, covered_alpha=0.0)
+
+    assert zero == w1  # the default: W1 configs and reports are unchanged
+    assert fusion_weights(cams, zero).tobytes() == fusion_weights(cams, w1).tobytes()
+    small = [camera(str(i), c.grid.dwell[:4, :4], c.coverage[:4, :4]) for i, c in enumerate(cams)]
+    digest = hashlib.sha256(fusion_weights(small, zero).tobytes()).hexdigest()
+    assert digest == hashlib.sha256(fusion_weights(small, w1).tobytes()).hexdigest()
+
+
+def test_covered_alpha_one_is_identical_to_covered_cells():
+    cams = _random_cameras()
+    for p in (1, 2, math.inf):
+        one = fusion_weights(cams, Fusion("visibility", p, 2.0, covered_alpha=1.0))
+        w3 = fusion_weights(cams, Fusion("visibility", p, 2.0, covered_cells=True))
+        assert one.tobytes() == w3.tobytes(), p
+
+
+def test_covered_alpha_moves_a_partial_camera_between_w1_and_covered_cells():
+    # One 2 m zone: a covers the left half (8 of 16 cells), b all of it, both see
+    # 1 person-second per covered cell. a's zone value is 8 / 16**(1-a) / 8**a
+    # and b's 16 / 16, so a's ratio is (1/2) ** (1 - alpha).
+    partial, whole = (
+        camera("a", full(1) * _left_half(), _left_half()),
+        camera("b", full(1), full(1)),
+    )
+    for alpha in (0.0, 0.25, 0.5, 0.75, 1.0):
+        w = fusion_weights([partial, whole], Fusion("visibility", 2, 2.0, covered_alpha=alpha))
+        r = (0.5 ** (1 - alpha)) ** 2
+        np.testing.assert_allclose(w[0][_left_half()], r / (1 + r))
+        np.testing.assert_allclose(w.sum(axis=0), 1)
+
+
+def test_covered_alpha_is_validated():
+    for bad in (-0.1, 1.5, math.nan):
+        with pytest.raises(ValueError, match="covered_alpha"):
+            Fusion("visibility", 2, 2.0, covered_alpha=bad)
+    with pytest.raises(ValueError, match="covered_alpha"):
+        Fusion("visibility", 2, None, covered_alpha=0.5)
+    with pytest.raises(ValueError, match="covered_alpha"):
+        Fusion("visibility", 2, 2.0, covered_cells=True, covered_alpha=0.5)

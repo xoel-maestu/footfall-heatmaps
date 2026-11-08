@@ -259,13 +259,15 @@ def load_config(path):
 
 def load_fusion(path):
     """A config's fusion section: weighting, power (.inf allowed), zone_m,
-    covered_cells."""
+    covered_cells, covered_alpha."""
     from space_usage_heatmaps.occupancy.domain.fusion import Fusion
 
     d = (yaml.safe_load(Path(path).read_text()) or {}).get("fusion")
     if not isinstance(d, dict):
         raise ValueError(f"config {path}: no fusion section (weighting, power, zone_m)")
-    if unknown := sorted(set(d) - {"weighting", "power", "zone_m", "covered_cells"}):
+    if unknown := sorted(
+        set(d) - {"weighting", "power", "zone_m", "covered_cells", "covered_alpha"}
+    ):
         raise ValueError(f"config {path}: unknown fusion keys {unknown}")
     return Fusion(**d)
 
@@ -945,7 +947,11 @@ FUSION_TITLES = {
 def _fusion_dict(f):
     d = {"weighting": f.weighting, "power": _inf(f.power), "zone_m": f.zone_m}
     # Only when on, so the reports and exports of the other weightings keep their bytes.
-    return d | {"covered_cells": True} if f.covered_cells else d
+    if f.covered_cells:
+        d |= {"covered_cells": True}
+    if f.covered_alpha > 0:
+        d |= {"covered_alpha": f.covered_alpha}
+    return d
 
 
 def _inf(v):

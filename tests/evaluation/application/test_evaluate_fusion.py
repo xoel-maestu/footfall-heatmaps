@@ -137,3 +137,20 @@ def test_compare_fusion_pairs_two_weightings_of_the_same_tracks(reader, rows):
     np.testing.assert_array_equal(r.fused["001"].dwell, alone[mean].fused["001"].dwell)
     d = r.results["full@joint"].delta_pooled["dwell"]["mass_error"].value
     assert d != 0  # the mean dilutes what only camera 8 sees
+
+
+def test_truths_scores_only_the_named_truth_blocks_with_the_same_values(reader, rows):
+    seen_by_7 = tracks_from_rows(rows)
+    run = (CFG, both(seen_by_7, joined(seen_by_7, tracks_from_rows(rows, camera=8))))
+    f = Fusion("visibility", 2, 2.0)
+
+    every = evaluate_fusion(reader, [("001", "7")], run, run, 0.5, f, 20)
+    some = evaluate_fusion(
+        reader, [("001", "7")], run, run, 0.5, f, 20, truths=("full@joint", "full@overlap")
+    )
+
+    assert set(some.results) == {"full@joint", "full@overlap"}
+    for truth, res in some.results.items():
+        assert res == every.results[truth], truth
+    with pytest.raises(ValueError, match="truth"):
+        evaluate_fusion(reader, [("001", "7")], run, run, 0.5, f, 20, truths=("nowhere",))

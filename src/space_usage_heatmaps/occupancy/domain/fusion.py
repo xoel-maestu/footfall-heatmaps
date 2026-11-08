@@ -18,7 +18,9 @@ Weightings:
   noise, coarser). With covered_cells, a camera's zone value is its dwell per
   zone cell it covers (the zone sum over the number of covered cells), so a
   camera that covers part of a zone is not penalised for the cells it cannot
-  see (improvements plan, phase 4).
+  see (improvements plan, phase 4). covered_alpha blends the two: the zone
+  value is divided by zone_cells ** (1 - alpha) * covered_cells ** alpha, so 0
+  is the plain zone sum and 1 is covered_cells (improvements plan, phase 6, H1).
 
 The weights come from whole-run (or whole-slot) grids and are applied
 linearly, so fusing time blocks and adding them equals fusing the sum.
@@ -47,6 +49,7 @@ class Fusion:
     power: float = 1.0  # visibility: exponent of the relative visibility; math.inf allowed
     zone_m: float | None = None  # visibility: measured on blocks of zone_m metres
     covered_cells: bool = False  # visibility on zones: per covered cell of the zone
+    covered_alpha: float = 0.0  # visibility on zones: partial covered_cells, 0 (off) to 1
 
     def __post_init__(self):
         if self.weighting not in WEIGHTINGS:
@@ -57,6 +60,12 @@ class Fusion:
             raise ValueError(f"fusion zone_m must be positive, not {self.zone_m}")
         if self.covered_cells and (self.weighting != "visibility" or self.zone_m is None):
             raise ValueError("fusion covered_cells needs the visibility weighting and zone_m")
+        if not 0 <= self.covered_alpha <= 1:
+            raise ValueError(f"fusion covered_alpha must be in [0, 1], not {self.covered_alpha}")
+        if self.covered_alpha > 0 and (self.weighting != "visibility" or self.zone_m is None):
+            raise ValueError("fusion covered_alpha needs the visibility weighting and zone_m")
+        if self.covered_alpha > 0 and self.covered_cells:
+            raise ValueError("fusion covered_alpha replaces covered_cells: set one of them")
 
 
 DEFAULT = Fusion()
@@ -93,6 +102,12 @@ def fusion_weights(grids, fusion=DEFAULT):
             if fusion.covered_cells:
                 n = _zones(cov.astype(float), k)
                 seen = np.divide(seen, n, out=np.zeros_like(seen), where=n > 0)
+            elif fusion.covered_alpha > 0:  # 0: the plain zone sum, untouched
+                a = fusion.covered_alpha
+                n = _zones(cov.astype(float), k)
+                cells = _zones(np.ones((1, *cov.shape[1:])), k)
+                d = cells ** (1 - a) * n**a
+                seen = np.divide(seen, d, out=np.zeros_like(seen), where=n > 0)
         top = seen.max(axis=0)
         ratio = np.divide(seen, top, out=np.zeros_like(seen), where=top > 0)
         if math.isinf(fusion.power):

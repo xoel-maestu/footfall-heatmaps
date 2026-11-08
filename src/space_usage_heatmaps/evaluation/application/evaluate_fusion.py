@@ -106,13 +106,17 @@ def evaluate_fusion(
     map=map,
     compare_run=None,
     compare_fusion=None,
+    truths=FUSION_TRUTHS,
 ):
     """scenes: [(scene, anchor camera)]; fused_run, single_run: (RunConfig,
     TrackSource); cameras: the cameras to fuse, default every calibrated one;
     map: how the bootstrap scores scenes (block_bootstrap); compare_run:
     (RunConfig, TrackSource) of a second fused map that takes the single
     camera's place in the predictions (same cameras; weighed by compare_fusion,
-    default fusion)."""
+    default fusion); truths: the truth blocks to score (each is bootstrapped
+    on its own, so leaving some out does not change the others)."""
+    if unknown := sorted(set(truths) - set(FUSION_TRUTHS)):
+        raise ValueError(f"unknown fusion truth blocks {unknown}")
     if compare_fusion is not None and compare_run is None:
         raise ValueError("compare_fusion needs compare_run")
     compare_fusion = fusion if compare_fusion is None else compare_fusion
@@ -224,6 +228,7 @@ def evaluate_fusion(
         results={
             truth: block_bootstrap(b, n_resamples=n_resamples, seed=seed, map=map)
             for truth, b in blocks.items()
+            if truth in truths
         },
         fused=fused_grids,
     )

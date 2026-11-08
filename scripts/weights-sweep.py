@@ -16,9 +16,23 @@ Selection: among the variants whose delta TVD full@joint CI has a lower bound
 <= 0, the lowest pooled overlap mass error; none: F5 stays. Acceptance: the
 pooled delta overlap mass error has a CI that excludes 0, with delta <= -.01.
 Target (reported, not a gate): overlap mass error <= .10 on every tune scene.
+
+Phase 6, H1 (iterations.md, "Improvements plan, phase 6"): the same rule on
+partial covered-cell normalisation, alpha in {.25, .5, .75} with p=2 on 2 m
+zones (A25, A50, A75), each paired with W1 on the product recipe
+configs/e2a-weights.yaml (same tracks as phase 4). Only the two truth blocks the
+rule reads are bootstrapped (full@overlap, full@joint; each truth is
+bootstrapped on its own, so their values do not change).
+
+    uv run --no-sync python scripts/weights-sweep.py variant A50
+    uv run --no-sync python scripts/weights-sweep.py decide h1
+
+SWEEP_WORKERS=n scores the scenes in n processes (default one per scene; 1:
+in this process).
 """
 
 import json
+import os
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -38,15 +52,33 @@ from space_usage_heatmaps.evaluation.domain.splits import SPLITS
 from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from space_usage_heatmaps.occupancy.domain.fusion import Fusion
 
-RECIPE = "configs/e2a-stitch.yaml"
 STRIDE, CACHED_STRIDE = 10, 2
 RESAMPLES = 1000
-VARIANTS = {
-    "W1": Fusion("visibility", 2.0, 2.0),
-    "W2": Fusion("visibility", 1.0, 2.0, covered_cells=True),
-    "W3": Fusion("visibility", 2.0, 2.0, covered_cells=True),
+SWEEPS = {
+    "phase4": {
+        "recipe": "configs/e2a-stitch.yaml",
+        "base": "F5",
+        "prefix": "weights",
+        "truths": ("full@joint", "full@anchor", "full@overlap"),
+        "variants": {
+            "W1": Fusion("visibility", 2.0, 2.0),
+            "W2": Fusion("visibility", 1.0, 2.0, covered_cells=True),
+            "W3": Fusion("visibility", 2.0, 2.0, covered_cells=True),
+        },
+    },
+    "h1": {
+        "recipe": "configs/e2a-weights.yaml",
+        "base": "W1",
+        "prefix": "alpha",
+        "truths": ("full@joint", "full@overlap"),
+        "variants": {
+            "A25": Fusion("visibility", 2.0, 2.0, covered_alpha=0.25),
+            "A50": Fusion("visibility", 2.0, 2.0, covered_alpha=0.5),
+            "A75": Fusion("visibility", 2.0, 2.0, covered_alpha=0.75),
+        },
+    },
 }
-TRUTHS = ("full@joint", "full@anchor", "full@overlap")
+VARIANTS = {n: (k, f) for k, sw in SWEEPS.items() for n, f in sw["variants"].items()}
 METRICS = ("mass_error", "tvd", "wape_zone", "emd_m")
 MARGIN = -0.01
 TARGET = 0.10
@@ -60,38 +92,46 @@ def dwell(t):
     return {m: est(t["dwell"][m]) for m in METRICS}
 
 
-def base_run(reader):
-    config = replace(load_config(RECIPE), stride=STRIDE)
+def base_run(reader, recipe):
+    config = replace(load_config(recipe), stride=STRIDE)
     return config, track_source(config, reader, detections_stride=CACHED_STRIDE)
 
 
 def score(name, split):
     t0 = time.time()
+    sweep, fusion = VARIANTS[name]
+    recipe, base = SWEEPS[sweep]["recipe"], SWEEPS[sweep]["base"]
     reader = NvidiaMtmcReader(data_dir())
-    run, single = base_run(reader), load_config(BASELINE_CONFIG)
-    f5 = load_fusion(RECIPE)
-    with ProcessPoolExecutor(len(SPLITS[split])) as pool:
+    run, single = base_run(reader, recipe), load_config(BASELINE_CONFIG)
+    base_fusion = load_fusion(recipe)
+    workers = int(os.environ.get("SWEEP_WORKERS", len(SPLITS[split])))
+    pool = ProcessPoolExecutor(workers) if workers > 1 else None
+    try:
         r = evaluate_fusion(
             reader,
             SPLITS[split],
             run,
             (single, track_source(single, reader)),
             0.5,
-            VARIANTS[name],
+            fusion,
             RESAMPLES,
             seed=0,
-            map=pool.map,
+            map=pool.map if pool else map,
             compare_run=run,
-            compare_fusion=f5,
+            compare_fusion=base_fusion,
+            truths=SWEEPS[sweep]["truths"],
         )
+    finally:
+        if pool:
+            pool.shutdown()
     overlap, joint = r.results["full@overlap"], r.results["full@joint"]
     return {
         "split": split,
         "scenes": [s for s, _ in SPLITS[split]],
-        "recipe": f"{RECIPE} at stride {STRIDE} from the stride-{CACHED_STRIDE} detection cache",
+        "recipe": f"{recipe} at stride {STRIDE} from the stride-{CACHED_STRIDE} detection cache",
         "variant": name,
-        "fusion": vars(VARIANTS[name]),
-        "baseline": "F5 " + json.dumps(vars(f5)),
+        "fusion": vars(fusion),
+        "baseline": f"{base} " + json.dumps(vars(base_fusion)),
         "n_resamples": RESAMPLES,
         "seed": 0,
         "interval": "paired block bootstrap, 30 s blocks, recentred percentile 95 %",
@@ -99,13 +139,13 @@ def score(name, split):
         "overlap_mass_error": {
             "pooled": {
                 "variant": est(overlap.pooled[0]["dwell"]["mass_error"]),
-                "F5": est(overlap.pooled[1]["dwell"]["mass_error"]),
+                base: est(overlap.pooled[1]["dwell"]["mass_error"]),
                 "delta": est(overlap.delta_pooled["dwell"]["mass_error"]),
             },
             "scenes": {
                 s.scene: {
                     "variant": est(overlap.scenes[i][0]["dwell"]["mass_error"]),
-                    "F5": est(overlap.scenes[i][1]["dwell"]["mass_error"]),
+                    base: est(overlap.scenes[i][1]["dwell"]["mass_error"]),
                     "delta": est(overlap.delta_scenes[i]["dwell"]["mass_error"]),
                 }
                 for i, s in enumerate(r.scenes)
@@ -113,32 +153,33 @@ def score(name, split):
         },
         "tvd_full_joint": {
             "variant": est(joint.pooled[0]["dwell"]["tvd"]),
-            "F5": est(joint.pooled[1]["dwell"]["tvd"]),
+            base: est(joint.pooled[1]["dwell"]["tvd"]),
             "delta": est(joint.delta_pooled["dwell"]["tvd"]),
         },
         "dwell": {
             truth: {
                 "pooled": {
                     "variant": dwell(r.results[truth].pooled[0]),
-                    "F5": dwell(r.results[truth].pooled[1]),
+                    base: dwell(r.results[truth].pooled[1]),
                     "delta": dwell(r.results[truth].delta_pooled),
                 }
             }
-            for truth in TRUTHS
+            for truth in SWEEPS[sweep]["truths"]
         },
         "seconds": round(time.time() - t0),
     }
 
 
-def line(res):
+def line(res, base):
     o, t = res["overlap_mass_error"], res["tvd_full_joint"]
     scenes = ", ".join(f"{s} {v['variant']['value']:.3f}" for s, v in o["scenes"].items())
     d, dt = o["pooled"]["delta"], t["delta"]
     return (
         f"{res['variant']} {res['split']}: overlap mass err {o['pooled']['variant']['value']:.4f} "
-        f"(F5 {o['pooled']['F5']['value']:.4f}) delta {d['value']:+.4f} "
+        f"({base} {o['pooled'][base]['value']:.4f}) delta {d['value']:+.4f} "
         f"[{d['lo']:+.4f}, {d['hi']:+.4f}]; TVD full@joint {t['variant']['value']:.4f} "
-        f"(F5 {t['F5']['value']:.4f}) delta {dt['value']:+.4f} [{dt['lo']:+.4f}, {dt['hi']:+.4f}]; "
+        f"({base} {t[base]['value']:.4f}) delta {dt['value']:+.4f} "
+        f"[{dt['lo']:+.4f}, {dt['hi']:+.4f}]; "
         f"scenes {scenes} ({res['seconds']} s)"
     )
 
@@ -148,14 +189,19 @@ def write(out, report):
     Path(out).write_text(json.dumps(report, indent=2) + "\n")
 
 
-def decide():
-    reports = {n: json.loads(Path(f"reports/weights-{n}-tune.json").read_text()) for n in VARIANTS}
+def decide(sweep):
+    base, prefix = SWEEPS[sweep]["base"], SWEEPS[sweep]["prefix"]
+    reports = {
+        n: json.loads(Path(f"reports/{prefix}-{n}-tune.json").read_text())
+        for n in SWEEPS[sweep]["variants"]
+    }
     eligible = [n for n, r in reports.items() if r["tvd_full_joint"]["delta"]["lo"] <= 0]
     best = min(
         eligible,
         key=lambda n: reports[n]["overlap_mass_error"]["pooled"]["variant"]["value"],
         default=None,
     )
+    # F5 in phase 4, W1 in phase 6 H1: the baseline stays when none is selected.
     accepted = False
     if best is not None:
         d = reports[best]["overlap_mass_error"]["pooled"]["delta"]
@@ -166,18 +212,19 @@ def decide():
     }
     out = {
         "rule": "eligible: delta TVD full@joint CI lower bound <= 0; selected: lowest pooled "
-        "overlap mass error among eligible, else F5; accepted: pooled delta overlap mass error "
-        "CI excludes 0 and delta <= -.01",
+        "overlap mass error among eligible, else the baseline; accepted: pooled delta overlap "
+        "mass error CI excludes 0 and delta <= -.01",
         "eligible": eligible,
-        "selected": best or "F5",
+        "baseline": base,
+        "selected": best or base,
         "accepted": accepted,
         "target_every_scene_overlap_le_0.10": target,
         "variants": reports,
     }
-    write("reports/weights-sweep-tune.json", out)
+    write(f"reports/{prefix}-sweep-tune.json", out)
     for r in reports.values():
-        print(line(r))
-    print(f"eligible {eligible}; selected {best or 'F5'}; accepted {accepted}; target {target}")
+        print(line(r, base))
+    print(f"eligible {eligible}; selected {best or base}; accepted {accepted}; target {target}")
 
 
 if __name__ == "__main__":
@@ -185,9 +232,10 @@ if __name__ == "__main__":
     if mode in ("variant", "sealed") and name in VARIANTS:
         split = "tune" if mode == "variant" else "sealed"
         res = score(name, split)
-        print(line(res), flush=True)
-        write(f"reports/weights-{name}-{split}.json", res)
+        sweep = SWEEPS[VARIANTS[name][0]]
+        print(line(res, sweep["base"]), flush=True)
+        write(f"reports/{sweep['prefix']}-{name}-{split}.json", res)
     elif mode == "decide":
-        decide()
+        decide(name or "phase4")
     else:
         raise SystemExit(__doc__)
