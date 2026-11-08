@@ -327,3 +327,35 @@ def test_the_meter_measures_stream_lag_and_lost_frames():
     assert b["lag_slope_s_per_min"] > 3  # grows: the lag is not bounded
     r = meter.report()
     assert r["lag_slope_max_s_per_min"] == b["lag_slope_s_per_min"]
+
+
+def test_a_site_counts_k_as_its_config_says(site, tmp_path, monkeypatch):
+    from space_usage_heatmaps.occupancy.domain.slots import DEFAULT_K_COUNT
+    from space_usage_heatmaps.occupancy.domain.stitching import K_STITCH
+
+    path, _ = site
+    assert calibrate(path) == 0
+    seen = []
+    real = site_recording.RecordSite
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("stitch"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(site_recording, "RecordSite", spy)
+    text = path.read_text()
+    assert cli.main(["run", "--site", str(path), "--db", str(tmp_path / "a.db")]) == 0
+    for k_count in ("ids", "chains"):
+        path.write_text(text + f"k_count: {k_count}\n")
+        assert cli.main(["run", "--site", str(path), "--db", str(tmp_path / f"{k_count}.db")]) == 0
+
+    default = K_STITCH if DEFAULT_K_COUNT == "chains" else None
+    assert seen == [default, None, K_STITCH]
+
+
+def test_a_site_with_an_unknown_k_count_is_refused(site, capsys):
+    path, _ = site
+    path.write_text(path.read_text() + "k_count: people\n")
+
+    assert calibrate(path) == 1
+    assert "k_count" in capsys.readouterr().err

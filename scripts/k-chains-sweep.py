@@ -154,7 +154,7 @@ def measure_scene(scene):
             if arm == "chains":
                 chain = ch
                 batch = stitch(ids, frames, xy, fps, K_STITCH)
-                unit["chains"] = int(len(set(ch.values())))
+                unit["n_chains"] = int(len(set(ch.values())))
                 unit["online_equals_batch"] = bool(
                     np.array_equal(np.array([ch[i] for i in ids.tolist()]), batch)
                 )
@@ -335,7 +335,7 @@ def main():
             r["scene"]: {
                 "cameras": len(r["cameras"]),
                 "raw_ids": sum(u["raw_ids"] for u in r["cameras"]),
-                "chains": sum(u["chains"] for u in r["cameras"]),
+                "chains": sum(u["n_chains"] for u in r["cameras"]),
                 "per_camera": {
                     a: {tr: pooled(r["cameras"], a, tr) for tr in TRUTHS} for a in ARMS
                 },  # fmt: skip

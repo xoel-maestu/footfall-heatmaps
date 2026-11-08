@@ -44,6 +44,7 @@ from space_usage_heatmaps.occupancy.application.record_cameras import CameraPipe
 from space_usage_heatmaps.occupancy.application.record_site import RecordSite
 from space_usage_heatmaps.occupancy.domain.fusion import Fusion
 from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from space_usage_heatmaps.occupancy.domain.slots import DEFAULT_K_COUNT, K_COUNTS, k_stitch
 from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 from space_usage_heatmaps.perception.application.reconnect import reconnecting_frames
 from space_usage_heatmaps.perception.domain.privacy_mask import PrivacyMask
@@ -51,7 +52,7 @@ from space_usage_heatmaps.perception.infrastructure.round_robin_feed import roun
 
 SITE_KEYS = {
     "site", "recipe", "stride", "extent_m", "cell_m", "retention_days", "start_utc",
-    "fusion", "calibration", "cameras",
+    "fusion", "calibration", "cameras", "k_count",
 }  # fmt: skip
 CAMERA_KEYS = {"id", "source", "calibration", "masks"}
 FUSION_KEYS = {"weighting", "power", "zone_m", "covered_cells", "weights"}
@@ -86,6 +87,7 @@ class Site:
     weights_path: Path
     calibration_s: float
     cameras: tuple
+    k_count: str = DEFAULT_K_COUNT  # what k counts in a fused slot: each camera's chains or ids
 
     @property
     def camera_ids(self):
@@ -149,6 +151,9 @@ def load_site(path):
     if not retention > 0:
         raise ValueError(f"site {path}: retention_days must be positive")
     minutes = (d.get("calibration") or {}).get("minutes", 15)
+    k_count = d.get("k_count", DEFAULT_K_COUNT)
+    if k_count not in K_COUNTS:
+        raise ValueError(f"site {path}: k_count must be one of {K_COUNTS}")
     return Site(
         id=str(d["site"]),
         config=config,
@@ -159,6 +164,7 @@ def load_site(path):
         weights_path=Path(_under_data(weights)),
         calibration_s=float(minutes) * 60,
         cameras=tuple(cameras),
+        k_count=k_count,
     )
 
 
@@ -546,7 +552,14 @@ def run_record_site(args, live=None, stop=None, meter=None):
     meter = meter or CameraMeter(site.camera_ids)
     store = SqliteSlotStore(args.db)
     recorder = RecordSite(
-        store, site.id, site.camera_ids, weights, site.spec, site.retention_days, time.time
+        store,
+        site.id,
+        site.camera_ids,
+        weights,
+        site.spec,
+        site.retention_days,
+        time.time,
+        stitch=k_stitch(site.k_count),
     )
     inner = recorder
     if live is not None:

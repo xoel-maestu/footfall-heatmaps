@@ -101,3 +101,35 @@ def test_a_start_past_the_retention_fails_instead_of_reporting_slots(tmp_path, s
     assert "0 slots" in captured.out
     with sqlite3.connect(db) as c:
         assert c.execute("SELECT COUNT(*) FROM slots").fetchone() == (0,)
+
+
+def test_run_counts_k_as_the_run_section_says(tmp_path, setup, monkeypatch):
+    from space_usage_heatmaps.occupancy.domain.slots import DEFAULT_K_COUNT
+    from space_usage_heatmaps.occupancy.domain.stitching import K_STITCH
+
+    config, video = setup
+    seen = []
+    real = cli.RecordSlots
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("stitch"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "RecordSlots", spy)
+    base = ["run", "--config", str(config), "--source", str(video)]
+    assert cli.main([*base, "--db", str(tmp_path / "a.db")]) == 0
+    for k_count in ("ids", "chains"):
+        config.write_text(CONFIG + f"  k_count: {k_count}\n")
+        assert cli.main([*base, "--db", str(tmp_path / f"{k_count}.db")]) == 0
+
+    default = K_STITCH if DEFAULT_K_COUNT == "chains" else None
+    assert seen == [default, None, K_STITCH]
+
+
+def test_an_unknown_k_count_is_an_error(tmp_path, setup, capsys):
+    config, video = setup
+    config.write_text(CONFIG + "  k_count: people\n")
+
+    args = ["run", "--config", str(config), "--source", str(video), "--db", str(tmp_path / "x.db")]
+    assert cli.main(args) == 1
+    assert "k_count" in capsys.readouterr().err

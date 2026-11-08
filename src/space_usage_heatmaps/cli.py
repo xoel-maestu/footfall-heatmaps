@@ -33,6 +33,7 @@ from space_usage_heatmaps.occupancy.application.purge_slots import RETENTION_DAY
 from space_usage_heatmaps.occupancy.application.record_camera import record_camera
 from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
 from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from space_usage_heatmaps.occupancy.domain.slots import DEFAULT_K_COUNT, K_COUNTS, k_stitch
 from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 from space_usage_heatmaps.perception.application.reconnect import reconnecting_frames
 from space_usage_heatmaps.perception.domain.privacy_mask import PrivacyMask
@@ -295,6 +296,7 @@ class RunSettings:
     retention_days: float = RETENTION_DAYS
     masks: dict = field(default_factory=dict)  # image and floor polygons (R6)
     start_utc: object = None  # a video file's start; --start overrides
+    k_count: str = DEFAULT_K_COUNT  # what k counts in a persisted slot: chains or ids
 
 
 def load_run_settings(path):
@@ -311,6 +313,8 @@ def load_run_settings(path):
         raise ValueError(f"config {path}: run.masks takes image and floor, not {unknown}")
     if not s.retention_days > 0:
         raise ValueError(f"config {path}: run.retention_days must be positive")
+    if s.k_count not in K_COUNTS:
+        raise ValueError(f"config {path}: run.k_count must be one of {K_COUNTS}")
     return replace(s, camera_id=str(s.camera_id))
 
 
@@ -364,7 +368,14 @@ def run_record(args, live=None, stop=None):
         cam.world_to_image,
     )
     store = SqliteSlotStore(args.db)
-    recorder = RecordSlots(store, settings.camera_id, spec, settings.retention_days, time.time)
+    recorder = RecordSlots(
+        store,
+        settings.camera_id,
+        spec,
+        settings.retention_days,
+        time.time,
+        stitch=k_stitch(settings.k_count),
+    )
     if live is not None:
         recorder = live.attach(recorder)
     purge_slots(store, time.time(), settings.retention_days)

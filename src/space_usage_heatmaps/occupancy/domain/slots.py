@@ -16,11 +16,20 @@ from typing import Protocol
 
 import numpy as np
 
-from space_usage_heatmaps.occupancy.domain.stitching import ChainBuilder
+from space_usage_heatmaps.occupancy.domain.stitching import K_STITCH, ChainBuilder
 
 SLOT_S = 900  # 15 minutes
 K_MIN_PEOPLE = 5  # R5: a cell with fewer distinct people reads as empty
 LAYERS = ("dwell", "passage")
+K_COUNTS = ("ids", "chains")  # what the k test of a persisted slot counts
+DEFAULT_K_COUNT = "ids"
+
+
+def k_stitch(k_count):
+    """The stitch a recorder's k test counts chains of; None: raw ids."""
+    if k_count not in K_COUNTS:
+        raise ValueError(f"k_count must be one of {K_COUNTS}, not {k_count!r}")
+    return K_STITCH if k_count == "chains" else None
 
 
 def follow_rows(slot, t, track_ids, xs, ys, seconds):
