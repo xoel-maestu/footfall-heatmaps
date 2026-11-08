@@ -9,7 +9,7 @@ or stop on an error.
 
 import numpy as np
 
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
+from space_usage_heatmaps.floorplan.domain.foot_point import camera_floor_points
 
 
 def record_camera(frames, detector, mask, tracker, cam, config, recorder, time_of, seconds):

@@ -115,3 +115,41 @@ MEDIAMTX=~/tools/mediamtx/mediamtx scripts/rtsp-loop.sh \
   "$SPACE_USAGE_DATA_DIR/nvidia/MTMC_Tracking_2024/test/scene_071/camera_0645/video.mp4" s071
 # -> rtsp://127.0.0.1:8554/s071 until Ctrl+C
 ```
+
+## Recording a site
+
+A site is every camera of one floor recorded in one process into the same
+15-minute slots. One TensorRT detector serves the cameras in turn; each camera
+keeps its own tracker, privacy mask and floor points. When a quarter closes,
+the cameras' grids are fused into one floor grid and k=5 is applied to the
+fused grid. Only that grid is written, under the site id. Nothing per camera
+or per track is stored.
+
+A site config lists the cameras with their sources and calibrations, the recipe,
+the stride, the floor grid and the fusion (`configs/site-071.yaml`: the 15
+cameras of NVIDIA scene 071 from their video files). Relative sources and the
+weights file are under the data dir. The sources are all video files (replayed
+file-paced, no frame dropped) or all `rtsp://` streams (each camera keeps its
+newest frame; drops reconnect with backoff and mark the slot incomplete).
+
+```bash
+# 1. Freeze the fusion weights once, from the calibration window (calibration.minutes)
+uv run space-usage calibrate --site configs/site-071.yaml
+# 2. Record every camera into fused slots (Ctrl+C or SIGTERM writes the open slot)
+uv run space-usage run --site configs/site-071.yaml --db data/site-071.db --stats data/site-071-stats.json
+# 3. View the fused slots; with --record, record in the same process and show the fused live layer
+uv run space-usage serve --site configs/site-071.yaml --db data/site-071.db --record
+```
+
+The weights are the evaluation's visibility weighting (W1: power 2 on 2 m
+zones) computed from what the cameras record during the calibration window
+(their dwell per cell) and where they look (their floor coverage), with no
+ground truth. `calibrate` refuses to overwrite them, and `run` refuses
+weights made for other cameras, another grid or another fusion. To calibrate
+again, delete the weights file.
+
+The fused passage of a cell is the weighted mean of the covering cameras'
+distinct people, so a cell shows only where at least one camera saw 5 or more
+distinct people. A slot's people count is the largest count of any one camera,
+because ids are per camera. The page shows the fused live layer and slots, the
+fusion, and each camera's state and processed frame rate.

@@ -28,7 +28,8 @@ one static file, no build step, nothing fetched from outside the server.
 
 ## Overview (brand and style)
 
-A measuring instrument for one camera's floor. The floor grid in metres is the
+A measuring instrument for one camera's floor, or for a site's floor with
+every camera fused (`serve --site`). The floor grid in metres is the
 page; everything else is the control and the reading of what it shows.
 
 ## Colors
@@ -65,7 +66,13 @@ None: no sheets, no dialogs, no shadows.
   "Dwell (person-seconds)" and "Passage (people)".
 - Slot picker: a UTC day and the slots that start on it; hidden in live mode.
 - Legend: the ramp from 0 to the highest cell shown, with the unit.
-- Summary: sum over cells, cells above zero, highest cell, cell size, data time.
+- Summary: sum over cells, cells above zero, highest cell, cell size, data time;
+  for a site also the cameras fused, the overlap weighting and what passage counts.
+- Site mode (`serve --site`): the title names the site; Live and 15-min slot are
+  the fused layers. A camera table spans the panel's columns: camera, state,
+  processed fps, frames skipped, source drops, refreshed every 2 s. Counts only.
+- Empty states: a map with no cell at k says so on the map; a site with no live
+  layer in the process, or no slot on the chosen day, says why on the map.
 
 ## Do's and Don'ts
 

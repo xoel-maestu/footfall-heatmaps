@@ -53,6 +53,13 @@ class LiveLayer:
             np.add.at(counts, [c for _, c in self.last_seen], 1.0)
         return counts.reshape(self.dwell.shape)
 
+    def raw(self, t):
+        """(dwell, passage, people) decayed to time t, before k: for fusion in
+        memory (fuse, then suppress), never shown as is."""
+        self._decay(t)
+        self._prune()
+        return self.dwell.copy(), self.passage.copy(), self.people()
+
     def at(self, t):
         """(dwell, passage) decayed to time t, empty where fewer than k people
         were seen in the last recent_s seconds."""

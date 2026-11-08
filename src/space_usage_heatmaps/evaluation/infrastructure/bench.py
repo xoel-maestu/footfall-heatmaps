@@ -15,7 +15,7 @@ import time
 import numpy as np
 import pynvml
 
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
+from space_usage_heatmaps.floorplan.domain.foot_point import camera_floor_points
 
 VRAM_EVERY = 30  # frames between two NVML samples
 

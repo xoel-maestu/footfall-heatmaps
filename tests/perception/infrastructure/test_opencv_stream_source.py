@@ -21,3 +21,14 @@ def test_a_stream_that_stops_is_dropped_after_its_frames(tmp_path):
             seen.append(frame.index)
 
     assert seen == [0, 1, 2, 3, 4] and source.fps == 10.0
+
+
+def test_a_frame_carries_its_stream_time(tmp_path):
+    source = OpenCvStreamSource(str(write_video(tmp_path / "v.avi", n=5)))
+    times = []
+
+    with pytest.raises(SourceDropped):
+        for f in source.frames():
+            times.append(round(f.timestamp, 3))
+
+    assert times == [0.0, 0.1, 0.2, 0.3, 0.4]  # 10 fps: PTS, or frame count / fps
