@@ -276,3 +276,24 @@ def test_the_page_offers_the_fused_map_only_when_there_is_one(serve, tmp_path):
 
     assert 'data-fused="0"' in plain and 'data-fused="1"' in with_fused
     assert "Fused scene" in with_fused
+
+
+def test_a_site_server_says_so_on_the_page_and_serves_its_cameras(tmp_path):
+    info = {"site": "071", "cameras": [{"id": "635", "state": "recording"}]}
+    server = make_server("127.0.0.1", 0, "071", SPEC, tmp_path / "x.db", site=lambda: info)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        page = get(server, "/")[2].decode()
+        status, _, body = get(server, "/api/site")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert 'data-site="1"' in page and 'data-camera="071"' in page
+    assert status == 200 and json.loads(body) == info
+
+
+def test_a_camera_server_has_no_site(serve):
+    status, _, body = get(serve(), "/api/site")
+
+    assert status == 404 and "--site" in json.loads(body)["error"]

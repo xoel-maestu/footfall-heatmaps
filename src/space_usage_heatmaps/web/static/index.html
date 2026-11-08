@@ -114,9 +114,19 @@ dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; f
 dt { color: var(--muted); }
 dd { margin: 0; text-align: right; }
 .note { font-size: 13px; color: var(--muted); margin: 0; }
+.site-only[hidden] { display: none; }
+#cameras { width: 100%; border-collapse: collapse; font-size: 13px; }
+#cameras th, #cameras td { padding: 6px 8px 6px 0; text-align: right; border-bottom: 1px solid var(--line); }
+#cameras th { font-weight: 600; color: var(--muted); vertical-align: bottom; }
+#cameras th:first-child, #cameras td:first-child, #cameras th:nth-child(2), #cameras td:nth-child(2) { text-align: left; }
+#cameras td[data-state="stalled"], #cameras td[data-state="ended"] { font-weight: 600; }
+#cameras-note { margin-top: 6px; }
+@media (min-width: 960px) {
+  #cameras-group { grid-column: 1 / -1; }
+}
 </style>
 </head>
-<body data-camera="__CAMERA__" data-fused="__FUSED__">
+<body data-camera="__CAMERA__" data-fused="__FUSED__" data-site="__SITE__">
 <header>
   <h1 id="title">Floor occupancy, camera <span id="camera"></span></h1>
   <p id="status" role="status" aria-live="polite">Loading…</p>
@@ -166,20 +176,33 @@ dd { margin: 0; text-align: right; }
       <dt class="fused-only" hidden>Passage counts</dt><dd class="fused-only" id="sum-passage-ids" hidden>-</dd>
     </dl>
     <p class="note" id="layer-note"></p>
+    <section id="cameras-group" class="site-only" hidden aria-labelledby="cameras-title">
+      <div class="label" id="cameras-title">Cameras of the site</div>
+      <table id="cameras">
+        <thead><tr><th scope="col">Camera</th><th scope="col">State</th><th scope="col">Processed fps</th><th scope="col">Frames skipped</th><th scope="col">Source drops</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="note" id="cameras-note">One detector serves every camera in turn. Processed fps is over each camera's last 30 frames; frames skipped are frames a camera replaced before its turn came.</p>
+    </section>
   </aside>
 </main>
 <script>
 "use strict";
 const camera = document.body.dataset.camera;
 const hasFused = document.body.dataset.fused === "1";
+const isSite = document.body.dataset.site === "1";
 const EMPTY = {
   live: "No cell reached 5 distinct people in the last 2 minutes.",
   slot: "No cell reached 5 distinct people in this slot.",
   fused: "No cell of the fused map reached 5 distinct people.",
 };
+const NO_DATA = {
+  live: "No live layer in this process. Start serve --site with --record to record the cameras and show it.",
+  slot: "No slot is stored for this day. A slot is written when its 15-minute quarter closes.",
+};
 const $ = (id) => document.getElementById(id);
 const desktop = window.matchMedia("(min-width: 960px)");
-const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false };
+const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false, noData: null };
 const timeFmt = (t) => new Date(t * 1000).toISOString().slice(11, 19) + " UTC";
 const cameraEl = $("camera");
 cameraEl.textContent = camera;
@@ -235,19 +258,30 @@ const NOTES = {
     "by several cameras is counted once. From an evaluation export of the whole video; cells " +
     "with fewer than 5 distinct people read as empty.",
 };
+const SITE_NOTES = {
+  live: "Fused live layer: every camera of the site on one floor, 60 s half-life, held in memory " +
+    "only and never stored. Where cameras overlap, each cell is a weighted mean of the cameras " +
+    "that cover it, with weights frozen at the site's calibration. Cells with fewer than 5 " +
+    "distinct people in the last 2 minutes read as empty.",
+  slot: "Fused slot: every camera of the site on one floor over 15 minutes. Where cameras " +
+    "overlap, each cell is a weighted mean of the cameras that cover it, with weights frozen at " +
+    "the site's calibration. Cells with fewer than 5 distinct people read as empty.",
+};
 const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 
 // The legend and summary texts, by element id, for the data shown. With no data
 // every number reads as a dash: an empty map never keeps the previous map's numbers.
-function legendState(d, layer, source) {
+// site: the site's fused map (serve --site); its camera and fusion rows come from /api/site.
+function legendState(d, layer, source, site) {
   const unit = UNITS[layer];
   const out = {
     "legend-title": layer === "dwell" ? "Dwell (person-seconds)" : "Passage (people)",
-    "layer-note": NOTES[source],
+    "layer-note": site ? SITE_NOTES[source] : NOTES[source],
   };
   if (!d) {
-    for (const id of ["legend-min", "legend-max", "sum-total", "sum-cells", "sum-max", "sum-cell",
-      "sum-time", "sum-cameras", "sum-fusion", "sum-passage-ids"]) out[id] = "-";
+    const ids = ["legend-min", "legend-max", "sum-total", "sum-cells", "sum-max", "sum-cell", "sum-time"];
+    if (!site) ids.push("sum-cameras", "sum-fusion", "sum-passage-ids");
+    for (const id of ids) out[id] = "-";
     out["legend-unit"] = "";
     return out;
   }
@@ -268,8 +302,22 @@ function legendState(d, layer, source) {
 }
 // legend-state:end
 
+// camera-rows:begin
+// The cells of the site's camera table, as text: counts and rates only.
+const fps1 = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+function cameraRows(cameras) {
+  return cameras.map((c) => [
+    c.id,
+    c.state.charAt(0).toUpperCase() + c.state.slice(1),
+    c.processed_fps == null ? "-" : fps1.format(c.processed_fps),
+    String(c.frames_skipped),
+    String(c.source_drops),
+  ]);
+}
+// camera-rows:end
+
 function showLegend(d) {
-  for (const [id, text] of Object.entries(legendState(d, state.layer, state.source))) $(id).textContent = text;
+  for (const [id, text] of Object.entries(legendState(d, state.layer, state.source, isSite))) $(id).textContent = text;
 }
 
 function draw() {
@@ -284,6 +332,7 @@ function draw() {
   showLegend(d);
   if (!d) {
     canvas.setAttribute("aria-label", "Occupancy heatmap: no data");
+    if (state.noData) { $("empty-note").textContent = state.noData; $("empty-note").hidden = false; }
     return;
   }
   const [ny, nx] = d.shape, cell = d.cell_m, [ox, oy] = d.origin;
@@ -358,6 +407,11 @@ async function pollLive() {
     draw();
   } catch (e) {
     if (state.source !== "live") return;
+    if (isSite && e.message.startsWith("no live source")) {
+      state.noData = NO_DATA.live; state.data = null; draw();
+      setStatus("Stored slots only: no live layer in this process");
+      return;
+    }
     state.data = null; draw(); // no stale map under an error
     setStatus(`Live layer unavailable: ${e.message}`, true);
   } finally {
@@ -402,11 +456,13 @@ function showSlot() {
   if (state.source !== "slot") return;
   const s = state.slots[Number($("slot").value)];
   if (!s || $("slot").value === "") {
+    state.noData = isSite ? NO_DATA.slot : null;
     state.data = null; draw();
     setStatus("No persisted slot on this day");
     return;
   }
   const end = new Date(Date.parse(s.start) + 900000).toISOString().slice(11, 16);
+  state.noData = null;
   state.data = { ...s, label: `${s.start.slice(0, 10)} ${s.start.slice(11, 16)} to ${end} UTC` };
   setStatus(`Slot ${state.data.label}${s.incomplete ? ", incomplete" : ""}`);
   draw();
@@ -441,12 +497,41 @@ async function loadFused() {
   draw();
 }
 
+const SITE_PASSAGE_IDS = "each camera's ids, weighted by the site's fusion weights";
+
+async function loadSite() {
+  try {
+    const d = await getJson("/api/site");
+    $("sum-cameras").textContent = `${d.cameras.length} (${d.cameras.map((c) => c.id).join(", ")})`;
+    $("sum-fusion").textContent = `${WEIGHTING[d.fusion.weighting](d.fusion)}, frozen at calibration`;
+    $("sum-passage-ids").textContent = SITE_PASSAGE_IDS;
+    const body = $("cameras").tBodies[0];
+    body.replaceChildren(...cameraRows(d.cameras).map((cells, i) => {
+      const tr = document.createElement("tr");
+      for (const [k, text] of cells.entries()) {
+        const td = document.createElement(k === 0 ? "th" : "td");
+        if (k === 0) td.scope = "row";
+        if (k === 1) td.dataset.state = d.cameras[i].state;
+        td.textContent = text;
+        tr.append(td);
+      }
+      return tr;
+    }));
+    return d;
+  } catch (e) {
+    setStatus(`Site details unavailable: ${e.message}`, true);
+    return null;
+  }
+}
+
 function setSource(source) {
   state.source = source;
+  state.noData = null;
   $("slot-picker").hidden = source !== "slot";
-  for (const el of document.querySelectorAll(".fused-only")) el.hidden = source !== "fused";
+  for (const el of document.querySelectorAll(".fused-only")) el.hidden = !(source === "fused" || isSite);
   $("title").replaceChildren(
-    ...(source === "fused" ? ["Floor occupancy, fused scene"] : ["Floor occupancy, camera ", cameraEl]));
+    ...(source === "fused" ? ["Floor occupancy, fused scene"]
+      : isSite ? ["Floor occupancy, site ", cameraEl] : ["Floor occupancy, camera ", cameraEl]));
   clearInterval(state.timer);
   if (source === "fused") {
     state.data = null; draw();
@@ -475,7 +560,17 @@ getJson(`/api/slots/latest?camera=${encodeURIComponent(camera)}`)
   .catch(() => {})
   .finally(() => { if (state.source === "slot") loadSlots(); });
 $("fused-choice").hidden = !hasFused;
-if (hasFused) {
+if (isSite) {
+  for (const el of document.querySelectorAll(".site-only")) el.hidden = false;
+  loadSite().then((d) => {
+    // a server that only reads the slots opens on them; a recording one on the live layer
+    const recording = d && d.cameras.some((c) => c.state !== "not recording");
+    const source = recording ? "live" : "slot";
+    document.querySelector(`input[name="source"][value="${source}"]`).checked = true;
+    setSource(source);
+    if (recording) setInterval(() => { if (!document.hidden) loadSite(); }, 2000);
+  });
+} else if (hasFused) {
   document.querySelector('input[name="source"][value="fused"]').checked = true;
   setSource("fused");
 } else {
