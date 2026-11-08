@@ -182,11 +182,12 @@ Windows-only markers in the lock, never installed on Linux: colorama
 
 ## Datasets
 
-Kept under `SPACE_USAGE_DATA_DIR`, never committed, used to measure only.
+Kept under `SPACE_USAGE_DATA_DIR`, never committed, used to measure only. The
+one exception is `docs/media/demo.gif`, frames of one NVIDIA scene (below).
 
 | Dataset | Licence | Consequence |
 |---|---|---|
-| NVIDIA PhysicalAI-SmartSpaces, MTMC_Tracking_2024 | Conflict: CC BY 4.0 on the Hugging Face card; the AI City Challenge 2024 data agreement forbids commercial use | measurement only; a product would replace it with its own footage |
+| NVIDIA PhysicalAI-SmartSpaces, MTMC_Tracking_2024 (`huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces`) | Conflict: CC BY 4.0 on the Hugging Face card (attribution required); the AI City Challenge 2024 data agreement forbids commercial use | measurement only; a product would replace it with its own footage. The README's demo GIF (`docs/media/demo.gif`, `scripts/demo-gif.py`) shows 24 s of scene 071 camera 645, with the attribution "Synthetic scene: NVIDIA PhysicalAI-SmartSpaces, CC BY 4.0" in the GIF and under it |
 | WILDTRACK (EPFL CVLab, `documents.epfl.ch/groups/c/cv/cvlab-unit/www/data/Wildtrack/Wildtrack_dataset_full.zip`, from `epfl.ch/labs/cvlab/data/data-wildtrack/`): calibrations, the 400 annotated frames' positions and camera C5's frames, fetched by HTTP range from the official zip (`scripts/fetch-datasets.py`) | No licence stated on its page (checked 2026-11-06); EPFL CVLab's general terms, as recorded in the research notes and not re-verified: research and evaluation only, commercial use with prior written permission | evaluation only (`space-usage eval --dataset wildtrack`), never tuned on; cite Chavdarova et al., CVPR 2018 |
 | CAVIAR, second set (`homepages.inf.ed.ac.uk/rbf/CAVIARDATA1/`): the 26 corridor-view clips (`CAVIARDATA2/<clip>cor/`, MPEG-1 and CVML ground truth; `scripts/fetch-datasets.py`) | Creative Commons BY-SA (version not stated); attribution to the EC-funded CAVIAR project IST 2001 37540 | evaluation only (`--dataset caviar`), never tuned on |
 | MOT17 (`motchallenge.net/data/MOT17/`): train sequences 02, 04 and 09 (FRCNN copy: frames, `gt/gt.txt`, `seqinfo.ini`), fetched by HTTP range from the official `MOT17.zip` (`scripts/fetch-datasets.py`) | CC BY-NC-SA 3.0 | non-commercial, evaluation only (`--dataset mot17`), never tuned on |
