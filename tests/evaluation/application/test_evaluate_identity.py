@@ -97,3 +97,28 @@ def test_the_camera_tracks_are_left_as_they_were(reader, source, rows):
     after = source.tracks("001", "7")
     np.testing.assert_array_equal(after.track_ids, before.track_ids)
     np.testing.assert_array_equal(after.boxes, before.boxes)
+
+
+def test_stitching_joins_a_camera_s_lost_track_before_association(reader, rows):
+    from dataclasses import replace
+
+    from tests.evaluation.application.test_evaluate_fusion import split_track_2
+
+    seen = split_track_2(tracks_from_rows(rows))
+    by_8 = joined(renumbered(tracks_from_rows(rows), 100), tracks_from_rows(rows, camera=8))
+    source = InMemoryTrackSource({("001", "7"): seen, ("001", "8"): by_8})
+    stitched = replace(CFG, stitch={"gap_s": 2.0, "radius_m": 0.5})
+
+    def tracks(config):
+        r = evaluate_identity(
+            reader,
+            ["001"],
+            (config, source),
+            Fusion("visibility", 1.0),
+            {"e2b": COLOCATE, "baseline": NONE},
+            floor_identity,
+            n_resamples=5,
+        )
+        return r.scenes[0].camera_tracks
+
+    assert (tracks(stitched), tracks(CFG)) == (5, 6)

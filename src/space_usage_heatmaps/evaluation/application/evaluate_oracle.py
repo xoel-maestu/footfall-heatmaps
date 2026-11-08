@@ -24,6 +24,7 @@ import numpy as np
 
 from space_usage_heatmaps.evaluation.domain.metrics import LayerMetrics, compare_grids
 from space_usage_heatmaps.evaluation.domain.position_error import PositionError, position_error
+from space_usage_heatmaps.evaluation.domain.tracks import Tracks
 from space_usage_heatmaps.floorplan.domain.foot_point import (
     MIN_IMPLIED_HEIGHT_M,
     PERSON_HEIGHT_M,
@@ -31,6 +32,7 @@ from space_usage_heatmaps.floorplan.domain.foot_point import (
 )
 from space_usage_heatmaps.floorplan.domain.homography import Homography
 from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec
+from space_usage_heatmaps.occupancy.domain.stitching import stitch
 
 SOURCES = ("gt-world", "gt-boxes")
 TRUTHS = ("visible@coverage", "full@coverage", "visible@visibility")
@@ -113,6 +115,37 @@ def camera_floor_points(
         frames,
         track_heights,
     )
+
+
+def recipe_floor_points(cam, tracks, config):
+    """(ids, xs, ys, head): the floor points of a recipe's tracks and the ids
+    they are scored with. The foot point reads the tracker's own ids
+    (auto-track's per-track height); the config's stitching, if any, then
+    relabels the ids from those points, so the points, and dwell, are the
+    same with and without it."""
+    xs, ys, head = camera_floor_points(
+        cam,
+        tracks.boxes,
+        config.foot_point,
+        config.person_height_m,
+        config.min_implied_height_m,
+        tracks.track_ids,
+        tracks.frames,
+        config.track_heights(),
+    )
+    ids, s = tracks.track_ids, config.stitcher()
+    if s is not None:
+        ids = stitch(ids, tracks.frames, np.column_stack([xs, ys]), cam.fps, s)
+    return ids, xs, ys, head
+
+
+def stitched_tracks(cam, tracks, config):
+    """The tracks with the ids recipe_floor_points scores them with (for the
+    image-space tracking metrics); unchanged without a stitch section."""
+    if config.stitcher() is None:
+        return tracks
+    ids, _, _, _ = recipe_floor_points(cam, tracks, config)
+    return Tracks(ids, tracks.frames, tracks.boxes)
 
 
 def evaluate_oracle(

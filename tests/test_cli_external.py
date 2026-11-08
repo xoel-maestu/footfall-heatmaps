@@ -94,3 +94,39 @@ def test_dataset_needs_a_config(tmp_path, monkeypatch, capsys):
     code = main(["eval", "--source", "gt-world", "--dataset", "caviar"])
 
     assert code == 2
+
+
+STITCH = "stitch:\n  gap_s: 2.0\n  radius_m: 0.5\n"
+
+
+def test_wildtrack_scores_the_stitched_ids(tmp_path, monkeypatch):
+    data, path, config = setup(tmp_path, monkeypatch)
+    path.write_text(path.read_text() + STITCH)
+    write_dataset(data, FRAMES)
+    from space_usage_heatmaps.evaluation.infrastructure.wildtrack_reader import WildtrackReader
+
+    samples = WildtrackReader(data).samples("wildtrack", "C5")
+    cache_truth_tracks(data, config, "wildtrack", "C5", samples)
+
+    assert main(["eval", "--config", str(path), "--dataset", "wildtrack"]) == 0
+
+    report = json.loads((tmp_path / "reports" / "external-wildtrack-configs_best.json").read_text())
+    assert report["stitch"] == {"applied": True, "gap_s": 2.0, "radius_m": 0.5}
+    assert report["tracking"]["pooled"]["configs_best"]["idf1"] == 1.0
+
+
+def test_caviar_has_no_floor_so_stitching_is_not_applied_and_says_so(tmp_path, monkeypatch):
+    data, path, config = setup(tmp_path, monkeypatch)
+    path.write_text(path.read_text() + STITCH)
+    write_clip(data, "Walk1cor")
+    from space_usage_heatmaps.evaluation.infrastructure.caviar_reader import CaviarReader
+
+    cache_truth_tracks(
+        data, config, "Walk1cor", "cor", CaviarReader(data).samples("Walk1cor", "cor")
+    )
+
+    assert main(["eval", "--config", str(path), "--dataset", "caviar"]) == 0
+
+    report = json.loads((tmp_path / "reports" / "external-caviar-configs_best.json").read_text())
+    assert report["stitch"]["applied"] is False and "floor" in report["stitch"]["reason"]
+    assert report["tracking"]["pooled"]["configs_best"]["hota"] == 1.0

@@ -83,3 +83,35 @@ def test_cameras_can_be_chosen(reader, rows):
 
     assert r.scenes[0].cameras == ("7",) and r.scenes[0].overlap_cells == 0
     assert ("001", "8") not in source.calls
+
+
+def split_track_2(tracks):
+    """Track 2, standing still, lost at frame 2 and back as track 6 on the same
+    spot: one person, two ids in one cell."""
+    t = tracks
+    keep = ~((t.track_ids == 2) & (t.frames == 2))
+    ids = np.where((t.track_ids == 2) & (t.frames > 2), 6, t.track_ids)
+    return Tracks(ids[keep], t.frames[keep], t.boxes[keep])
+
+
+def test_stitching_joins_a_lost_track_for_passage_and_leaves_dwell_byte_identical(reader, rows):
+    from dataclasses import replace
+
+    source = both(split_track_2(tracks_from_rows(rows)), tracks_from_rows(rows, camera=8))
+    stitched = replace(CFG, stitch={"gap_s": 2.0, "radius_m": 0.5})
+    plain = (CFG, source)
+
+    r = evaluate_fusion(
+        reader, [("001", "7")], (stitched, source), plain, 0.5, Fusion(), 20, compare_run=plain
+    )
+    base = evaluate_fusion(reader, [("001", "7")], plain, plain, 0.5, Fusion(), 20)
+
+    for truth, res in r.results.items():
+        for m, e in res.delta_pooled["dwell"].items():
+            assert (e.value, e.lo, e.hi) in ((0.0, 0.0, 0.0), (None, None, None)), (truth, m)
+    np.testing.assert_array_equal(r.fused["001"].dwell, base.fused["001"].dwell)
+    # The fused map is compared with the plain fused map, not the single camera.
+    assert r.results["full@joint"].pooled[1] == base.results["full@joint"].pooled[0]
+    joined = r.results["full@joint"].delta_pooled["passage"]["mass_error"].value
+    assert joined < 0
+    assert (r.scenes[0].camera_tracks, base.scenes[0].camera_tracks) == (3, 4)

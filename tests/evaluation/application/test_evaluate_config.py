@@ -93,3 +93,22 @@ def test_head_without_a_camera_matrix_is_an_error_and_bottom_still_works(tmp_pat
         evaluate_config(reader, [("001", "7")], [(head, source)], cell=0.5, n_resamples=5)
     report = evaluate_config(reader, [("001", "7")], [(CFG, source)], cell=0.5, n_resamples=5)
     assert report.results["visible@coverage"].pooled[0]["dwell"]["tvd"].value == 0
+
+
+def test_stitching_changes_passage_only(reader, rows):
+    from dataclasses import replace
+
+    from tests.evaluation.application.test_evaluate_fusion import split_track_2
+
+    source = InMemoryTrackSource({("001", "7"): split_track_2(tracks_from_rows(rows))})
+    stitched = replace(CFG, stitch={"gap_s": 2.0, "radius_m": 0.5})
+
+    report = evaluate_config(
+        reader, [("001", "7")], [(stitched, source), (CFG, source)], cell=0.5, n_resamples=50
+    )
+
+    for truth, res in report.results.items():
+        for m, e in res.delta_pooled["dwell"].items():
+            assert (e.value, e.lo, e.hi) in ((0.0, 0.0, 0.0), (None, None, None)), (truth, m)
+    # Unstitched, the standing person counts twice in their cell.
+    assert report.results["visible@coverage"].delta_pooled["passage"]["mass_error"].value < 0

@@ -7,7 +7,10 @@ their whole-run grids and fuses each block with those weights, so the paired
 block bootstrap resamples the fused map like any other prediction.
 
 Predictions: the fused map, and the single-camera baseline (the scene's E1
-camera, the anchor, with its own recipe); deltas are fused - single.
+camera, the anchor, with its own recipe); deltas are fused - single. With
+compare_run, the second prediction is instead the fused map of another
+recipe on the same cameras (e.g. without tracklet stitching), and deltas are
+fused - compared.
 
 Truth blocks (spec 9, E2a):
 - full@joint: every person, on the joint coverage (cells at least one camera
@@ -26,7 +29,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from space_usage_heatmaps.evaluation.application.evaluate_config import BLOCK_S
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
+from space_usage_heatmaps.evaluation.application.evaluate_oracle import recipe_floor_points
 from space_usage_heatmaps.evaluation.domain.bootstrap import (
     BlockLayers,
     SceneBlocks,
@@ -58,6 +61,7 @@ class FusionScene:
     overlap_cells: int
     anchor_cells: int
     samples: int  # tracked boxes of every fused camera in the truth frames
+    camera_tracks: int  # track ids of every fused camera in the truth frames, as scored
     dropped: int  # of those, outside the grid
     occlusion_anchor: float  # share of the full dwell on the anchor's coverage it never sees
     occlusion_joint: float  # share of the full dwell on the joint coverage no fused camera sees
@@ -81,21 +85,10 @@ def _camera_blocks(reader, scene, camera, config, source, spec, first, last, bf,
     cam = reader.camera(scene, camera)
     t = source.tracks(scene, camera)
     keep = (t.frames >= first) & (t.frames <= last)
-    xs, ys, _ = camera_floor_points(
-        cam,
-        t.boxes,
-        config.foot_point,
-        config.person_height_m,
-        config.min_implied_height_m,
-        t.track_ids,
-        t.frames,
-        config.track_heights(),
-    )
-    layers = block_layers(
-        spec, t.track_ids[keep], t.frames[keep], xs[keep], ys[keep], cam.fps, bf, nb
-    )
+    ids, xs, ys, _ = recipe_floor_points(cam, t, config)
+    layers = block_layers(spec, ids[keep], t.frames[keep], xs[keep], ys[keep], cam.fps, bf, nb)
     coverage = Homography(cam.world_to_image).sees(*spec.cell_centres(), cam.width, cam.height)
-    return layers, coverage, int(keep.sum())
+    return layers, coverage, int(keep.sum()), len(np.unique(ids[keep]))
 
 
 def evaluate_fusion(
@@ -109,10 +102,13 @@ def evaluate_fusion(
     seed=0,
     cameras=None,
     map=map,
+    compare_run=None,
 ):
     """scenes: [(scene, anchor camera)]; fused_run, single_run: (RunConfig,
     TrackSource); cameras: the cameras to fuse, default every calibrated one;
-    map: how the bootstrap scores scenes (block_bootstrap)."""
+    map: how the bootstrap scores scenes (block_bootstrap); compare_run:
+    (RunConfig, TrackSource) of a second fused map that takes the single
+    camera's place in the predictions (same fusion, cameras and weights rule)."""
     blocks = {truth: [] for truth in FUSION_TRUTHS}
     report_scenes, fused_grids = [], {}
     for scene, anchor in scenes:
@@ -133,34 +129,38 @@ def evaluate_fusion(
             )
 
         seen_by_any = np.zeros(len(truth.track_ids), dtype=bool)
-        per_camera, samples, dropped = [], 0, 0
-        config, source = fused_run
         for c in names:
-            layers, coverage, n = _camera_blocks(
-                reader, scene, c, config, source, spec, first, last, bf, nb
-            )
-            per_camera.append((c, layers, coverage))
-            samples, dropped = samples + n, dropped + layers.dropped
             seen_by_any |= reader.floor_truth(scene, c).visible
-        grids = [
-            CameraGrid(c, Grid(spec, b.dwell.sum(0), b.passage.sum(0), b.dropped), cov)
-            for c, b, cov in per_camera
-        ]
-        w = fusion_weights(grids, fusion)
-        fused = BlockLayers(
-            fuse_layers(w, [b.dwell for _, b, _ in per_camera]),
-            fuse_layers(w, [b.passage for _, b, _ in per_camera]),
-            dropped,
-        )
+
+        def fuse(run, scene=scene, names=names, spec=spec, first=first, last=last, bf=bf, nb=nb):
+            per_camera, samples, dropped, tracks = [], 0, 0, 0
+            for c in names:
+                layers, coverage, n, k = _camera_blocks(
+                    reader, scene, c, *run, spec, first, last, bf, nb
+                )
+                per_camera.append((c, layers, coverage))
+                samples, dropped, tracks = samples + n, dropped + layers.dropped, tracks + k
+            grids = [
+                CameraGrid(c, Grid(spec, b.dwell.sum(0), b.passage.sum(0), b.dropped), cov)
+                for c, b, cov in per_camera
+            ]
+            w = fusion_weights(grids, fusion)
+            fused = BlockLayers(
+                fuse_layers(w, [b.dwell for _, b, _ in per_camera]),
+                fuse_layers(w, [b.passage for _, b, _ in per_camera]),
+                dropped,
+            )
+            return fused, grids, samples, dropped, tracks
+
+        fused, grids, samples, dropped, tracks = fuse(fused_run)
         fused_grids[scene] = Grid(spec, fused.dwell.sum(0), fused.passage.sum(0), dropped)
-        single_config, single_source = single_run
-        single, anchor_cov, _ = _camera_blocks(
-            reader, scene, anchor, single_config, single_source, spec, first, last, bf, nb
+        single, anchor_cov, _, _ = _camera_blocks(
+            reader, scene, anchor, *single_run, spec, first, last, bf, nb
         )
         joint, shared = joint_coverage(grids), overlap(grids)
         full = truth_layers(np.ones(len(truth.track_ids), dtype=bool))
         visible_any, visible_anchor = truth_layers(seen_by_any), truth_layers(truth.visible)
-        preds = (fused, single)
+        preds = (fused, single if compare_run is None else fuse(compare_run)[0])
         for name, tr, mask in (
             ("full@joint", full, joint),
             ("visible@joint", visible_any, joint),
@@ -184,6 +184,7 @@ def evaluate_fusion(
                 overlap_cells=int(shared.sum()),
                 anchor_cells=int(anchor_cov.sum()),
                 samples=samples,
+                camera_tracks=tracks,
                 dropped=dropped,
                 occlusion_anchor=_unseen(full_dwell, visible_anchor.dwell.sum(0), anchor_cov),
                 occlusion_joint=_unseen(full_dwell, visible_any.dwell.sum(0), joint),
