@@ -26,10 +26,10 @@ import numpy as np
 import pynvml
 
 from space_usage_heatmaps.cli import BENCH_SCENE, data_dir, engine_label, load_config
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
 from space_usage_heatmaps.evaluation.infrastructure.bench import process_vram_mb
 from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from space_usage_heatmaps.evaluation.infrastructure.round_robin import round_robin
+from space_usage_heatmaps.floorplan.domain.foot_point import camera_floor_points
 from space_usage_heatmaps.occupancy.domain.grid import GridSpec
 from space_usage_heatmaps.perception.application.track_video import fill_stride, track_video
 from space_usage_heatmaps.perception.infrastructure import container

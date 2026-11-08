@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
+from space_usage_heatmaps.floorplan.domain.foot_point import camera_floor_points
 from space_usage_heatmaps.perception.application.track_video import fill_between
 from space_usage_heatmaps.perception.domain.frame import TrackedBoxes
 

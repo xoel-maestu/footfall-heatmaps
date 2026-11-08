@@ -14,10 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from space_usage_heatmaps.evaluation.application.evaluate_config import BLOCK_S
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import (
-    build_ground_truth_grid,
-    camera_floor_points,
-)
+from space_usage_heatmaps.evaluation.application.evaluate_oracle import build_ground_truth_grid
 from space_usage_heatmaps.evaluation.domain.bootstrap import block_layers
 from space_usage_heatmaps.evaluation.domain.label_free import (
     LabelFree,
@@ -26,6 +23,7 @@ from space_usage_heatmaps.evaluation.domain.label_free import (
     label_free_metrics,
 )
 from space_usage_heatmaps.evaluation.domain.metrics import compare_layer
+from space_usage_heatmaps.floorplan.domain.foot_point import camera_floor_points
 
 LABEL_FREE = ("conservation_error", "interior_birth_fraction", "mean_track_length_s")
 TRUE_ERRORS = ("tvd", "mass_error")

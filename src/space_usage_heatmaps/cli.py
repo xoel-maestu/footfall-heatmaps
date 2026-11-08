@@ -1384,12 +1384,15 @@ def wildtrack_ground_error(reader, scene, camera, config, source):
     matrix) against the annotated floor positions, paired by box IoU."""
     import numpy as np
 
-    from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
     from space_usage_heatmaps.evaluation.infrastructure.ground_position import (
         ground_plane_error,
         matched_ground_error,
     )
-    from space_usage_heatmaps.floorplan.domain.foot_point import camera_height, head_rule_applies
+    from space_usage_heatmaps.floorplan.domain.foot_point import (
+        camera_floor_points,
+        camera_height,
+        head_rule_applies,
+    )
 
     t = source.tracks(scene, camera)
     cam = reader.camera(scene, camera)

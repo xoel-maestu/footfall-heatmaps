@@ -135,8 +135,8 @@ def render(args):
     from PIL import Image, ImageDraw
 
     from space_usage_heatmaps.cli import data_dir, load_config, track_source
-    from space_usage_heatmaps.evaluation.application.evaluate_oracle import camera_floor_points
     from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+    from space_usage_heatmaps.floorplan.domain.foot_point import camera_floor_points
     from space_usage_heatmaps.floorplan.domain.homography import Homography
 
     run = yaml.safe_load(Path(args.config).read_text())["run"]

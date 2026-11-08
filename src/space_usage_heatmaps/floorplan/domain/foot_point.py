@@ -204,3 +204,33 @@ def floor_points(
         us = (b[head, 0] + b[head, 2]) / 2
         xs[head], ys[head] = _plane_to_world(projection, height[head], us, b[head, 1])
     return xs, ys, head
+
+
+def camera_floor_points(
+    cam,
+    boxes,
+    foot_point,
+    person_height_m=PERSON_HEIGHT_M,
+    min_implied_height_m=MIN_IMPLIED_HEIGHT_M,
+    track_ids=None,
+    frames=None,
+    track_heights=None,
+):
+    """floor_points of x1, y1, x2, y2 boxes with one camera's calibration; the
+    image points (centroid, bottom) need only its ground homography."""
+    projection = cam.projection
+    if projection is None:
+        if foot_point not in ("centroid", "bottom"):
+            raise ValueError(f"foot point {foot_point!r} needs the 3x4 camera matrix")
+        projection = np.insert(cam.world_to_image, 2, 0.0, axis=1)
+    return floor_points(
+        boxes,
+        projection,
+        cam.height,
+        foot_point,
+        person_height_m,
+        min_implied_height_m,
+        track_ids,
+        frames,
+        track_heights,
+    )
