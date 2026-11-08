@@ -341,6 +341,10 @@ def run_record(args, live=None, stop=None):
     a stream (rtsp://) is timed by the wall clock and reconnects when it drops.
     live: a LiveSource the viewer reads the live layer from (space-usage serve);
     stop: an Event that ends the frames, so the open slot is still written."""
+    if getattr(args, "site", None):
+        from space_usage_heatmaps.site_recording import run_record_site
+
+        return run_record_site(args, live, stop)
     from space_usage_heatmaps.perception.infrastructure import container
     from space_usage_heatmaps.perception.infrastructure.opencv_stream_source import (
         OpenCvStreamSource,
@@ -416,6 +420,13 @@ def run_record(args, live=None, stop=None):
     return 0
 
 
+def run_calibrate(args):
+    """space-usage calibrate --site: the site's frozen fusion weights."""
+    from space_usage_heatmaps.site_recording import run_calibrate as calibrate
+
+    return calibrate(args)
+
+
 def _until(stop, frames):
     for frame in frames:
         if stop.is_set():
@@ -438,6 +449,8 @@ def start_serve(args):
     server reads it there. (server, recorder thread or None, stop event)."""
     from space_usage_heatmaps.web.server import LiveSource, make_server
 
+    if args.site:
+        return _start_serve_site(args)
     settings = load_run_settings(args.config)
     spec = GridSpec.covering(*settings.extent_m, cell_m=settings.cell_m)
     live = LiveSource() if args.source else None
@@ -469,6 +482,53 @@ def start_serve(args):
     return server, recording, stop
 
 
+def _warn_open(host):
+    if not _is_loopback(host):
+        print(
+            f"space-usage serve: warning: --host {host} opens the page and the live layer "
+            "to other machines, with no authentication",
+            file=sys.stderr,
+        )
+
+
+def _start_serve_site(args):
+    """serve --site: the site's fused slots, and with --record its cameras recorded
+    in a thread of this process, so the fused live layer stays in its memory."""
+    from space_usage_heatmaps.site_recording import (
+        CameraMeter,
+        load_site,
+        run_record_site,
+        site_info,
+    )
+    from space_usage_heatmaps.web.server import LiveSource, make_server
+
+    site = load_site(args.site)
+    meter = CameraMeter(site.camera_ids)
+    live = LiveSource() if args.record else None
+    server = make_server(
+        args.host, args.port, site.id, site.spec, args.db, live, site=site_info(site, meter)
+    )
+    _warn_open(args.host)
+    stop, recording = threading.Event(), None
+    if args.record:
+
+        def record():
+            try:
+                run_record_site(args, live, stop, meter)
+                if not site.streams and not stop.is_set():
+                    live.end(time.time())
+            except CAMERA_ERRORS as e:
+                live.fail(e)
+                print(f"space-usage: error: {e}", file=sys.stderr)
+            except Exception as e:  # any other failure: /api/live answers 503
+                live.fail(e)
+                raise
+
+        recording = threading.Thread(target=record, name="recorder", daemon=True)
+        recording.start()
+    return server, recording, stop
+
+
 def _interrupt(signum, frame):
     raise KeyboardInterrupt
 
@@ -477,7 +537,10 @@ def run_serve(args):
     """space-usage serve: the page, /api/live and /api/slots until Ctrl+C or SIGTERM."""
     server, recording, stop = start_serve(args)
     host, port = server.server_address[:2]
-    live = f"live from {args.source}" if args.source else "slots only, no live source"
+    if getattr(args, "site", None):
+        live = "fused site, recorded here" if args.record else "fused site slots only"
+    else:
+        live = f"live from {args.source}" if args.source else "slots only, no live source"
     print(f"space-usage serve: http://{host}:{port}/ ({live})", flush=True)
     signal.signal(signal.SIGTERM, _interrupt)
     try:
@@ -1565,13 +1628,21 @@ def main(argv=None):
     be = sub.add_parser("bench", help="sustained end-to-end fps and peak VRAM on one video")
     be.add_argument("--config", required=True, help="run configuration, e.g. configs/iter0.yaml")
     be.add_argument("--minutes", type=float, default=30.0)
-    ru = sub.add_parser("run", help="record a camera into persistent 15-min slots")
-    ru.add_argument("--config", required=True, help="configuration with a run section")
-    ru.add_argument("--source", required=True, help="video file or rtsp:// stream")
+    ca = sub.add_parser("calibrate", help="freeze a site's fusion weights from a window")
+    ca.add_argument("--site", required=True, help="site config, e.g. configs/site-071.yaml")
+    ru = sub.add_parser(
+        "run", help="record a camera, or every camera of a site, into persistent 15-min slots"
+    )
+    ru.add_argument("--site", help="site config: every camera, fused (instead of --config)")
+    ru.add_argument("--config", help="configuration with a run section (one camera)")
+    ru.add_argument("--source", help="with --config: video file or rtsp:// stream")
     ru.add_argument("--db", required=True, help="SQLite file of the slots")
     ru.add_argument("--start", help="video file: UTC start, e.g. 2026-11-06T09:10:00Z")
+    ru.add_argument("--stats", help="with --site: JSON file of per-camera processed fps")
     se = sub.add_parser("serve", help="viewer page with the live layer and the persisted slots")
-    se.add_argument("--config", required=True, help="configuration with a run section")
+    se.add_argument("--site", help="site config: the fused slots of the site (instead of --config)")
+    se.add_argument("--record", action="store_true", help="with --site: record in this process")
+    se.add_argument("--config", help="configuration with a run section (one camera)")
     se.add_argument("--db", required=True, help="SQLite file of the slots")
     se.add_argument("--source", help="video file or rtsp:// stream to record in this process")
     se.add_argument("--start", help="video file: UTC start, e.g. 2026-11-06T09:10:00Z")
@@ -1581,7 +1652,23 @@ def main(argv=None):
     se.add_argument("--host", default="127.0.0.1", help="address to bind (default 127.0.0.1)")
     se.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
-    commands = {"bench": run_bench, "eval": run_eval, "run": run_record, "serve": run_serve}
+    if args.command == "run" and not args.site and not (args.config and args.source):
+        ru.error("give --site, or --config and --source")
+    if args.command == "run" and args.site and (args.config or args.source or args.start):
+        ru.error("--site takes its cameras, sources and start from the site config")
+    if args.command == "serve" and bool(args.site) == bool(args.config):
+        se.error("give one of --site and --config")
+    if args.command == "serve" and args.site and (args.source or args.fused or args.start):
+        se.error("--site takes its sources from the site config; --record records them")
+    if args.command == "serve" and args.record and not args.site:
+        se.error("--record goes with --site; with --config, --source records")
+    commands = {
+        "bench": run_bench,
+        "eval": run_eval,
+        "run": run_record,
+        "serve": run_serve,
+        "calibrate": run_calibrate,
+    }
     try:
         return commands[args.command](args)
     except CAMERA_ERRORS as e:

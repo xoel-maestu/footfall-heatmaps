@@ -11,6 +11,8 @@ GET /api/slots?camera=&from=&to=
                        or epoch seconds, clamped to [0, END_OF_TIME]
 GET /api/slots/latest?camera=
                        {"start": the newest persisted slot start, or null}
+GET /api/site          serve --site: the site id, its fusion and each camera's state
+                       and processed fps (counts only); 404 for one camera
 GET /api/fused         the fused floor map of a scene's cameras (serve --fused, an
                        export of eval --cameras), k-suppressed again here (R5); 404
                        without one
@@ -76,9 +78,9 @@ class _Locked:
         with self._lock:
             self._recorder.add(*args, **kwargs)
 
-    def mark_incomplete(self):
+    def mark_incomplete(self, *args):  # a site recorder names the camera
         with self._lock:
-            self._recorder.mark_incomplete()
+            self._recorder.mark_incomplete(*args)
 
     def close(self):
         with self._lock:
@@ -152,9 +154,13 @@ def fused_payload(export, k=K_MIN_PEOPLE):
     return export | {"k": k, "dwell": _grid(dwell), "passage": _grid(passage)}
 
 
-def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time, fused=None):
+def make_server(
+    host, port, camera_id, spec, db_path, live=None, clock=time.time, fused=None, site=None
+):
     """A ThreadingHTTPServer for one camera; live is a LiveSource or None;
-    fused, an eval --cameras export (dict) of a scene's fused map, or None."""
+    fused, an eval --cameras export (dict) of a scene's fused map, or None.
+    site: for a site (serve --site), a callable that returns /api/site; then
+    camera_id is the site id, its slots and live layer are the fused ones."""
     if fused is not None and fused.get("passage_ids") == "global":
         raise ValueError(
             "the fused export's passage counts global ids (eval --metric mc-idf1), less "
@@ -165,6 +171,7 @@ def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time
         PAGE.read_text()
         .replace("__CAMERA__", html.escape(camera_id))
         .replace("__FUSED__", "0" if fused is None else "1")
+        .replace("__SITE__", "0" if site is None else "1")
         .encode()
     )
     fused_body = None if fused is None else fused_payload(fused)
@@ -179,6 +186,10 @@ def make_server(host, port, camera_id, spec, db_path, live=None, clock=time.time
                 if fused_body is None:
                     return self._json(404, {"error": "no fused map: start serve with --fused"})
                 return self._json(200, fused_body)
+            if url.path == "/api/site":
+                if site is None:
+                    return self._json(404, {"error": "not a site: start serve with --site"})
+                return self._json(200, site())
             if url.path not in ("/api/live", "/api/slots", "/api/slots/latest"):
                 return self._json(404, {"error": "not found"})
             if query.get("camera") != camera_id:
