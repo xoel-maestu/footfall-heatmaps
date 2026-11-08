@@ -413,7 +413,8 @@ function showSlot() {
 }
 
 const WEIGHTING = {
-  visibility: (f) => `by visibility, power ${f.power}${f.zone_m ? `, on ${f.zone_m} m zones` : ""}`,
+  visibility: (f) =>
+    `by visibility, power ${f.power}${f.zone_m ? `, on ${f.zone_m} m zones` : ""}${f.covered_cells ? ", per covered cell" : ""}`,
   mean: () => "mean of the covering cameras",
   sum: () => "none (cameras added)",
 };

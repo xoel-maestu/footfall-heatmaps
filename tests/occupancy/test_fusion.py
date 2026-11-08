@@ -1,3 +1,4 @@
+import hashlib
 import math
 
 import numpy as np
@@ -123,3 +124,72 @@ def test_cameras_on_another_grid_or_unknown_weighting_are_errors():
         Fusion("median")
     with pytest.raises(ValueError, match="no camera"):
         fuse_grids([])
+
+
+def _left_half():
+    cov = np.zeros((4, 4), bool)
+    cov[:, :2] = True
+    return cov
+
+
+def test_covered_cells_does_not_penalise_a_camera_that_covers_part_of_a_zone():
+    # One 2 m zone (4 x 4 cells). Both cameras see the same 1 person-second per
+    # cell; a covers only the left half, b all of it. The zone sum halves a's
+    # ratio (8 vs 16); the mean over covered cells makes them alike (1 vs 1).
+    partial, whole = (
+        camera("a", full(1) * _left_half(), _left_half()),
+        camera("b", full(1), full(1)),
+    )
+
+    plain = fusion_weights([partial, whole], Fusion("visibility", 1, 2.0))
+    normalised = fusion_weights([partial, whole], Fusion("visibility", 1, 2.0, covered_cells=True))
+
+    assert plain[0, 0, 0] == pytest.approx(0.5 / 1.5)  # ratios 8/16 and 1
+    np.testing.assert_allclose(normalised[0][_left_half()], 0.5)  # ratios 1 and 1
+    np.testing.assert_allclose(normalised[1][~_left_half()], 1)  # b alone where a cannot see
+    np.testing.assert_allclose(normalised.sum(axis=0), 1)
+
+
+def test_covered_cells_still_follows_visibility_and_power():
+    # a sees half as much per covered cell as b: ratio 1/2 whatever its coverage.
+    a, b = camera("a", 0.5 * full(1) * _left_half(), _left_half()), camera("b", full(1), full(1))
+
+    for p in (1, 2):
+        w = fusion_weights([a, b], Fusion("visibility", p, 2.0, covered_cells=True))
+        r = 0.5**p
+        np.testing.assert_allclose(w[0][_left_half()], r / (1 + r))
+    w = fusion_weights([a, b], Fusion("visibility", math.inf, 2.0, covered_cells=True))
+    np.testing.assert_allclose(w[1], 1)
+
+
+# sha256 of the weights before covered_cells existed (main b765c5e).
+GOLDEN = {
+    ("sum", 1.0, None): "72b669efc00fbf525034f111074c18ba00b08d1094e3b5ad5b01010fe0934112",
+    ("mean", 1.0, None): "1c19c7732cd945143f29e87f468a9eaacfa8752e0b5df853020cefc4c67cc862",
+    ("visibility", 1, None): "be43af3495d8ccbdce69c4b5dcfb594463f42145d337960041fd92f2f98fdf94",
+    ("visibility", 2, 1.0): "097fc6a0534fd78ad2416ec6cc2abf7c803372a8d417766ed0e34e336a1b5a35",
+    ("visibility", 1, 2.0): "d2ed2af48df0d6deec3f3ffb73d097c0954a6abf7f6caf450880ab64046c30dd",
+    ("visibility", 2, 2.0): "0a6dedf384afc87334da92695412115bb3096091df9af3af73b3081d936636a3",
+    (
+        "visibility",
+        math.inf,
+        2.0,
+    ): "3a7b0634ade69c53f314344d24dbe5017e2a824fb350c2933d49699b3c299828",
+}
+
+
+def test_existing_weightings_are_byte_identical_with_covered_cells_off():
+    rng = np.random.default_rng(1)
+    cams = [camera(str(i), rng.random((4, 4)), rng.random((4, 4)) > 0.3) for i in range(3)]
+
+    for args, digest in GOLDEN.items():
+        f = Fusion(*args)
+        assert f.covered_cells is False
+        assert hashlib.sha256(fusion_weights(cams, f).tobytes()).hexdigest() == digest, args
+
+
+def test_covered_cells_needs_visibility_on_zones():
+    with pytest.raises(ValueError, match="covered_cells"):
+        Fusion("visibility", 1, None, covered_cells=True)
+    with pytest.raises(ValueError, match="covered_cells"):
+        Fusion("mean", 1, 2.0, covered_cells=True)

@@ -15,7 +15,10 @@ Weightings:
   visibility (occlusion, distance, missed detections), without any label.
   Weight = ratio ** power: power 0 is the mean, power inf the camera that sees
   most. With zone_m, the ratio is measured on zone_m blocks of cells (less
-  noise, coarser).
+  noise, coarser). With covered_cells, a camera's zone value is its dwell per
+  zone cell it covers (the zone sum over the number of covered cells), so a
+  camera that covers part of a zone is not penalised for the cells it cannot
+  see (improvements plan, phase 4).
 
 The weights come from whole-run (or whole-slot) grids and are applied
 linearly, so fusing time blocks and adding them equals fusing the sum.
@@ -43,6 +46,7 @@ class Fusion:
     weighting: str = "visibility"
     power: float = 1.0  # visibility: exponent of the relative visibility; math.inf allowed
     zone_m: float | None = None  # visibility: measured on blocks of zone_m metres
+    covered_cells: bool = False  # visibility on zones: per covered cell of the zone
 
     def __post_init__(self):
         if self.weighting not in WEIGHTINGS:
@@ -51,6 +55,8 @@ class Fusion:
             raise ValueError(f"fusion power must be 0 or more, not {self.power}")
         if self.zone_m is not None and not self.zone_m > 0:
             raise ValueError(f"fusion zone_m must be positive, not {self.zone_m}")
+        if self.covered_cells and (self.weighting != "visibility" or self.zone_m is None):
+            raise ValueError("fusion covered_cells needs the visibility weighting and zone_m")
 
 
 DEFAULT = Fusion()
@@ -82,7 +88,11 @@ def fusion_weights(grids, fusion=DEFAULT):
     else:
         seen = np.stack([np.where(c, g.grid.dwell, 0.0) for g, c in zip(grids, cov, strict=True)])
         if fusion.zone_m is not None:
-            seen = _zones(seen, round(fusion.zone_m / spec.cell_m))
+            k = round(fusion.zone_m / spec.cell_m)
+            seen = _zones(seen, k)
+            if fusion.covered_cells:
+                n = _zones(cov.astype(float), k)
+                seen = np.divide(seen, n, out=np.zeros_like(seen), where=n > 0)
         top = seen.max(axis=0)
         ratio = np.divide(seen, top, out=np.zeros_like(seen), where=top > 0)
         if math.isinf(fusion.power):
@@ -101,9 +111,9 @@ def _zones(a, k):
     a camera's block sum holds only the cells it covers (the others are zero in
     `seen`), so a camera that covers part of a block gets a lower ratio there
     than the camera covering all of it, even on the cells it sees well. This
-    lowers the weights of cameras at the edges of their coverage. Normalising
-    by the number of covered cells in the block is a candidate for a later
-    iteration, tuned on tune only (reports/iterations-phase9.md)."""
+    lowers the weights of cameras at the edges of their coverage. Fusion's
+    covered_cells divides by the number of covered cells in the block instead
+    (improvements plan, phase 4)."""
     # The sum, not the mean over covered cells: the bias above is part of the
     # method chosen on tune; changing it now would be choosing on sealed.
     n, ny, nx = a.shape
