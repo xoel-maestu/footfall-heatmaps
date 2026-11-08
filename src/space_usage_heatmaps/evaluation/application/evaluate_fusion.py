@@ -88,7 +88,9 @@ def _camera_blocks(reader, scene, camera, config, source, spec, first, last, bf,
     t = source.tracks(scene, camera)
     keep = (t.frames >= first) & (t.frames <= last)
     ids, xs, ys, _ = recipe_floor_points(cam, t, config)
-    layers = block_layers(spec, ids[keep], t.frames[keep], xs[keep], ys[keep], cam.fps, bf, nb)
+    layers = block_layers(
+        spec, ids[keep], t.frames[keep], xs[keep], ys[keep], cam.fps, bf, nb, config.passage
+    )
     coverage = Homography(cam.world_to_image).sees(*spec.cell_centres(), cam.width, cam.height)
     return layers, coverage, int(keep.sum()), len(np.unique(ids[keep]))
 
@@ -106,17 +108,21 @@ def evaluate_fusion(
     map=map,
     compare_run=None,
     compare_fusion=None,
+    truths=FUSION_TRUTHS,
 ):
     """scenes: [(scene, anchor camera)]; fused_run, single_run: (RunConfig,
     TrackSource); cameras: the cameras to fuse, default every calibrated one;
     map: how the bootstrap scores scenes (block_bootstrap); compare_run:
     (RunConfig, TrackSource) of a second fused map that takes the single
     camera's place in the predictions (same cameras; weighed by compare_fusion,
-    default fusion)."""
+    default fusion); truths: the truth blocks to score (the bootstrap is the
+    cost), default all."""
     if compare_fusion is not None and compare_run is None:
         raise ValueError("compare_fusion needs compare_run")
     compare_fusion = fusion if compare_fusion is None else compare_fusion
-    blocks = {truth: [] for truth in FUSION_TRUTHS}
+    if unknown := sorted(set(truths) - set(FUSION_TRUTHS)):
+        raise ValueError(f"unknown truths {unknown}, expected some of {FUSION_TRUTHS}")
+    blocks = {truth: [] for truth in FUSION_TRUTHS if truth in truths}
     report_scenes, fused_grids = [], {}
     for scene, anchor in scenes:
         names = [str(c) for c in (cameras or reader.cameras(scene))]
@@ -189,7 +195,8 @@ def evaluate_fusion(
             ("visible@anchor", visible_anchor, anchor_cov),
             ("full@overlap", full, shared),
         ):
-            blocks[name].append(SceneBlocks(tr, preds, mask, cell))
+            if name in blocks:
+                blocks[name].append(SceneBlocks(tr, preds, mask, cell))
         full_dwell = full.dwell.sum(0)
         sum_overlap = None
         if shared.any():
@@ -213,7 +220,7 @@ def evaluate_fusion(
             )
         )
     if any(s.overlap_cells == 0 for s in report_scenes):
-        del blocks["full@overlap"]  # a scene without overlap: nothing to double count
+        blocks.pop("full@overlap", None)  # a scene without overlap: nothing to double count
     return FusionReport(
         dataset=reader.name,
         cell_m=cell,

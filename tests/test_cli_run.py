@@ -101,3 +101,14 @@ def test_a_start_past_the_retention_fails_instead_of_reporting_slots(tmp_path, s
     assert "0 slots" in captured.out
     with sqlite3.connect(db) as c:
         assert c.execute("SELECT COUNT(*) FROM slots").fetchone() == (0,)
+
+
+def test_run_refuses_chord_passage_so_k_counts_distinct_ids(tmp_path, setup, capsys):
+    # k = 5 (R5) reads the passage layer as distinct people per cell; chord
+    # passage is fractional, an evaluation layer, so run records ids as before.
+    config, video = setup
+    config.write_text("passage: chord\n" + CONFIG)
+
+    args = ["run", "--config", str(config), "--source", str(video), "--db", str(tmp_path / "x.db")]
+    assert cli.main(args) == 1
+    assert "passage" in capsys.readouterr().err

@@ -352,6 +352,11 @@ def run_record(args, live=None, stop=None):
             f"config {args.config}: stitch joins tracks across later frames, an evaluation "
             "step; space-usage run records the tracker's own ids"
         )
+    if config.passage != "ids":
+        raise ValueError(
+            f"config {args.config}: passage {config.passage} is an evaluation layer; "
+            "space-usage run records distinct ids per cell, which k suppression reads"
+        )
     cam = calibration_of(settings.calibration)
     spec = GridSpec.covering(*settings.extent_m, cell_m=settings.cell_m)
     mask = PrivacyMask(

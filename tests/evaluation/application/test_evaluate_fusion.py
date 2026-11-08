@@ -137,3 +137,33 @@ def test_compare_fusion_pairs_two_weightings_of_the_same_tracks(reader, rows):
     np.testing.assert_array_equal(r.fused["001"].dwell, alone[mean].fused["001"].dwell)
     d = r.results["full@joint"].delta_pooled["dwell"]["mass_error"].value
     assert d != 0  # the mean dilutes what only camera 8 sees
+
+
+def test_chord_passage_changes_passage_only_and_leaves_dwell_byte_identical(reader, rows):
+    from dataclasses import replace
+
+    source = both(tracks_from_rows(rows), tracks_from_rows(rows, camera=8))
+    plain = (CFG, source)
+    chord = (replace(CFG, passage="chord"), source)
+
+    r = evaluate_fusion(reader, [("001", "7")], chord, plain, 0.5, Fusion(), 20, compare_run=plain)
+    base = evaluate_fusion(reader, [("001", "7")], plain, plain, 0.5, Fusion(), 20)
+
+    assert r.fused["001"].dwell.tobytes() == base.fused["001"].dwell.tobytes()
+    for truth, res in r.results.items():
+        for m, e in res.delta_pooled["dwell"].items():
+            assert (e.value, e.lo, e.hi) in ((0.0, 0.0, 0.0), (None, None, None)), (truth, m)
+    assert not np.array_equal(r.fused["001"].passage, base.fused["001"].passage)
+
+
+def test_truths_limits_the_scored_truth_blocks(reader, rows):
+    source = both(tracks_from_rows(rows), tracks_from_rows(rows, camera=8))
+    run = (CFG, source)
+
+    some = evaluate_fusion(
+        reader, [("001", "7")], run, run, 0.5, Fusion(), 20, truths=["full@joint"]
+    )
+    every = evaluate_fusion(reader, [("001", "7")], run, run, 0.5, Fusion(), 20)
+
+    assert list(some.results) == ["full@joint"]
+    assert some.results["full@joint"] == every.results["full@joint"]

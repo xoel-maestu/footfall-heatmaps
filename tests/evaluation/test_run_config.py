@@ -176,3 +176,14 @@ def test_a_stitch_section_gives_the_tracklet_stitcher():
 def test_an_invalid_stitch_section_is_an_error(value):
     with pytest.raises(ValueError, match="stitch"):
         RunConfig.from_mapping(ITER0 | {"stitch": value})
+
+
+def test_passage_defaults_to_distinct_ids_and_takes_chord():
+    assert RunConfig.from_mapping(ITER0).passage == "ids"
+    assert RunConfig.from_mapping(ITER0 | {"passage": "chord"}).passage == "chord"
+
+
+@pytest.mark.parametrize("value", ["length", 1, None])
+def test_an_unknown_passage_mode_is_a_config_error(value):
+    with pytest.raises(ValueError, match="passage"):
+        RunConfig.from_mapping(ITER0 | {"passage": value})

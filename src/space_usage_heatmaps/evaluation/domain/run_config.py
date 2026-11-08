@@ -2,6 +2,7 @@
 
 from dataclasses import MISSING, dataclass, field, fields
 
+from space_usage_heatmaps.evaluation.domain.bootstrap import PASSAGES
 from space_usage_heatmaps.floorplan.domain.foot_point import (
     FOOT_POINTS,
     HIDDEN_RATIO,
@@ -53,6 +54,10 @@ class RunConfig:
     # domain.stitching): gap_s, radius_m, v_max_mps. It relabels track ids on
     # the floor and leaves the cached tracks as they are.
     stitch: dict | None = None
+    # How the evaluation counts passage (evaluation.domain.bootstrap.PASSAGES):
+    # "ids", distinct track ids per cell; "chord", per track min(1, path length
+    # in the cell / mean chord) (occupancy.domain.chord). Dwell is the same.
+    passage: str = "ids"
 
     def stitcher(self):
         """The config's Stitch, or None without a stitch section."""
@@ -97,10 +102,13 @@ class RunConfig:
             )
         if cfg.stitch is not None:
             _check_stitch(cfg.stitch)
+        if not isinstance(cfg.passage, str) or cfg.passage not in PASSAGES:
+            raise ValueError(f"config: passage must be one of {PASSAGES}")
         optional = {n for n in names if n not in required} - {
             "tracker_params",
             "detector_params",
             "stitch",
+            "passage",
         }
         for name in sorted(optional & set(d) - set(FOOT_POINT_KEYS[cfg.foot_point])):
             raise ValueError(

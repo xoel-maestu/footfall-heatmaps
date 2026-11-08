@@ -24,8 +24,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from space_usage_heatmaps.evaluation.domain.metrics import compare_layer
+from space_usage_heatmaps.occupancy.domain.chord import chord_passage
 
 LAYERS = ("dwell", "passage")
+# How the passage layer counts: "ids", distinct track ids per cell; "chord",
+# per track min(1, path length in the cell / mean chord) (occupancy.domain.chord).
+PASSAGES = ("ids", "chord")
 METRICS = ("mass_error", "tvd", "wape_zone", "emd_m", "pearson")
 # Valid range of each metric, for clipping absolute intervals.
 DOMAINS = {
@@ -69,11 +73,15 @@ class BootstrapResult:
     delta_pooled: dict[str, dict[str, Estimate]] | None
 
 
-def block_layers(spec, track_ids, frames, xs, ys, fps, block_frames, n_blocks):
+def block_layers(spec, track_ids, frames, xs, ys, fps, block_frames, n_blocks, passage="ids"):
     """Dwell and passage per block; summed over blocks they equal the whole
     run's Grid. Passage counts a track in a cell in the block of its first
-    sample there, so a stay that crosses a block boundary is counted once."""
-    frames = np.asarray(frames)
+    sample there, so a stay that crosses a block boundary is counted once.
+    passage="chord": each track adds its chord weight to a cell in the block
+    of the sample that starts its path into that cell; dwell is unchanged."""
+    if passage not in PASSAGES:
+        raise ValueError(f"passage must be one of {PASSAGES}, got {passage!r}")
+    frames = all_frames = np.asarray(frames)
     block = frames // block_frames
     if np.any(block >= n_blocks) or np.any(block < 0):
         raise ValueError(f"sample frame outside the {n_blocks} blocks of {block_frames} frames")
@@ -85,13 +93,18 @@ def block_layers(spec, track_ids, frames, xs, ys, fps, block_frames, n_blocks):
     block, frames = block[inside], frames[inside]
     ids = np.asarray(track_ids)[inside]
     dwell = np.bincount(block * cells + cell, minlength=n_blocks * cells) / fps
+    shape = (n_blocks, spec.ny, spec.nx)
+    dropped = int((~inside).sum())
+    if passage == "chord":
+        crossed, entered, weight = chord_passage(spec, track_ids, all_frames, xs, ys)
+        at = entered // block_frames * cells + crossed
+        chord = np.bincount(at, weights=weight, minlength=n_blocks * cells)
+        return BlockLayers(dwell.reshape(shape), chord.reshape(shape), dropped)
     # First sample of each (track, cell): sort by frame, keep the first occurrence.
     order = np.argsort(frames, kind="stable")
     _, first = np.unique(np.stack([ids[order], cell[order]]), axis=1, return_index=True)
     entered = order[first]
     passage = np.bincount(block[entered] * cells + cell[entered], minlength=n_blocks * cells)
-    shape = (n_blocks, spec.ny, spec.nx)
-    dropped = int((~inside).sum())
     return BlockLayers(dwell.reshape(shape), passage.astype(float).reshape(shape), dropped)
 
 

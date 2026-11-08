@@ -196,3 +196,33 @@ def test_scenes_can_be_scored_in_parallel_with_the_same_result():
         parallel = block_bootstrap(scenes, n_resamples=50, seed=3, map=pool.map)
 
     assert parallel == serial
+
+
+def test_chord_passage_mode_leaves_dwell_byte_identical():
+    ids, frames, xs, ys = walkers(3)
+
+    plain = block_layers(SPEC, ids, frames, xs, ys, FPS, BLOCK, n_blocks=6)
+    chord = block_layers(SPEC, ids, frames, xs, ys, FPS, BLOCK, n_blocks=6, passage="chord")
+
+    assert chord.dwell.tobytes() == plain.dwell.tobytes()
+    assert chord.dropped == plain.dropped
+    assert not np.array_equal(chord.passage, plain.passage)
+
+
+def test_chord_passage_counts_in_the_block_where_the_path_entered_the_cell():
+    from space_usage_heatmaps.occupancy.domain.chord import mean_chord
+
+    # Track 7 walks row 2 from x = 0.25 to 1.25, crossing into cell (2, 2) at frame 299.
+    blocks = block_layers(
+        SPEC, np.array([7, 7, 7]), np.array([10, 299, 300]), np.array([0.25, 0.75, 1.25]),
+        np.full(3, 1.25), FPS, BLOCK, n_blocks=2, passage="chord",
+    )  # fmt: skip
+
+    assert blocks.passage[:, 2, 0].tolist() == pytest.approx([0.25 / mean_chord(0.5), 0])
+    assert blocks.passage[:, 2, 1].tolist() == [1.0, 0.0]
+    assert blocks.passage[:, 2, 2].tolist() == pytest.approx([0.25 / mean_chord(0.5), 0])
+
+
+def test_an_unknown_passage_mode_is_an_error():
+    with pytest.raises(ValueError, match="passage"):
+        block_layers(SPEC, np.array([1]), np.array([0]), [1.0], [1.0], FPS, BLOCK, 1, "x")
