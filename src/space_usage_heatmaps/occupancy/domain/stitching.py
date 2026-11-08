@@ -20,6 +20,7 @@ so it is unchanged. Only floor points and time are used: no image, no
 appearance feature (R3); the ids live only in memory (R2).
 """
 
+from collections import deque
 from dataclasses import dataclass
 
 import numpy as np
@@ -42,6 +43,11 @@ class Stitch:
                 raise ValueError(f"stitch {name} must be 0 or more")
 
 
+# The accepted stitch (improvements plan phase 2, G10 R1), which the k test of
+# persisted slots counts chains with (phase 6, H3).
+K_STITCH = Stitch(gap_s=10.0, radius_m=1.0, v_max_mps=1.5)
+
+
 def stitch(track_ids, frames, xy, fps, s):
     """New track ids, one per row: the id of the first track of each joined
     chain. xy: (N, 2) floor metres, NaN where a box could not be placed."""
@@ -59,7 +65,7 @@ def stitch(track_ids, frames, xy, fps, s):
     np.maximum.at(last, inv, frames)
 
     # Floor points in (track, frame) order: per track, its first and last
-    # placed point and its velocity over the last window.
+    # placed point and the earliest placed point within the velocity window.
     placed = np.flatnonzero(np.isfinite(xy).all(axis=1))
     placed = placed[np.lexsort((frames[placed], inv[placed]))]
     pt, pf, pxy = inv[placed], frames[placed], xy[placed]
@@ -67,21 +73,54 @@ def stitch(track_ids, frames, xy, fps, s):
     has[pt] = True
     cut = np.flatnonzero(np.diff(pt)) + 1
     head, tail = np.r_[0, cut], np.r_[cut, len(pt)] - 1
-    start_f = np.zeros(n, dtype=np.int64)
-    end_f = np.zeros(n, dtype=np.int64)
-    start_xy, end_xy, velocity = np.zeros((n, 2)), np.zeros((n, 2)), np.zeros((n, 2))
+    ends = _Ends.empty(n)
     k = pt[head]
-    start_f[k], end_f[k] = pf[head], pf[tail]
-    start_xy[k], end_xy[k] = pxy[head], pxy[tail]
+    ends.first[:], ends.last[:], ends.has[:] = first, last, has
+    ends.start_f[k], ends.end_f[k] = pf[head], pf[tail]
+    ends.start_xy[k], ends.end_xy[k] = pxy[head], pxy[tail]
     # Earliest placed point of each track within the window before its last one.
     window = s.velocity_window_s * fps
-    in_window = pf >= end_f[pt] - window
+    in_window = pf >= ends.end_f[pt] - window
     earliest = np.full(n, len(pt))
     np.minimum.at(earliest, pt[in_window], np.flatnonzero(in_window))
     e = earliest[k]
-    dt = (pf[tail] - pf[e]) / fps
+    ends.early_f[k], ends.early_xy[k] = pf[e], pxy[e]
+    return tracks[_link(ends, fps, s)][inv]
+
+
+@dataclass
+class _Ends:
+    """What stitching reads of each track: its first and last row frame, and
+    of its placed rows the first, the last, and the earliest one within the
+    velocity window before the last (has: it has a placed row)."""
+
+    first: np.ndarray
+    last: np.ndarray
+    has: np.ndarray
+    start_f: np.ndarray
+    end_f: np.ndarray
+    early_f: np.ndarray
+    start_xy: np.ndarray
+    end_xy: np.ndarray
+    early_xy: np.ndarray
+
+    @classmethod
+    def empty(cls, n):
+        ints = [np.zeros(n, dtype=np.int64) for _ in range(5)]
+        return cls(ints[0], ints[1], np.zeros(n, dtype=bool), ints[2], ints[3], ints[4],
+                   np.zeros((n, 2)), np.zeros((n, 2)), np.zeros((n, 2)))  # fmt: skip
+
+
+def _link(ends, fps, s):
+    """Per track (in the order of ends), the index of its chain's first track."""
+    n = len(ends.first)
+    first, last, has = ends.first, ends.last, ends.has
+    start_f, end_f, start_xy, end_xy = ends.start_f, ends.end_f, ends.start_xy, ends.end_xy
+    velocity = np.zeros((n, 2))
+    k = np.flatnonzero(has)
+    dt = (end_f[k] - ends.early_f[k]) / fps
     moving = dt > 0
-    velocity[k[moving]] = (pxy[tail][moving] - pxy[e][moving]) / dt[moving, None]
+    velocity[k[moving]] = (end_xy[k][moving] - ends.early_xy[k][moving]) / dt[moving, None]
     speed = np.linalg.norm(velocity, axis=1)
     fast = speed > s.v_max_mps
     velocity[fast] *= (s.v_max_mps / speed[fast])[:, None]
@@ -115,4 +154,54 @@ def stitch(track_ids, frames, xy, fps, s):
         while k >= 0:
             label[k] = h
             k = successor[k]
-    return tracks[label][inv]
+    return label
+
+
+class ChainBuilder:
+    """The stitch of one slot, built as its rows arrive (k on chains, phase 6 H3).
+
+    Keeps per track only what stitch() reads: its first and last row frame,
+    its first placed point, and its placed points of the last velocity window.
+    chains() then gives the same chains as stitch() over all the rows, as long
+    as each track's rows come in frame order. It lives in memory with the open
+    slot and is dropped when the slot closes; nothing of it is written."""
+
+    def __init__(self, s, fps):
+        self.s, self.fps = s, fps
+        self.window = s.velocity_window_s * fps
+        self._tracks = {}  # id -> [first, last, start (frame, xy) or None, recent deque]
+
+    def add(self, track_ids, frames, xy):
+        """Rows: track ids, integer frames at fps, (N, 2) floor metres (NaN: not placed)."""
+        xy = np.asarray(xy, dtype=float).reshape(-1, 2)
+        placed = np.isfinite(xy).all(axis=1)
+        for i, f, p, ok in zip(np.asarray(track_ids).tolist(), np.asarray(frames).tolist(),
+                               xy, placed.tolist(), strict=True):  # fmt: skip
+            t = self._tracks.get(i)
+            if t is None:
+                t = self._tracks[i] = [f, f, None, deque()]
+            t[0], t[1] = min(t[0], f), max(t[1], f)
+            if ok:
+                if t[2] is None:
+                    t[2] = (f, p)
+                recent = t[3]
+                recent.append((f, p))
+                while recent[0][0] < f - self.window:
+                    recent.popleft()
+
+    def chains(self):
+        """Track id -> the id of its chain's first track."""
+        tracks = sorted(self._tracks)
+        if not tracks:
+            return {}
+        ends = _Ends.empty(len(tracks))
+        for j, i in enumerate(tracks):
+            first, last, start, recent = self._tracks[i]
+            ends.first[j], ends.last[j] = first, last
+            if start is not None:
+                ends.has[j] = True
+                ends.start_f[j], ends.start_xy[j] = start
+                ends.end_f[j], ends.end_xy[j] = recent[-1]
+                ends.early_f[j], ends.early_xy[j] = recent[0]
+        label = _link(ends, self.fps, self.s)
+        return {i: tracks[label[j]] for j, i in enumerate(tracks)}

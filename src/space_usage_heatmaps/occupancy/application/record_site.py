@@ -15,6 +15,11 @@ open, never reported it, or when the sources ended inside it. Samples a
 camera sends for a quarter already written are dropped (counted in late).
 n_unique is the most distinct ids any one camera saw: ids are per camera, so
 adding them would count a person seen by two cameras twice.
+
+With a stitch, k reads each camera's stitched chains instead of its raw ids
+(phase 6, H3): the fused count k reads is the weighted mean of the cameras'
+distinct chains, and n_unique shows only when some camera has k chains. The
+fused live layer keeps counting raw ids over its 2 minutes.
 """
 
 import numpy as np
@@ -32,6 +37,7 @@ from space_usage_heatmaps.occupancy.domain.slots import (
     SLOT_S,
     SlotAccumulator,
     SlotGrid,
+    follow_rows,
     slot_start,
     suppress,
     suppress_count,
@@ -49,9 +55,11 @@ class RecordSite:
         retention_days=RETENTION_DAYS,
         now=None,
         k=K_MIN_PEOPLE,
+        stitch=None,
     ):
         """weights: (cameras, ny, nx), the site's frozen fusion weights in the
-        order of cameras; now: the wall clock the retention counts from."""
+        order of cameras; now: the wall clock the retention counts from;
+        stitch: k counts each camera's chains of this stitch (None: raw ids)."""
         self.cameras = [str(c) for c in cameras]
         self.weights = np.asarray(weights, float)
         if self.weights.shape != (len(self.cameras), spec.ny, spec.nx):
@@ -60,7 +68,7 @@ class RecordSite:
                 f"{len(self.cameras)} cameras on a {spec.ny}x{spec.nx} grid"
             )
         self.store, self.site_id, self.spec, self.k = store, site_id, spec, k
-        self.retention_days, self.now = retention_days, now
+        self.retention_days, self.now, self.stitch = retention_days, now, stitch
         self._index = {c: i for i, c in enumerate(self.cameras)}
         self._open = {}  # slot start -> {camera: SlotAccumulator}
         self._current = {}  # camera -> the slot start of its newest sample
@@ -84,7 +92,10 @@ class RecordSite:
             return
         slot = self._open.setdefault(start, {})
         if camera_id not in slot:
-            slot[camera_id] = SlotAccumulator(self.spec, start, incomplete=t - start > seconds)
+            slot[camera_id] = SlotAccumulator(
+                self.spec, start, incomplete=t - start > seconds, stitch=self.stitch
+            )
+        follow_rows(slot[camera_id], t, track_ids, xs, ys, seconds)
         slot[camera_id].add(ids, cells, seconds)
         self._current[camera_id] = max(start, self._current.get(camera_id, start))
         self._close_passed()
@@ -132,8 +143,16 @@ class RecordSite:
                 for c in self.cameras]  # fmt: skip
         dwell = fuse_layers(self.weights, [r[0] for r in raws])
         passage = fuse_layers(self.weights, [r[1] for r in raws])
-        dwell, passage = suppress(dwell, passage, self.k)
-        n = suppress_count(max(len(a.ids) for a in slot.values()), self.k)
+        people, n = None, max(len(a.ids) for a in slot.values())
+        if self.stitch is not None:
+            counts = {c: a.people() for c, a in slot.items()}
+            people = fuse_layers(
+                self.weights,
+                [counts[c][0] if c in counts else np.zeros(shape) for c in self.cameras],
+            )
+            n = n if max(m for _, m in counts.values()) >= self.k else 0
+        dwell, passage = suppress(dwell, passage, self.k, people)
+        n = suppress_count(n, self.k)
         incomplete = (
             ended or len(slot) < len(self.cameras) or any(a.incomplete for a in slot.values())
         )

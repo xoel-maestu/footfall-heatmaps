@@ -6,6 +6,10 @@ more than one frame after the slot began, the source dropped while it was
 open, or it was still open when the source ended. Each write also purges the
 slots past the retention (R7); a slot already past it when it closes (a video
 with an old start) is not written, only counted in past_retention.
+
+With a stitch, k counts the slot's stitched chains instead of raw ids (phase 6,
+H3): the stitch runs when the slot closes, over what the open slot kept of its
+tracks in memory. The live layer keeps counting raw ids over its 2 minutes.
 """
 
 import numpy as np
@@ -16,15 +20,29 @@ from space_usage_heatmaps.occupancy.application.purge_slots import (
     purge_slots,
 )
 from space_usage_heatmaps.occupancy.domain.live import LiveLayer
-from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, SlotAccumulator, slot_start
+from space_usage_heatmaps.occupancy.domain.slots import (
+    K_MIN_PEOPLE,
+    SlotAccumulator,
+    follow_rows,
+    slot_start,
+)
 
 
 class RecordSlots:
     def __init__(
-        self, store, camera_id, spec, retention_days=RETENTION_DAYS, now=None, k=K_MIN_PEOPLE
+        self,
+        store,
+        camera_id,
+        spec,
+        retention_days=RETENTION_DAYS,
+        now=None,
+        k=K_MIN_PEOPLE,
+        stitch=None,
     ):
-        """now: the wall clock (epoch seconds) the retention counts from."""
+        """now: the wall clock (epoch seconds) the retention counts from;
+        stitch: k counts chains of this stitch (None: raw ids)."""
         self.store, self.camera_id, self.spec, self.k = store, camera_id, spec, k
+        self.stitch = stitch
         self.retention_days, self.now = retention_days, now
         self.slot = None
         self.written = 0  # slots written so far
@@ -38,7 +56,10 @@ class RecordSlots:
         if self.slot is not None and start != self.slot.start_utc:
             self._write()
         if self.slot is None:
-            self.slot = SlotAccumulator(self.spec, start, incomplete=t - start > seconds)
+            self.slot = SlotAccumulator(
+                self.spec, start, incomplete=t - start > seconds, stitch=self.stitch
+            )
+        follow_rows(self.slot, t, track_ids, xs, ys, seconds)
         cells, inside = self.spec.cell_index(xs, ys)
         ids = np.asarray(track_ids)[inside]
         self.slot.add(ids, cells, seconds)

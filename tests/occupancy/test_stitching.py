@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.domain.stitching import Stitch, stitch
+from space_usage_heatmaps.occupancy.domain.stitching import ChainBuilder, Stitch, stitch
 
 FPS = 10.0
 S = Stitch(gap_s=2.0, radius_m=0.5)  # v_max 1.5 m/s
@@ -172,3 +172,54 @@ def test_the_predicted_speed_is_capped_at_v_max():
 
     ids, frames, xy = rows(a, b)
     assert groups(ids, stitch(ids, frames, xy, FPS, S)) == [[1, 2]]
+
+
+def _fragmented_scene(seed):
+    """Random fragments of a few walkers, with short gaps, unplaced rows and
+    rows outside any track's reach: the batch and the online stitch must agree."""
+    rng = np.random.default_rng(seed)
+    parts, tid = [], 0
+    for _ in range(6):  # walkers
+        f0 = int(rng.integers(0, 40))
+        x0, y0 = rng.uniform(-3, 3, 2)
+        vx, vy = rng.uniform(-1.2, 1.2, 2)
+        f = f0
+        while f < 400:
+            n = int(rng.integers(3, 40))
+            frames = np.arange(f, f + n)
+            t = (frames - f0) / FPS
+            xy = np.column_stack([x0 + vx * t, y0 + vy * t]) + rng.normal(0, 0.05, (n, 2))
+            xy[rng.random(n) < 0.1] = np.nan  # boxes that could not be placed
+            parts.append((np.full(n, tid), frames, xy))
+            tid += 1
+            f += n + int(rng.integers(1, 30))
+    ids, frames, xy = (np.concatenate(p) for p in zip(*parts, strict=True))
+    order = np.argsort(frames, kind="stable")
+    return ids[order], frames[order], xy[order]
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_the_online_chains_equal_the_batch_stitch(seed):
+    ids, frames, xy = _fragmented_scene(seed)
+    batch = stitch(ids, frames, xy, FPS, S)
+    online = ChainBuilder(S, FPS)
+    for f in np.unique(frames):  # one frame at a time, as a recorder sends them
+        rows = frames == f
+        online.add(ids[rows], frames[rows], xy[rows])
+    chain = online.chains()
+    np.testing.assert_array_equal(np.array([chain[i] for i in ids.tolist()]), batch)
+
+
+def test_the_online_chains_take_rows_in_any_batch_size():
+    ids, frames, xy = _fragmented_scene(3)
+    online = ChainBuilder(S, FPS)
+    for part in np.array_split(np.arange(len(ids)), 7):
+        online.add(ids[part], frames[part], xy[part])
+    chain = online.chains()
+    np.testing.assert_array_equal(
+        np.array([chain[i] for i in ids.tolist()]), stitch(ids, frames, xy, FPS, S)
+    )
+
+
+def test_no_rows_give_no_chains():
+    assert ChainBuilder(S, FPS).chains() == {}
