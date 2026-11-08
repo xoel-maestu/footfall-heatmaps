@@ -114,8 +114,8 @@ def _zones(a, k):
     lowers the weights of cameras at the edges of their coverage. Fusion's
     covered_cells divides by the number of covered cells in the block instead
     (improvements plan, phase 4)."""
-    # The sum, not the mean over covered cells: the bias above is part of the
-    # method chosen on tune; changing it now would be choosing on sealed.
+    # The default stays the sum; the mean over covered cells is opt-in
+    # (covered_cells), a separate variant scored on tune.
     n, ny, nx = a.shape
     py, px = -(-ny // k) * k, -(-nx // k) * k
     padded = np.pad(a, ((0, 0), (0, py - ny), (0, px - nx)))

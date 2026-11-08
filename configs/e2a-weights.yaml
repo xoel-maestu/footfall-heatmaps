@@ -14,7 +14,9 @@ track_height_percentile: 0.9
 hidden_ratio: 0.88
 track_height_min_m: 1.0
 track_height_max_m: 2.0
-stride: 2
+stride: 10            # the scored recipe. Live runs and recordings detect at stride 10
+                      # directly; the evaluation (scripts/weights-sweep.py) replays the
+                      # stride-2 detection cache at stride 10 (detections_stride=2).
 
 # occupancy.domain.fusion: how covering cameras are weighed per cell. W1, chosen
 # on tune 071-075 as the lowest pooled dwell overlap mass error among the
