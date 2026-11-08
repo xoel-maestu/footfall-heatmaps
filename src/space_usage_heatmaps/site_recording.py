@@ -57,6 +57,8 @@ CAMERA_KEYS = {"id", "source", "calibration", "masks"}
 FUSION_KEYS = {"weighting", "power", "zone_m", "covered_cells", "weights"}
 WARM_UP_S = 5  # stats: the first seconds (first inferences) are left out of the rates
 RECENT_FRAMES = 30  # the viewer's per-camera rate: over a camera's last frames
+WINDOW_S = 10  # stats: a live source caps a camera at its own rate (30 / stride), so per-second
+# counts jitter around it by the bin edges; 10 s windows show whether it keeps up
 STALLED_S = 5.0  # the viewer: a camera with no frame for this long reads as stalled
 
 
@@ -263,6 +265,7 @@ class CameraMeter:
                     "processed_fps_p5": round(float(np.percentile(rates, 5)), 2)
                     if len(rates)
                     else None,
+                    "processed_fps_p5_10s": _p5_windows(rates, WINDOW_S),
                     "frames_skipped": s.get("dropped", 0),
                     "source_drops": s.get("drops", 0),
                 }
@@ -274,6 +277,15 @@ class CameraMeter:
             "processed_fps_p5_min": min(p5) if p5 else None,
             "cameras": cameras,
         }
+
+
+def _p5_windows(rates, n):
+    """5th percentile of the rate over consecutive whole windows of n seconds."""
+    windows = len(rates) // n
+    if not windows:
+        return None
+    means = np.asarray(rates[: windows * n]).reshape(windows, n).mean(axis=1)
+    return round(float(np.percentile(means, 5)), 2)
 
 
 def _inputs(site, stop):

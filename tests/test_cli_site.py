@@ -219,3 +219,4 @@ def test_the_meter_reports_per_second_rates_after_the_warm_up():
         3.1
     )  # linear 5th pct of 14 x 4 and one 1
     assert r["processed_fps_p5_min"] == a["processed_fps_p5"]
+    assert a["processed_fps_p5_10s"] == pytest.approx(3.7)  # one 10 s window, 5..14: 37 frames
