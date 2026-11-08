@@ -1,0 +1,51 @@
+# Improvements plan, phase 4: configs/e2a-stitch.yaml with fusion weights W1,
+# visibility power 2 on 2 m zones. Chosen on tune 071-075 at stride 10 from the
+# stride-2 detection cache by the pre-registered rule (iterations.md,
+# "Improvements plan, phase 4: fusion weights"; scripts/weights-sweep.py).
+# Improvements plan, phase 2: the E2a/E2b scene (configs/e2b-association.yaml:
+# per-camera recipe of configs/e2a-stride2.yaml, fusion of configs/e2a-fusion.yaml,
+# association A4) with intra-camera tracklet stitching on every camera.
+detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960
+engine: onnx-trt       # ONNX Runtime, TensorRT execution provider, fp16
+tracker: bytetrack     # roboflow trackers 2.6.1 ByteTrackTracker, its defaults
+input_size: 960        # the exported model's fixed input
+foot_point: auto-track # as h1-yolox-s.yaml
+track_height_percentile: 0.9
+hidden_ratio: 0.88
+track_height_min_m: 1.0
+track_height_max_m: 2.0
+stride: 10            # the scored recipe. Live runs and recordings detect at stride 10
+                      # directly; the evaluation (scripts/weights-sweep.py) replays the
+                      # stride-2 detection cache at stride 10 (detections_stride=2).
+
+# occupancy.domain.fusion: how covering cameras are weighed per cell. W1, chosen
+# on tune 071-075 as the lowest pooled dwell overlap mass error among the
+# variants with no TVD loss (W1-W3 against F5): visibility weighting, power 2,
+# the visibility ratio measured on 2 m zones.
+fusion:
+  weighting: visibility
+  power: 2
+  zone_m: 2.0
+
+# occupancy.domain.association: cross-camera global ids from floor co-location,
+# no appearance. Chosen on tune 071-075 by the rule pre-registered in
+# reports/iterations-phase10.md (highest pooled mc-IDF1 among the accepted
+# variants A1-A4; sweep in reports/e2b-sweep-tune.json): A4, colocate with a
+# 1 m gate plus a 2 s handover.
+association:
+  method: colocate
+  gate_m: 1.0
+  min_overlap_s: 1.0
+  min_close: 0.5
+  handover_s: 2.0
+  handover_speed_mps: 1.5
+  handover_radius_m: 0.5
+
+# occupancy.domain.stitching: relabel-only tracklet stitching per camera on the
+# floor. Chosen on tune 071-075 by the pre-registered rule (iterations.md,
+# "Improvements plan, phase 2"; scripts/stitch-sweep.py): lowest pooled fused
+# passage mass error full@joint among G {2, 5, 10} s x R {0.5, 1.0} m: G10 R1.
+stitch:
+  gap_s: 10.0
+  radius_m: 1.0
+  v_max_mps: 1.5

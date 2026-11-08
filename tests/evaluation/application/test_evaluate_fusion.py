@@ -115,3 +115,25 @@ def test_stitching_joins_a_lost_track_for_passage_and_leaves_dwell_byte_identica
     joined = r.results["full@joint"].delta_pooled["passage"]["mass_error"].value
     assert joined < 0
     assert (r.scenes[0].camera_tracks, base.scenes[0].camera_tracks) == (3, 4)
+
+
+def test_compare_fusion_pairs_two_weightings_of_the_same_tracks(reader, rows):
+    import math
+
+    seen_by_7 = tracks_from_rows(rows)
+    source = both(seen_by_7, joined(seen_by_7, tracks_from_rows(rows, camera=8)))
+    run = (CFG, source)
+    mean, top = Fusion("mean"), Fusion("visibility", math.inf)
+
+    r = evaluate_fusion(
+        reader, [("001", "7")], run, run, 0.5, mean, 20, compare_run=run, compare_fusion=top
+    )
+    assert source.calls.count(("001", "8")) == 1  # the same run's tracks are read once
+    alone = {f: evaluate_fusion(reader, [("001", "7")], run, run, 0.5, f, 20) for f in (mean, top)}
+
+    for truth, res in r.results.items():
+        assert res.pooled[0] == alone[mean].results[truth].pooled[0], truth
+        assert res.pooled[1] == alone[top].results[truth].pooled[0], truth
+    np.testing.assert_array_equal(r.fused["001"].dwell, alone[mean].fused["001"].dwell)
+    d = r.results["full@joint"].delta_pooled["dwell"]["mass_error"].value
+    assert d != 0  # the mean dilutes what only camera 8 sees

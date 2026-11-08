@@ -91,3 +91,21 @@ def test_the_fusion_section_parses_and_is_not_part_of_the_recipe(fused_scene):
     assert cli.load_config("fused.yaml") == cli.load_config("single.yaml")
     with pytest.raises(ValueError, match="no fusion section"):
         cli.load_fusion("single.yaml")
+
+
+def test_covered_cells_parses_and_is_reported_only_when_on(fused_scene):
+    (fused_scene / "norm.yaml").write_text(
+        RECIPE + "fusion:\n  weighting: visibility\n  power: 2\n  zone_m: 2.0\n"
+        "  covered_cells: true\n"
+    )
+
+    on, off = cli.load_fusion("norm.yaml"), cli.load_fusion("fused.yaml")
+
+    assert on.covered_cells is True and off.covered_cells is False
+    assert cli._fusion_dict(on) == {
+        "weighting": "visibility",
+        "power": 2,
+        "zone_m": 2.0,
+        "covered_cells": True,
+    }
+    assert "covered_cells" not in cli._fusion_dict(off)  # earlier reports unchanged

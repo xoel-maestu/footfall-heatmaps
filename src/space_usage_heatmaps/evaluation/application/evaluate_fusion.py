@@ -10,7 +10,9 @@ Predictions: the fused map, and the single-camera baseline (the scene's E1
 camera, the anchor, with its own recipe); deltas are fused - single. With
 compare_run, the second prediction is instead the fused map of another
 recipe on the same cameras (e.g. without tracklet stitching), and deltas are
-fused - compared.
+fused - compared. compare_fusion weighs that second map with another fusion
+(with compare_run the same run: two weightings of the same tracks, whose
+per-camera layers are computed once).
 
 Truth blocks (spec 9, E2a):
 - full@joint: every person, on the joint coverage (cells at least one camera
@@ -103,12 +105,17 @@ def evaluate_fusion(
     cameras=None,
     map=map,
     compare_run=None,
+    compare_fusion=None,
 ):
     """scenes: [(scene, anchor camera)]; fused_run, single_run: (RunConfig,
     TrackSource); cameras: the cameras to fuse, default every calibrated one;
     map: how the bootstrap scores scenes (block_bootstrap); compare_run:
     (RunConfig, TrackSource) of a second fused map that takes the single
-    camera's place in the predictions (same fusion, cameras and weights rule)."""
+    camera's place in the predictions (same cameras; weighed by compare_fusion,
+    default fusion)."""
+    if compare_fusion is not None and compare_run is None:
+        raise ValueError("compare_fusion needs compare_run")
+    compare_fusion = fusion if compare_fusion is None else compare_fusion
     blocks = {truth: [] for truth in FUSION_TRUTHS}
     report_scenes, fused_grids = [], {}
     for scene, anchor in scenes:
@@ -132,7 +139,9 @@ def evaluate_fusion(
         for c in names:
             seen_by_any |= reader.floor_truth(scene, c).visible
 
-        def fuse(run, scene=scene, names=names, spec=spec, first=first, last=last, bf=bf, nb=nb):
+        def cameras_of(
+            run, scene=scene, names=names, spec=spec, first=first, last=last, bf=bf, nb=nb
+        ):
             per_camera, samples, dropped, tracks = [], 0, 0, 0
             for c in names:
                 layers, coverage, n, k = _camera_blocks(
@@ -140,6 +149,9 @@ def evaluate_fusion(
                 )
                 per_camera.append((c, layers, coverage))
                 samples, dropped, tracks = samples + n, dropped + layers.dropped, tracks + k
+            return per_camera, samples, dropped, tracks
+
+        def fuse(per_camera, dropped, fusion, spec=spec):
             grids = [
                 CameraGrid(c, Grid(spec, b.dwell.sum(0), b.passage.sum(0), b.dropped), cov)
                 for c, b, cov in per_camera
@@ -150,9 +162,10 @@ def evaluate_fusion(
                 fuse_layers(w, [b.passage for _, b, _ in per_camera]),
                 dropped,
             )
-            return fused, grids, samples, dropped, tracks
+            return fused, grids
 
-        fused, grids, samples, dropped, tracks = fuse(fused_run)
+        per_camera, samples, dropped, tracks = cameras_of(fused_run)
+        fused, grids = fuse(per_camera, dropped, fusion)
         fused_grids[scene] = Grid(spec, fused.dwell.sum(0), fused.passage.sum(0), dropped)
         single, anchor_cov, _, _ = _camera_blocks(
             reader, scene, anchor, *single_run, spec, first, last, bf, nb
@@ -160,7 +173,15 @@ def evaluate_fusion(
         joint, shared = joint_coverage(grids), overlap(grids)
         full = truth_layers(np.ones(len(truth.track_ids), dtype=bool))
         visible_any, visible_anchor = truth_layers(seen_by_any), truth_layers(truth.visible)
-        preds = (fused, single if compare_run is None else fuse(compare_run)[0])
+        if compare_run is None:
+            preds = (fused, single)
+        else:
+            other = (
+                (per_camera, samples, dropped, tracks)
+                if compare_run is fused_run
+                else cameras_of(compare_run)
+            )
+            preds = (fused, fuse(other[0], other[2], compare_fusion)[0])
         for name, tr, mask in (
             ("full@joint", full, joint),
             ("visible@joint", visible_any, joint),
