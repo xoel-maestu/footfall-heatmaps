@@ -23,7 +23,10 @@ def crowd(n, x=0.1, y=0.1):
     return np.arange(n), np.full(n, x), np.full(n, y)
 
 
-def calibration(window_s=60.0, fusion=Fusion("visibility", 1.0)):
+P1 = Fusion("visibility", 1.0)
+
+
+def calibration(window_s=60.0, fusion=P1):
     return CalibrateSite(["a", "b"], COVERAGE, SPEC, fusion, window_s)
 
 
