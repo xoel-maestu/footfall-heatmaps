@@ -88,13 +88,17 @@ class SlotAccumulator:
         self.pairs.update(zip(ids, np.asarray(cells).tolist(), strict=True))
         self.ids.update(ids)
 
-    def grids(self, camera_id, k=K_MIN_PEOPLE):
-        """Both layers, suppressed below k: what may be written."""
+    def raw(self):
+        """(dwell, passage) before k: for fusion in memory, never written as is."""
         shape = (self.spec.ny, self.spec.nx)
         passage = np.zeros(self.spec.ny * self.spec.nx)
         if self.pairs:
             np.add.at(passage, [c for _, c in self.pairs], 1.0)
-        dwell, passage = suppress(self.dwell.reshape(shape), passage.reshape(shape), k)
+        return self.dwell.reshape(shape), passage.reshape(shape)
+
+    def grids(self, camera_id, k=K_MIN_PEOPLE):
+        """Both layers, suppressed below k: what may be written."""
+        dwell, passage = suppress(*self.raw(), k)
         return [
             SlotGrid(
                 camera_id,
