@@ -19,16 +19,17 @@ SLOT = {
 }
 
 
-def reading(s):
-    return run_js(["reading"], f"slotReading({js(s)})")
+def reading(s, site=True):
+    return run_js(["reading"], f"slotReading({js(s)}, {js(site)})")
 
 
-def option(s):
-    return run_js(["reading"], f"slotOption({js(s)})")
+def option(s, site=True):
+    return run_js(["reading"], f"slotOption({js(s)}, {js(site)})")
 
 
 def test_the_slot_reads_as_people_in_view_from_dwell():
     assert reading(SLOT) == {
+        "occ-mean-bound": "",
         "occ-mean": "4.7",
         "occ-peak": "9.1 people, 09:07 to 09:08 UTC",
         "occ-observed": "13 min 20 s of 15 min",
@@ -47,7 +48,8 @@ def test_a_slot_without_a_reading_says_so_and_shows_dashes():
                    "observed_s": None}  # fmt: skip
     assert option(bare) == "09:00 to 09:15, occupancy not recorded, incomplete"
     assert reading(bare) == {
-        "occ-mean": "-", "occ-peak": "-", "occ-observed": "Not recorded for this slot"
+        "occ-mean-bound": "", "occ-mean": "-", "occ-peak": "-",
+        "occ-observed": "Not recorded for this slot",
     }  # fmt: skip
     assert reading(None)["occ-observed"] == "-"
 
@@ -120,10 +122,36 @@ def test_the_reading_note_says_sparse_minutes_count_as_zero():
     assert "Minutes in which fewer than 5 track ids were seen count as 0." in PAGE.read_text()
 
 
-def test_a_single_camera_reading_says_it_reads_low_where_the_view_is_occluded():
+def test_a_single_camera_reading_is_a_lower_bound_with_the_measured_error_range():
+    # H7 (phase 7): one recall factor did not bring a single camera within 10 %
+    # on sealed scenes, so its reading is "at least N" with the tune error range
     note = (
-        "One camera: people hidden from it are not counted, "
-        "so this reads low where the view is occluded."
+        "One camera: people hidden from it are not counted. On the test scenes "
+        "(79 cameras), a single camera read 10 % below the people in view at the "
+        "median, between 36 % below and 13 % above for 8 cameras in 10, and from "
+        "100 % below to 33 % above in all."
     )
     assert run_js(["reading"], "oneCameraNote(false)") == note
     assert run_js(["reading"], "oneCameraNote(true)") is None
+
+
+def test_a_single_camera_slot_reads_at_least_n_people_in_view():
+    one = run_js(["reading"], f"slotReading({js(SLOT)}, false)")
+    assert one["occ-mean-bound"] == "at least" and one["occ-mean"] == "4.7"
+    assert run_js(["reading"], f"slotOption({js(SLOT)}, false)") == (
+        "09:00 to 09:15, on average at least 4.7 people in view, incomplete"
+    )
+
+
+def test_a_site_slot_reads_without_a_bound():
+    site = run_js(["reading"], f"slotReading({js(SLOT)}, true)")
+    assert site["occ-mean-bound"] == "" and site["occ-mean"] == "4.7"
+    assert run_js(["reading"], f"slotOption({js(SLOT)}, true)") == (
+        "09:00 to 09:15, on average 4.7 people in view, incomplete"
+    )
+
+
+def test_a_slot_without_a_reading_has_no_bound_either():
+    bare = SLOT | {"mean_occupancy": None, "peak_occupancy": None, "peak_start": None,
+                   "observed_s": None}  # fmt: skip
+    assert run_js(["reading"], f"slotReading({js(bare)}, false)")["occ-mean-bound"] == ""

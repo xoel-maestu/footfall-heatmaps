@@ -119,6 +119,8 @@ dd { margin: 0; text-align: right; }
 .site-only[hidden], .slot-only[hidden] { display: none; }
 #reading .headline { margin: 0 0 6px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 #occ-mean { font-size: 22px; font-weight: 600; }
+#occ-mean-bound { font-size: 13px; }
+#occ-mean-bound:empty { display: none; }
 #occ-mean-unit { font-size: 13px; }
 #reading dl { margin-bottom: 8px; }
 #zones { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -167,7 +169,7 @@ dd { margin: 0; text-align: right; }
     </div>
     <section id="reading" class="slot-only" hidden aria-labelledby="reading-title">
       <div class="label" id="reading-title">Occupancy in this slot</div>
-      <p class="headline"><span id="occ-mean">-</span><span id="occ-mean-unit">people in view on average</span></p>
+      <p class="headline"><span id="occ-mean-bound"></span><span id="occ-mean">-</span><span id="occ-mean-unit">people in view on average</span></p>
       <dl aria-label="Occupancy of the slot">
         <dt>Peak 1-minute occupancy</dt><dd id="occ-peak">-</dd>
         <dt>Observed time</dt><dd id="occ-observed">-</dd>
@@ -417,12 +419,18 @@ function zoneTable(z) {
 // A slot's occupancy as text, from /api/slots: identity-free, derived from dwell.
 const one = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const hhmm = (iso, plusMin = 0) => new Date(Date.parse(iso) + plusMin * 60000).toISOString().slice(11, 16);
-function slotReading(s) {
+// One camera's mean is a lower bound (H7, phase 7): it misses the people hidden
+// from it, and one recall factor did not correct it within 10 % on test scenes.
+function slotReading(s, site) {
   if (!s || s.mean_occupancy == null) {
-    return { "occ-mean": "-", "occ-peak": "-", "occ-observed": s ? "Not recorded for this slot" : "-" };
+    return {
+      "occ-mean-bound": "", "occ-mean": "-", "occ-peak": "-",
+      "occ-observed": s ? "Not recorded for this slot" : "-",
+    };
   }
   const sec = Math.round(s.observed_s), min = Math.floor(sec / 60), rest = sec % 60;
   return {
+    "occ-mean-bound": site ? "" : "at least",
     "occ-mean": one.format(s.mean_occupancy),
     "occ-peak": s.peak_occupancy == null ? "-"
       : `${one.format(s.peak_occupancy)} people, ${hhmm(s.peak_start)} to ${hhmm(s.peak_start, 1)} UTC`,
@@ -430,17 +438,21 @@ function slotReading(s) {
   };
 }
 
-// A single camera misses people it cannot see; a site fuses many views.
+// A single camera misses people it cannot see; a site fuses many views. The
+// range is H7's tune measurement (scripts/recall-factor.py, phase 7): every
+// calibrated camera of scenes 071-075 against the people visible to it.
 function oneCameraNote(site) {
   return site ? null
-    : "One camera: people hidden from it are not counted, so this reads low where the view is occluded.";
+    : "One camera: people hidden from it are not counted. On the test scenes (79 cameras), "
+      + "a single camera read 10 % below the people in view at the median, between 36 % below "
+      + "and 13 % above for 8 cameras in 10, and from 100 % below to 33 % above in all.";
 }
 
 // The slot picker's option text.
-function slotOption(s) {
+function slotOption(s, site) {
   const span = `${hhmm(s.start)} to ${hhmm(s.start, 15)}`;
   const occ = s.mean_occupancy == null ? "occupancy not recorded"
-    : `on average ${one.format(s.mean_occupancy)} people in view`;
+    : `on average ${site ? "" : "at least "}${one.format(s.mean_occupancy)} people in view`;
   return `${span}, ${occ}${s.incomplete ? ", incomplete" : ""}`;
 }
 // reading:end
@@ -479,7 +491,7 @@ function showZones(z) {
 }
 
 function showReading(s) {
-  for (const [id, text] of Object.entries(slotReading(s))) $(id).textContent = text;
+  for (const [id, text] of Object.entries(slotReading(s, isSite))) $(id).textContent = text;
 }
 
 function draw() {
@@ -629,7 +641,7 @@ async function loadSlots() {
     select.disabled = true;
   } else {
     select.disabled = false;
-    for (const [i, s] of state.slots.entries()) select.append(new Option(slotOption(s), String(i)));
+    for (const [i, s] of state.slots.entries()) select.append(new Option(slotOption(s, isSite), String(i)));
     select.value = String(state.slots.length - 1);
   }
   showSlot();

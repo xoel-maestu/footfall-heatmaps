@@ -168,8 +168,9 @@ def measure_scene(scene):
         truth = reader.floor_truth(scene, c)
         v = truth.visible
         truth_s = [
-            truth_person_seconds(spec, truth.frames[v], truth.world[v], cam.fps, coverage, T0,
-                                 s["slot_start_utc"])  # fmt: skip
+            truth_person_seconds(
+                spec, truth.frames[v], truth.world[v], cam.fps, coverage, T0, s["slot_start_utc"]
+            )  # fmt: skip
             for s in slots
         ]
         observed = sum(s["observed_s"] or 0 for s in slots)

@@ -71,11 +71,14 @@ None: no sheets, no dialogs, no shadows.
 - Source and layer switches: segmented radio groups. Layer names are exactly
   "Dwell (person-seconds)" and "Passage (crossings)".
 - Slot picker: a UTC day and the slots that start on it, each read as
-  "on average N people in view"; hidden in live mode.
+  "on average N people in view" ("on average at least N people in view" on a
+  single camera); hidden in live mode.
 - Occupancy (slot only): people in view on average (22 px), the peak 1-minute
   occupancy with its minute, and the observed time. Identity-free: dwell over
-  observed seconds, never a count of ids. On a single camera (not a site) a
-  second note says people hidden from it are not counted.
+  observed seconds, never a count of ids. On a single camera (not a site) the
+  mean reads "at least N" (13 px before the number) and a second note says
+  people hidden from it are not counted, with the measured single-camera error
+  range.
 - Zone table: the top 10 of the grid's 2 m zones by dwell, with their x and y
   ranges in metres, share of the dwell shown and person-seconds.
 - Legend: the ramp from 0 to the highest cell shown, with the unit.
