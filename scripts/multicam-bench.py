@@ -1,5 +1,5 @@
 """Real-time budget, camera count (improvements plan, phase 3), as pre-registered
-in iterations.md, "Improvements plan, phase 3: real-time budget".
+in the experiment log.
 
     uv run --no-sync python scripts/multicam-bench.py --stride 8 --cameras 4 --minutes 10
 

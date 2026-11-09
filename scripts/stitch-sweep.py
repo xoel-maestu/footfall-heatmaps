@@ -1,5 +1,5 @@
 """Intra-camera tracklet stitching (improvements plan, phase 2), as pre-registered
-in iterations.md, "Improvements plan, phase 2".
+in the experiment log.
 
     uv run --no-sync python scripts/stitch-sweep.py sweep
     uv run --no-sync python scripts/stitch-sweep.py confirm tune|sealed

@@ -1,4 +1,4 @@
-"""ultralytics is AGPL (spec 3): only evaluation/baseline imports it, and only the
+"""ultralytics is AGPL-3.0: only evaluation/baseline imports it, and only the
 CLI imports evaluation/baseline, inside the commands that need it."""
 
 import ast

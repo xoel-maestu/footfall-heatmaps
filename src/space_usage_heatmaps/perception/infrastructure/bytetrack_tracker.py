@@ -2,7 +2,7 @@
 
 Motion and IoU only: ByteTrack associates boxes by Kalman-predicted IoU in two
 stages (high-score boxes, then low-score ones), with no appearance features
-(spec 3, R3); it is never given the image. Parameters are the library's
+(privacy rule R3); it is never given the image. Parameters are the library's
 defaults, read from its constructor, except frame_rate, which scales the lost
 track buffer (30 frames at 30 fps) to the source:
 

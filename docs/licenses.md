@@ -3,7 +3,16 @@
 > Every dependency, model weight and dataset this repo uses, with its licence
 > and whether it is on the run path or for evaluation only. Read it before
 > adding a dependency, a model or a dataset: the run path takes Apache-2.0,
-> MIT or BSD code and weights only (spec 3).
+> MIT or BSD code and weights only.
+
+## This repository
+
+The code and documentation are licensed under the Apache License 2.0
+(`LICENSE`, `NOTICE`), Copyright 2026 Xoel Maestu. One file is an exception:
+`docs/media/demo.gif` is adapted (overlays, resized) from frames of NVIDIA
+PhysicalAI-SmartSpaces and stays under that dataset's CC BY 4.0 licence (see
+Datasets below). Nothing else here is third-party content: no dataset, model
+weight or third-party wheel is committed.
 
 Versions are the ones in `uv.lock`; licences are what each distribution
 declares in its package metadata.
@@ -123,7 +132,23 @@ RF-DETR's exporter has its own locked environment, `scripts/export/rfdetr`
 (rfdetr pins pyDeprecate < 0.10, which would downgrade the run path's
 trackers dependency): rfdetr 1.11.2 (Apache-2.0) with transformers 5.22.1,
 huggingface-hub, tokenizers, safetensors (Apache-2.0), pydantic and
-supervision (MIT), torch and torchvision as above. Its checkpoint download is
+supervision (MIT), torch and torchvision as above. Its other transitive
+packages, from `scripts/export/rfdetr/uv.lock`:
+
+| Distribution | Version | Licence | Pulled by |
+|---|---|---|---|
+| pydantic-core | 2.50.4 | MIT | pydantic |
+| annotated-types, typing-inspection | 0.8.0, 0.4.5 | MIT | pydantic |
+| hf-xet | 1.8.0 | Apache-2.0 | huggingface-hub |
+| httpx2, httpcore2 | 2.16.0, 2.16.0 | BSD-3-Clause | huggingface-hub |
+| truststore | 0.10.5 | MIT | httpx2, httpcore2 |
+| typer, shellingham, annotated-doc | 0.27.3, 1.5.4, 0.0.5 | MIT, ISC, MIT | transformers (its CLI); shellingham and annotated-doc through typer |
+| regex | 2026.9.29 | Apache-2.0 AND CNRI-Python | transformers |
+| av (PyAV) | 19.0.2 | BSD-3-Clause; its wheels bundle FFmpeg under LGPL-3.0+ with GPL-2.0+ libx264 and libx265 | supervision (not overridden in this environment, unlike the run path) |
+
+`httpx2-jsfetch` is in that lock only for Emscripten and is never installed on
+Linux. This environment is for exporting only: none of it is imported by the
+package or shipped with the ONNX file. Its checkpoint download is
 the only weights download from outside GitHub (`EXPORT_HOSTS`); the run path's
 allowlist stays GitHub's release hosts. Installing that environment (`uv run
 --project scripts/export/rfdetr`) fetches packages from PyPI and torch and
@@ -180,6 +205,15 @@ tests and the layer check. Never imported by the package.
 Windows-only markers in the lock, never installed on Linux: colorama
 (BSD; pytest, click, tqdm, loguru) and win32-setctime (loguru).
 
+## External tools
+
+Not dependencies and not installed by `uv`; documented for local testing.
+
+| Tool | Licence | Use |
+|---|---|---|
+| [mediamtx](https://github.com/bluenviron/mediamtx) | MIT | `scripts/rtsp-loop.sh` serves a video file as a local RTSP stream |
+| ffmpeg | LGPL-2.1+ or GPL-2.0+, depending on the build | `scripts/rtsp-loop.sh` feeds the file to mediamtx |
+
 ## Datasets
 
 Kept under `SPACE_USAGE_DATA_DIR`, never committed, used to measure only. The
@@ -187,8 +221,8 @@ one exception is `docs/media/demo.gif`, frames of one NVIDIA scene (below).
 
 | Dataset | Licence | Consequence |
 |---|---|---|
-| NVIDIA PhysicalAI-SmartSpaces, MTMC_Tracking_2024 (`huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces`) | Conflict: CC BY 4.0 on the Hugging Face card (attribution required); the AI City Challenge 2024 data agreement forbids commercial use | measurement only; a product would replace it with its own footage. The README's demo GIF (`docs/media/demo.gif`, `scripts/demo-gif.py`) shows 24 s of scene 071 camera 645, with the attribution "Synthetic scene: NVIDIA PhysicalAI-SmartSpaces, CC BY 4.0" in the GIF and under it |
-| WILDTRACK (EPFL CVLab, `documents.epfl.ch/groups/c/cv/cvlab-unit/www/data/Wildtrack/Wildtrack_dataset_full.zip`, from `epfl.ch/labs/cvlab/data/data-wildtrack/`): calibrations, the 400 annotated frames' positions and camera C5's frames, fetched by HTTP range from the official zip (`scripts/fetch-datasets.py`) | No licence stated on its page (checked 2026-11-06); EPFL CVLab's general terms, as recorded in the research notes and not re-verified: research and evaluation only, commercial use with prior written permission | evaluation only (`space-usage eval --dataset wildtrack`), never tuned on; cite Chavdarova et al., CVPR 2018 |
+| NVIDIA PhysicalAI-SmartSpaces, MTMC_Tracking_2024 (`huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces`) | CC BY 4.0, as stated on the Hugging Face dataset card (attribution required). The copy used here, including the GIF's frames, is that Hugging Face release (`scripts/fetch-datasets.py nvidia`), not the AI City Challenge 2024 download, whose data agreement forbids commercial use | measurement only; a product would replace it with its own footage. The dataset card asks users to cite its papers (README, Acknowledgements). The README's demo GIF (`docs/media/demo.gif`, `scripts/demo-gif.py`) shows 24 s of scene 071 camera 645, with the attribution "Synthetic scene: NVIDIA PhysicalAI-SmartSpaces, CC BY 4.0" in the GIF and under it |
+| WILDTRACK (EPFL CVLab, `documents.epfl.ch/groups/c/cv/cvlab-unit/www/data/Wildtrack/Wildtrack_dataset_full.zip`, from `epfl.ch/labs/cvlab/data/data-wildtrack/`): calibrations, the 400 annotated frames' positions and camera C5's frames, fetched by HTTP range from the official zip (`scripts/fetch-datasets.py`) | No licence stated on its page (checked 2026-11-06); EPFL CVLab's general terms, as read when the dataset was first fetched and not re-verified: research and evaluation only, commercial use with prior written permission | evaluation only (`space-usage eval --dataset wildtrack`), never tuned on; cite Chavdarova et al., CVPR 2018 |
 | CAVIAR, second set (`homepages.inf.ed.ac.uk/rbf/CAVIARDATA1/`): the 26 corridor-view clips (`CAVIARDATA2/<clip>cor/`, MPEG-1 and CVML ground truth; `scripts/fetch-datasets.py`) | Creative Commons BY-SA (version not stated); attribution to the EC-funded CAVIAR project IST 2001 37540 | evaluation only (`--dataset caviar`), never tuned on |
 | MOT17 (`motchallenge.net/data/MOT17/`): train sequences 02, 04 and 09 (FRCNN copy: frames, `gt/gt.txt`, `seqinfo.ini`), fetched by HTTP range from the official `MOT17.zip` (`scripts/fetch-datasets.py`) | CC BY-NC-SA 3.0 | non-commercial, evaluation only (`--dataset mot17`), never tuned on |
 

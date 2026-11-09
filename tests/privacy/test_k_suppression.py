@@ -1,4 +1,4 @@
-"""R5 (spec 3): a cell with fewer than k=5 distinct people reads as empty, in a
+"""Privacy rule R5: a cell with fewer than k=5 distinct people reads as empty, in a
 persisted slot and, by the same rule, in the live layer.
 
 The passage layer is the per-cell count of distinct ephemeral ids, an

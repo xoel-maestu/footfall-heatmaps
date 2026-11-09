@@ -1,4 +1,4 @@
-"""15-minute slots: the only occupancy data that is persisted (spec 3, R4, R5).
+"""15-minute slots: the only occupancy data that is persisted (privacy rules R4, R5).
 
 A slot is one floor grid per layer over a UTC wall-clock quarter: dwell in
 person-seconds, passage in distinct ephemeral ids per cell, and n_unique, the

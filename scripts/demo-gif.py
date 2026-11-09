@@ -4,7 +4,7 @@ Left, the video frames with a dot at each tracked person's foot point (the
 config's foot point, projected back into the image through the floor
 homography). Right, the scene's floor grid with the camera's dwell accumulated
 from the start of the video up to the shown frame (a cell shows once k distinct
-ids have been in it, as the viewer's maps), the same people's floor positions
+track ids were seen in it, as in the viewer's maps), the same people's floor positions
 and the outline of the cells the camera sees.
 
 Tracks come from the config's track source (the cache when it has them), so no
@@ -31,9 +31,9 @@ STEADY = 12  # per-channel change below which a video pixel keeps its last value
 MARGIN, GAP, CAPTION_H = 16, 16, 74
 CAPTION = (
     "Left: camera video, one dot per person at the estimated foot point. Right: floor plan in "
-    "0.5 m cells, the camera's",
-    "dwell since the video started (a cell shows once 5 people have been in it), the current "
-    "positions and its field of view (outline). {speed:g}x speed.",
+    "0.5 m cells, the camera's dwell",
+    "since the video started (a cell shows once 5 distinct track ids were seen in it), the "
+    "current positions and the camera's field of view (outline). {speed:g}x speed.",
     "Synthetic scene, adapted (overlays, resized) from NVIDIA PhysicalAI-SmartSpaces, CC BY 4.0.",
 )
 

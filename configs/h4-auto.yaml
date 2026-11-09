@@ -1,4 +1,4 @@
-# H4 (spec 8, hypothesis 4): iteration 0 with the floor point chosen per box.
+# H4 (hypothesis 4): iteration 0 with the floor point chosen per box.
 # Same detector, tracker and input as iter0.yaml, so its cached tracks are reused.
 detector: yolov8n      # Ultralytics YOLOv8n, COCO weights, class person only
 tracker: bytetrack     # Ultralytics built-in bytetrack.yaml, defaults

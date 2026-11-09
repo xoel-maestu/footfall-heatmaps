@@ -1,4 +1,4 @@
-"""Paired block bootstrap of the heatmap metrics (spec 8).
+"""Paired block bootstrap of the heatmap metrics.
 
 The run is cut into blocks of consecutive frames (30 s), each with its own
 dwell and passage grid, so that a resample is a sum of block grids. A resample

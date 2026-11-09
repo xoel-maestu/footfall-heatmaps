@@ -1,4 +1,4 @@
-"""R6 (spec 3): per-camera privacy masks drop detections before the tracker.
+"""Privacy rule R6: per-camera privacy masks drop detections before the tracker.
 
 A detection is dropped when the bottom-centre of its box (where the feet
 touch the floor) lies in an image polygon, or its floor point does in a floor

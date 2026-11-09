@@ -1,4 +1,4 @@
-# H3b-2 (spec 8, hypothesis 3): configs/h3-ucmc.yaml with the box thresholds of
+# H3b-2 (hypothesis 3): configs/h3-ucmc.yaml with the box thresholds of
 # configs/h1-best.yaml's ByteTrack, so the comparison tests floor association
 # and not thresholds. Same detections (the detection cache replays them).
 #

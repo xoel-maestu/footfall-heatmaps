@@ -1,9 +1,9 @@
-"""Oracle runs: score ground truth against ground truth to validate the harness.
+"""Oracle runs: score ground truth against ground truth to validate the evaluation code.
 
 Three blocks, from the dataset's per-frame floor positions of every person:
 - visible@coverage: people this camera has a visible box of, on its coverage
   mask (E1 primary: mass the camera puts where nobody is visible counts);
-- full@coverage: every person, on the coverage mask (spec 5, the E2a target);
+- full@coverage: every person, on the coverage mask (the E2a target);
   its gap to visible@coverage is the occlusion ceiling of a single camera;
 - visible@visibility: the visible people on the covered cells where the camera
   sees someone at least once (diagnostic only: the mask comes from the truth,

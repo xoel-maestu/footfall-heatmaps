@@ -1,4 +1,4 @@
-"""Validate the label-free metrics (spec 6) against the error the truth gives.
+"""Validate the label-free metrics against the error the truth gives.
 
 For each scene, the config's tracks give the label-free metrics (from the
 tracks alone) and the true error of their dwell map on visible@coverage (TVD

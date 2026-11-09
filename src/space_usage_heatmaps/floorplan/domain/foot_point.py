@@ -24,7 +24,7 @@ import numpy as np
 FOOT_POINTS = ("centroid", "bottom", "head", "auto", "auto-track")
 PERSON_HEIGHT_M = 1.70
 MIN_IMPLIED_HEIGHT_M = 1.40
-# auto-track, chosen on the tune split's ground-truth boxes (iterations.md):
+# auto-track, chosen on the tune split's ground-truth boxes (experiment log):
 TRACK_HEIGHT_PERCENTILE = 0.9  # quantile of the track's implied heights so far
 TRACK_HEIGHT_MIN_M, TRACK_HEIGHT_MAX_M = 1.0, 2.0  # clip: a track's height is a person's
 HIDDEN_RATIO = 0.88  # a box below this share of its track's height is hidden

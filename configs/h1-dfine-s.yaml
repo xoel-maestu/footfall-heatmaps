@@ -1,4 +1,4 @@
-# H1b (spec 8, hypothesis 1): configs/h1-yolox-s.yaml with D-FINE-S in place of
+# H1b (hypothesis 1): configs/h1-yolox-s.yaml with D-FINE-S in place of
 # YOLOX-s: the Objects365 + COCO release checkpoint (Apache-2.0), exported to a
 # 640 x 640 ONNX by its official exporter (scripts/export-detector.py dfine-s).
 detector: dfine-s      # D-FINE-S obj2coco; class person, score > 0.1, no NMS (a DETR)

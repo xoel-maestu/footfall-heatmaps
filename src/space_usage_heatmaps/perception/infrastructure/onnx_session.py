@@ -119,7 +119,7 @@ class OnnxDetector:
     def __init__(self, session, cpu_session=None, engine=None, fallbacks=None):
         """session: an onnxruntime.InferenceSession of the model, or a test double.
         fallbacks: [(provider, session factory)] tried in order if the GPU runs
-        out of memory during a run (spec 4); cpu_session() alone is [(CPU, it)].
+        out of memory during a run; cpu_session() alone is [(CPU, it)].
         engine: session's provider. providers: every provider this detector has
         run on, in order."""
         self._session = session

@@ -1,4 +1,4 @@
-# H6e (spec 8, hypothesis 6): configs/h1-best.yaml with the detector's score
+# H6e (hypothesis 6): configs/h1-best.yaml with the detector's score
 # threshold 0.1 -> 0.2: fewer false boxes in ByteTrack's low stage. Replays
 # h1-best's cached detections, filtered (exact).
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960

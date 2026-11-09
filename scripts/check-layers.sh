@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# managed-by: plantilla. Edit it there: scripts/harness-sync.sh overwrites this copy.
-# Layer check of the hexagonal layout (docs/architecture/hexagonal.md):
+# Layer check of the hexagonal layout (docs/architecture.md):
 # infrastructure -> application -> domain, never the other way round.
 # verify.sh calls it.
 #
@@ -13,8 +12,7 @@
 # that is needed but missing is a failure with the install command, never a
 # silent pass.
 #
-# The rules are generated here, so every repo starts with the same ones and
-# this file can be synced from the template. A repo that needs other rules
+# Without a config of its own the rules are generated here. A repo that needs other rules
 # writes its own config (.dependency-cruiser.{cjs,mjs,js,json,json5},
 # .importlinter or [tool.importlinter]), and then that one is used instead.
 # To start one from the generated rules:
@@ -37,7 +35,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 violation() {
-  echo "Layer violation ($1). The dependency rule: docs/architecture/hexagonal.md." >&2
+  echo "Layer violation ($1). The dependency rule: docs/architecture.md." >&2
   status=1
 }
 
@@ -109,8 +107,7 @@ if [ -f package.json ]; then
         echo "  Usual cause: a TypeScript it does not support. Releases without TypeScript 7"
         echo "  support read 0 modules with it ('npx depcruise --info' lists what it supports"
         echo "  and what is installed). Fix: npm install --save-dev typescript@6, until your"
-        echo "  dependency-cruiser declares TypeScript 7 in its peerDependencies"
-        echo "  (docs/architecture/hexagonal.md)."
+        echo "  dependency-cruiser declares TypeScript 7 in its peerDependencies."
       } >&2
       status=1
     fi

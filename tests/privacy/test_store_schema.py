@@ -1,4 +1,4 @@
-"""R4 (spec 3): only aggregated grids are persisted, never trajectories or images.
+"""Privacy rule R4: only aggregated grids are persisted, never trajectories or images.
 
 The database a run writes holds two tables with exactly the contract's columns:
 slots, whose grid blob decodes to one floor grid of numbers, and slot_minutes,

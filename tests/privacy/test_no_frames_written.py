@@ -1,4 +1,4 @@
-"""R1 (spec 3): no frame or crop is ever written to disk.
+"""Privacy rule R1: no frame or crop is ever written to disk.
 
 The real eval path (video decoding, ByteTrack, track cache, report) runs in a
 subprocess with HOME, TMPDIR, the data dir and the working directory pointed

@@ -12,7 +12,7 @@ log det of the innovation covariance, and assignments above the threshold are
 refused. Three stages as in the original: high-score boxes with confirmed and
 coasting tracks, low-score boxes with the tracks left, then the high-score
 boxes left with tentative tracks; the rest start tentative tracks. Positions
-only (spec 3, R3): never the image.
+only (privacy rule R3): never the image.
 
 Parameters are the defaults of the original's make_args (util/run_ucmc.py),
 cdt being frames at 30 fps, scaled to the source like ByteTrack's buffer; a

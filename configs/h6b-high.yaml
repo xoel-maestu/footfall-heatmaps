@@ -1,4 +1,4 @@
-# H6b (spec 8, hypothesis 6): configs/h1-best.yaml with ByteTrack's high
+# H6b (hypothesis 6): configs/h1-best.yaml with ByteTrack's high
 # threshold and track activation threshold both 0.5: more boxes in the first
 # stage, and more boxes start tracks. Same cached detections.
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960

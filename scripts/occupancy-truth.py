@@ -1,5 +1,5 @@
 """Truth of a slot's mean occupancy (improvements plan, phase 6, H4), as
-pre-registered in iterations.md: the ground-truth person-seconds inside the
+pre-registered in the experiment log: the ground-truth person-seconds inside the
 coverage the slot shows (cells at least one of its cameras sees), during the
 slot, over the observed slot seconds the recorder stored. Primary truth: the
 people visible to the slot's cameras (a visible box in at least one of them,

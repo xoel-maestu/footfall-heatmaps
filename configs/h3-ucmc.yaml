@@ -1,4 +1,4 @@
-# H3b (spec 8, hypothesis 3): configs/h1-best.yaml with association on the
+# H3b (hypothesis 3): configs/h1-best.yaml with association on the
 # floor plane, after UCMCTrack, in place of ByteTrack. Same detections (the
 # detection cache replays them).
 #

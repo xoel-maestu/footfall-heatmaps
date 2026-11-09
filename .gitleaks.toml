@@ -1,12 +1,11 @@
-# managed-by: plantilla. Edit it there: scripts/harness-sync.sh overwrites this copy.
-# gitleaks in CI (.github/workflows/verify.yml): its default rules, plus the
-# same escape as .githooks/pre-commit, a fake fixture whose line ends with the
-# marker as a trailing comment. The finding must be one line (`^`, `$` and no
+# gitleaks in CI (.github/workflows/verify.yml): its default rules, plus one
+# escape: a fake fixture whose line ends with the `secret-scan: allow` marker
+# as a trailing comment. The finding must be one line (`^`, `$` and no
 # newline between them), so a multi-line private key block is never allowed.
 [extend]
 useDefault = true
 
 [[allowlists]]
-description = "fake fixtures marked for the pre-commit hook"
+description = "fake fixtures marked secret-scan: allow"
 regexTarget = "line"
 regexes = ['''^[^\n]*(#|//|<!--)[ \t]*secret-scan: allow[ \t]*(-->)?[ \t\r]*$''']

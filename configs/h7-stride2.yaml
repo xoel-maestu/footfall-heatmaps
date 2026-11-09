@@ -1,4 +1,4 @@
-# H7 (spec 8, hypothesis 7): configs/h1-best.yaml processing one frame in two
+# H7 (hypothesis 7): configs/h1-best.yaml processing one frame in two
 # (detector and tracker); the skipped frame's box is interpolated between the
 # two processed frames of its track, or held after the last one, so dwell
 # stays one sample per source frame. Replays h1-best's cached detections.

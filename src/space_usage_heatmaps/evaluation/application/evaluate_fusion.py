@@ -14,7 +14,7 @@ fused - compared. compare_fusion weighs that second map with another fusion
 (with compare_run the same run: two weightings of the same tracks, whose
 per-camera layers are computed once).
 
-Truth blocks (spec 9, E2a):
+Truth blocks (E2a, multi-camera fusion):
 - full@joint: every person, on the joint coverage (cells at least one camera
   covers); the E2a target;
 - visible@joint: the people at least one fused camera has a visible box of,

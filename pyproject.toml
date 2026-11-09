@@ -25,7 +25,7 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.8",
 ]
-# Iteration 0 only (spec 3): the Ultralytics reference recipe, measured.
+# Iteration 0 (the baseline) only: the Ultralytics reference recipe, measured.
 # ultralytics is AGPL-3.0: evaluation-only, imported only under
 # space_usage_heatmaps/evaluation/baseline and never by the pipeline. Not a default
 # group, so CI (scripts/verify.sh: uv sync --locked) never installs it.
@@ -59,7 +59,7 @@ tensorrt = [
     "tensorrt-cu13-libs>=10.16,<11",
 ]
 
-# Detector export only (scripts/export-detector.sh): each family's official
+# Detector export only (scripts/export-detector.py): each family's official
 # exporter turns its release checkpoint into the ONNX file the runtime group
 # runs. Never imported by the package; CPU is enough. Not a default group.
 # Install locally with: uv sync --group runtime --group export
@@ -133,7 +133,7 @@ pythonpath = ["."]
 filterwarnings = ["ignore:invalid escape sequence:SyntaxWarning"]
 
 # The generated contracts of scripts/check-layers.sh (--print-config py), with
-# two exceptions (docs/architecture/hexagonal.md, "Exceptions"): numpy and ot
+# two exceptions (docs/architecture.md, rule 3): numpy and ot
 # (POT) are pure numerical libraries without I/O, and the grid, homography and
 # metrics are array maths. Every other installed distribution stays forbidden,
 # plus the planned I/O and model packages before they are installed.
