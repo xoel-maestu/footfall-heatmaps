@@ -1,4 +1,4 @@
-"""Oracle runs: score ground truth against ground truth to validate the harness.
+"""Oracle runs: score ground truth against ground truth to validate the evaluation code.
 
 Three blocks, from the dataset's per-frame floor positions of every person:
 - visible@coverage: people this camera has a visible box of, on its coverage
