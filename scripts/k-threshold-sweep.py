@@ -119,6 +119,10 @@ def measure_scene(args):
         xs, ys = xs_all[keep][order], ys_all[keep][order]
         coverage = Homography(cam.world_to_image).sees(*spec.cell_centres(), cam.width, cam.height)
         truth = reader.floor_truth(scene, c)
+        # Rows are masked per camera against truth_all, so they must align row for row.
+        assert np.array_equal(truth.frames, truth_all.frames) and np.array_equal(
+            truth.track_ids, truth_all.track_ids
+        ), f"truth rows of camera {c} do not align with the scene's"
         seen_by_any |= truth.visible
         v = truth.visible
         samples = {
