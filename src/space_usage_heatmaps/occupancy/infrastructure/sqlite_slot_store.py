@@ -1,4 +1,9 @@
-"""SlotStore over SQLite (standard library): one table, aggregated grids only (R4)."""
+"""SlotStore over SQLite (standard library): aggregated grids only (R4).
+
+slots holds one floor grid per slot and layer; slot_minutes one row per minute
+of a slot, two numbers for the whole grid (person-seconds over the shown cells
+and observed seconds), nothing per cell or per track.
+"""
 
 import io
 import sqlite3
@@ -6,7 +11,14 @@ from datetime import UTC, datetime
 
 import numpy as np
 
-from space_usage_heatmaps.occupancy.domain.slots import SlotGrid, merge_incomplete
+from space_usage_heatmaps.occupancy.domain.slots import (
+    MINUTE_S,
+    MINUTES,
+    SlotGrid,
+    SlotMinutes,
+    merge_incomplete,
+    merge_incomplete_minutes,
+)
 
 SCHEMA = """CREATE TABLE IF NOT EXISTS slots (
     camera_id TEXT NOT NULL,
@@ -17,6 +29,16 @@ SCHEMA = """CREATE TABLE IF NOT EXISTS slots (
     n_unique INTEGER NOT NULL,
     incomplete INTEGER NOT NULL CHECK (incomplete IN (0, 1)),
     PRIMARY KEY (camera_id, start_utc, cell_m, layer)
+)"""
+MINUTES_SCHEMA = """CREATE TABLE IF NOT EXISTS slot_minutes (
+    camera_id TEXT NOT NULL,
+    start_utc TEXT NOT NULL,
+    cell_m REAL NOT NULL,
+    minute INTEGER NOT NULL CHECK (minute >= 0 AND minute < 15),
+    person_s REAL NOT NULL,
+    observed_s REAL NOT NULL,
+    incomplete INTEGER NOT NULL CHECK (incomplete IN (0, 1)),
+    PRIMARY KEY (camera_id, start_utc, cell_m, minute)
 )"""
 
 
@@ -32,6 +54,7 @@ class SqliteSlotStore:
     def __init__(self, path):
         self.db = sqlite3.connect(str(path))
         self.db.execute(SCHEMA)
+        self.db.execute(MINUTES_SCHEMA)
         self.db.commit()
 
     @staticmethod
@@ -45,8 +68,10 @@ class SqliteSlotStore:
     def decode(blob):
         return np.load(io.BytesIO(blob), allow_pickle=False)
 
-    def write(self, slots):
+    def write(self, slots, minutes=()):
         with self.db:
+            for m in minutes:
+                self._write_minutes(m)
             for s in slots:
                 if s.incomplete:
                     row = self.db.execute(
@@ -80,6 +105,39 @@ class SqliteSlotStore:
                     ),
                 )
 
+    def _write_minutes(self, m):
+        key = (m.camera_id, _iso(m.start_utc), m.cell_m)
+        if m.incomplete:
+            old = self._minutes_rows(*key)
+            if old is not None and not old.incomplete:
+                return  # a complete slot's minutes are never replaced by an incomplete pass
+            if old is not None:
+                m = merge_incomplete_minutes(old, m)
+        observed = np.minimum(np.asarray(m.observed_s, float), MINUTE_S)  # overlapping passes
+        self.db.executemany(
+            "INSERT OR REPLACE INTO slot_minutes VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (*key, i, float(m.person_s[i]), float(observed[i]), int(m.incomplete))
+                for i in range(MINUTES)
+            ],
+        )
+
+    def _minutes_rows(self, camera_id, start_iso, cell_m):
+        rows = self.db.execute(
+            "SELECT minute, person_s, observed_s, incomplete FROM slot_minutes"
+            " WHERE camera_id = ? AND start_utc = ? AND cell_m = ?",
+            (camera_id, start_iso, cell_m),
+        ).fetchall()
+        return _minutes(camera_id, start_iso, cell_m, rows) if rows else None
+
+    def read_minutes(self, camera_id, start_utc, end_utc):
+        keys = self.db.execute(
+            "SELECT DISTINCT start_utc, cell_m FROM slot_minutes WHERE camera_id = ?"
+            " AND start_utc >= ? AND start_utc < ? ORDER BY start_utc, cell_m",
+            (camera_id, _iso(start_utc), _iso(end_utc)),
+        ).fetchall()
+        return [self._minutes_rows(camera_id, s, m) for s, m in keys]
+
     def read(self, camera_id, start_utc, end_utc):
         rows = self.db.execute(
             "SELECT camera_id, start_utc, cell_m, layer, grid_blob, n_unique, incomplete"
@@ -101,9 +159,18 @@ class SqliteSlotStore:
 
     def purge(self, before_utc):
         with self.db:
+            self.db.execute("DELETE FROM slot_minutes WHERE start_utc < ?", (_iso(before_utc),))
             return self.db.execute(
                 "DELETE FROM slots WHERE start_utc < ?", (_iso(before_utc),)
             ).rowcount
 
     def close(self):
         self.db.close()
+
+
+def _minutes(camera_id, start_iso, cell_m, rows):
+    person_s, observed_s = np.zeros(MINUTES), np.zeros(MINUTES)
+    for minute, p, o, _ in rows:
+        person_s[minute], observed_s[minute] = p, o
+    incomplete = any(i for *_, i in rows)
+    return SlotMinutes(camera_id, _epoch(start_iso), cell_m, person_s, observed_s, incomplete)

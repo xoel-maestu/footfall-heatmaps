@@ -47,9 +47,11 @@ on the canvas. Numbers are tabular.
 ## Layout
 
 Below 960 px one column: the map (its height follows the grid's aspect), then the
-panel. From 960 px two columns: the map takes the full viewport height and the
-width its grid needs at that height, with no empty side gutters; the panel takes
-the rest (at least 340 px) and lays its groups in columns of at least 260 px.
+panel: controls and the slot's occupancy, then the zone ranking and the summary.
+From 960 px two columns: the map takes the full viewport height and the width
+its grid needs at that height, with no empty side gutters; the panel takes the
+rest (at least 340 px) in two columns of at least 300 px when they fit: controls,
+occupancy and legend in the first, the zone ranking and summary beside them.
 
 ## Elevation & Depth
 
@@ -61,18 +63,31 @@ None: no sheets, no dialogs, no shadows.
 
 ## Components
 
-- Map: canvas, x to the right and y up, grid lines every 2 m labelled in metres.
+- Map: canvas, x to the right and y up, grid lines on the grid's 2 m blocks
+  labelled in metres. A stored map (slot, fused scene) is cropped to its
+  observed extent (cells above zero in either layer) plus 2 m on each side; the
+  live map keeps the whole grid. The ranked zones are outlined in ink and
+  numbered as in the zone table.
 - Source and layer switches: segmented radio groups. Layer names are exactly
-  "Dwell (person-seconds)" and "Passage (people)".
-- Slot picker: a UTC day and the slots that start on it; hidden in live mode.
+  "Dwell (person-seconds)" and "Passage (crossings)".
+- Slot picker: a UTC day and the slots that start on it, each read as
+  "on average N people in view"; hidden in live mode.
+- Occupancy (slot only): people in view on average (22 px), the peak 1-minute
+  occupancy with its minute, and the observed time. Identity-free: dwell over
+  observed seconds, never a count of ids. On a single camera (not a site) a
+  second note says people hidden from it are not counted.
+- Zone table: the top 10 of the grid's 2 m zones by dwell, with their x and y
+  ranges in metres, share of the dwell shown and person-seconds.
 - Legend: the ramp from 0 to the highest cell shown, with the unit.
-- Summary: sum over cells, cells above zero, highest cell, cell size, data time;
+- Summary: sum over cells, cells above zero, highest cell, cell size, data time,
+  map extent;
   for a site also the cameras fused, the overlap weighting and what passage counts.
 - Site mode (`serve --site`): the title names the site; Live and 15-min slot are
   the fused layers. A camera table spans the panel's columns: camera, state,
   processed fps, frames skipped, source drops, refreshed every 2 s. Counts only.
-- Empty states: a map with no cell at k says so on the map; a site with no live
-  layer in the process, or no slot on the chosen day, says why on the map.
+- Empty states: a map with no cell at k says so on the map; a process with no
+  live layer opens on its newest slot and never polls for one; choosing Live
+  there, or a day without a slot, says why on the map.
 
 ## Do's and Don'ts
 
@@ -82,6 +97,7 @@ None: no sheets, no dialogs, no shadows.
 | A second hue for anything but occupancy | Ink for controls and text |
 | Tinted cells for empty or suppressed cells | The floor colour |
 | Informal or tracking wording | Neutral occupancy and foot-traffic terms |
+| "people" on a number counted from ids | "people" only on numbers derived from dwell (occupancy); passage in crossings; the k rule stated as track ids, which are not people |
 
 ## Testable rules
 

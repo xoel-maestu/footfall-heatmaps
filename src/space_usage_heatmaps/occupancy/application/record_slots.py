@@ -41,7 +41,7 @@ class RecordSlots:
             self.slot = SlotAccumulator(self.spec, start, incomplete=t - start > seconds)
         cells, inside = self.spec.cell_index(xs, ys)
         ids = np.asarray(track_ids)[inside]
-        self.slot.add(ids, cells, seconds)
+        self.slot.add(ids, cells, seconds, t)
         self.live_layer.add(t, ids, cells, seconds)
 
     def mark_incomplete(self):
@@ -66,7 +66,7 @@ class RecordSlots:
         if now is not None and slot.start_utc < now - self.retention_days * DAY_S:
             self.past_retention += 1
             return
-        self.store.write(slot.grids(self.camera_id, self.k))
+        self.store.write(slot.grids(self.camera_id, self.k), [slot.minutes(self.camera_id, self.k)])
         self.written += 1
         if now is not None:
             purge_slots(self.store, now, self.retention_days)

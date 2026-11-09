@@ -115,7 +115,9 @@ def test_run_records_the_fused_slots_of_every_camera(site, tmp_path, monkeypatch
     with sqlite3.connect(db) as c:
         tables = c.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         rows = c.execute("SELECT camera_id, start_utc, layer FROM slots ORDER BY 3").fetchall()
-    assert tables == [("slots",)]
+        minutes = c.execute("SELECT DISTINCT camera_id, start_utc FROM slot_minutes").fetchall()
+    assert sorted(tables) == [("slot_minutes",), ("slots",)]  # no per-camera or per-track table
+    assert minutes == [("shop", "2026-11-06T09:00:00Z")]
     assert rows == [
         ("shop", "2026-11-06T09:00:00Z", "dwell"),
         ("shop", "2026-11-06T09:00:00Z", "passage"),

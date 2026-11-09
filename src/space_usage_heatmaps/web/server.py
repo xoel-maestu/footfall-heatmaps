@@ -8,7 +8,10 @@ GET /api/live?camera=  the live layer of the recorder running in this process, d
 GET /api/slots?camera=&from=&to=
                        persisted 15-min slots starting in [from, to), read through
                        read_slots (k-suppressed, R5); times are ISO 8601 with a zone
-                       or epoch seconds, clamped to [0, END_OF_TIME]
+                       or epoch seconds, clamped to [0, END_OF_TIME]; each slot
+                       reads as occupancy from its dwell (slot_reading: mean and
+                       peak 1-min people in view, observed seconds), never as a
+                       count of ids
 GET /api/slots/latest?camera=
                        {"start": the newest persisted slot start, or null}
 GET /api/site          serve --site: the site id, its fusion and each camera's state
@@ -30,8 +33,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import numpy as np
 
-from space_usage_heatmaps.occupancy.application.read_slots import read_slots
-from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, suppress
+from space_usage_heatmaps.occupancy.application.read_slots import read_minutes, read_slots
+from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, slot_reading, suppress
 from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
 PAGE = Path(__file__).parent / "static" / "index.html"
@@ -128,24 +131,37 @@ def live_payload(spec, dwell, passage, t, ended=None):
     }
 
 
-def slots_payload(camera_id, spec, slots):
-    """One entry per slot start with both layers; slots of another grid are left out."""
-    by_start = {}
+def _reading(dwell, minutes, incomplete):
+    r = slot_reading(dwell, minutes, incomplete)
+    peak = r["peak_start"]
+    return {
+        "mean_occupancy": None if r["mean_occupancy"] is None else round(r["mean_occupancy"], 3),
+        "peak_occupancy": None if r["peak_occupancy"] is None else round(r["peak_occupancy"], 3),
+        "peak_start": None if peak is None else _iso(peak),
+        "observed_s": r["observed_s"],
+    }
+
+
+def slots_payload(camera_id, spec, slots, minutes=()):
+    """One entry per slot start with both layers and its occupancy reading;
+    slots of another grid are left out. minutes: the slots' SlotMinutes."""
+    by_start, dwell = {}, {}
     for s in slots:
         if s.cell_m != spec.cell_m or s.grid.shape != (spec.ny, spec.nx):
             continue
         entry = by_start.setdefault(
-            s.start_utc,
-            {"start": _iso(s.start_utc), "incomplete": s.incomplete, "n_unique": s.n_unique},
+            s.start_utc, {"start": _iso(s.start_utc), "incomplete": s.incomplete}
         )
         entry[s.layer] = _grid(s.grid)
         entry["incomplete"] = entry["incomplete"] or s.incomplete
-    return {
-        "camera": camera_id,
-        **_frame(spec),
-        "shape": [spec.ny, spec.nx],
-        "slots": [e for _, e in sorted(by_start.items()) if "dwell" in e and "passage" in e],
-    }
+        if s.layer == "dwell":
+            dwell[s.start_utc] = s.grid
+    of_start = {m.start_utc: m for m in minutes if m.cell_m == spec.cell_m}
+    out = []
+    for start, e in sorted(by_start.items()):
+        if "dwell" in e and "passage" in e:
+            out.append(e | _reading(dwell[start], of_start.get(start), e["incomplete"]))
+    return {"camera": camera_id, **_frame(spec), "shape": [spec.ny, spec.nx], "slots": out}
 
 
 def fused_payload(export, k=K_MIN_PEOPLE):
@@ -172,6 +188,7 @@ def make_server(
         .replace("__CAMERA__", html.escape(camera_id))
         .replace("__FUSED__", "0" if fused is None else "1")
         .replace("__SITE__", "0" if site is None else "1")
+        .replace("__LIVE__", "0" if live is None else "1")
         .encode()
     )
     fused_body = None if fused is None else fused_payload(fused)
@@ -227,9 +244,10 @@ def make_server(
             store = SqliteSlotStore(db_path)
             try:
                 slots = read_slots(store, camera_id, start, end)
+                minutes = read_minutes(store, camera_id, start, end)
             finally:
                 store.close()
-            return self._json(200, slots_payload(camera_id, spec, slots))
+            return self._json(200, slots_payload(camera_id, spec, slots, minutes))
 
         def _json(self, status, payload):
             body = json.dumps(payload, separators=(",", ":")).encode()

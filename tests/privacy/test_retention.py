@@ -70,3 +70,17 @@ def test_a_slot_inside_the_retention_is_written_and_not_reported():
     r.close()
 
     assert (r.written, r.past_retention) == (1, 0)
+
+
+def test_purge_drops_the_minute_totals_of_the_slots_it_drops():
+    store = SqliteSlotStore(":memory:")
+    old = NOW - 90 * DAY - 900
+    for start in (old, NOW):
+        r = RecordSlots(store, "cam", SPEC, retention_days=365, now=lambda: NOW)
+        r.add(start, np.arange(6), np.full(6, 0.1), np.full(6, 0.1), seconds=1.0)
+        r.close()
+    assert len(store.read_minutes("cam", 0, NOW + 900)) == 2
+
+    purge_slots(store, now=NOW)
+
+    assert [m.start_utc for m in store.read_minutes("cam", 0, NOW + 900)] == [NOW]

@@ -11,7 +11,7 @@ import pytest
 
 from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
 from space_usage_heatmaps.occupancy.domain.grid import GridSpec
-from space_usage_heatmaps.occupancy.domain.slots import SLOT_S, SlotGrid
+from space_usage_heatmaps.occupancy.domain.slots import MINUTES, SLOT_S, SlotGrid, SlotMinutes
 from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 from space_usage_heatmaps.web.server import LiveSource, make_server
 
@@ -99,10 +99,37 @@ def test_slots_are_read_through_k_suppression(serve, tmp_path):
     assert set(d) == {"camera", "cell_m", "origin", "shape", "slots"}
     assert d["origin"] == [-1.0, 2.0] and d["shape"] == [2, 4]
     first, second = d["slots"]
-    assert set(first) == {"start", "incomplete", "n_unique", "dwell", "passage"}
+    assert set(first) == {
+        "start", "incomplete", "dwell", "passage",
+        "mean_occupancy", "peak_occupancy", "peak_start", "observed_s",
+    }  # fmt: skip
     assert first["start"] == "2026-11-06T09:00:00Z" and first["incomplete"] is False
     assert first["dwell"][0][:2] == [9.0, 0.0] and first["passage"][0][:2] == [6.0, 0.0]
-    assert second["n_unique"] == 0 and second["incomplete"] is True  # 3 people: under k
+    assert second["incomplete"] is True
+
+
+def test_a_slot_reads_as_occupancy_from_dwell_not_as_an_id_count(serve, tmp_path):
+    store = SqliteSlotStore(tmp_path / "x.db")
+    dwell = np.array([[600.0, 0, 0, 0], [0, 0, 0, 300.0]])
+    passage = np.array([[6.0, 0, 0, 0], [0, 0, 0, 5.0]])
+    person_s, observed = np.zeros(MINUTES), np.zeros(MINUTES)
+    person_s[:10], observed[:10] = [60.0] * 9 + [360.0], 60.0  # minute 9 is the busiest
+    store.write(
+        [
+            SlotGrid("645", T0, 0.5, "dwell", dwell, 652, True),
+            SlotGrid("645", T0, 0.5, "passage", passage, 652, True),
+        ],
+        [SlotMinutes("645", T0, 0.5, person_s, observed, True)],
+    )
+    store.close()
+
+    (s,) = json.loads(get(serve(), "/api/slots?camera=645")[2])["slots"]
+
+    assert "n_unique" not in s  # an id count is not a count of people
+    assert s["mean_occupancy"] == pytest.approx(900 / 600)
+    assert s["peak_occupancy"] == pytest.approx(6.0)
+    assert s["peak_start"] == "2026-11-06T09:09:00Z"
+    assert s["observed_s"] == 600.0
 
 
 def test_slots_filter_by_time_and_reject_a_bad_time(serve, tmp_path):
@@ -170,7 +197,8 @@ def test_the_page_is_served_with_the_layer_names(serve):
 
     assert status == 200 and kind.startswith("text/html")
     page = body.decode()
-    assert "Dwell (person-seconds)" in page and "Passage (people)" in page
+    assert "Dwell (person-seconds)" in page and "Passage (crossings)" in page
+    assert "Passage (people)" not in page
     assert "http://" not in page and "https://" not in page  # no CDN at runtime
     assert get(serve(), "/nothing")[0] == 404
 
@@ -297,3 +325,10 @@ def test_a_camera_server_has_no_site(serve):
     status, _, body = get(serve(), "/api/site")
 
     assert status == 404 and "--site" in json.loads(body)["error"]
+
+
+def test_the_page_says_whether_this_process_has_a_live_layer(serve):
+    recorder, live = recording()
+
+    assert 'data-live="0"' in get(serve(), "/")[2].decode()
+    assert 'data-live="1"' in get(serve(live), "/")[2].decode()

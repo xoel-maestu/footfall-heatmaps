@@ -1,7 +1,9 @@
 """R4 (spec 3): only aggregated grids are persisted, never trajectories or images.
 
-The database a run writes holds one table, slots, with exactly the contract's
-columns; a grid blob decodes to one floor grid of numbers, nothing per track.
+The database a run writes holds two tables with exactly the contract's columns:
+slots, whose grid blob decodes to one floor grid of numbers, and slot_minutes,
+one aggregate total per minute of a slot for the whole grid (person-seconds
+and observed seconds; phase 6, H4). Nothing per track, nothing per cell per minute.
 """
 
 import sqlite3
@@ -16,6 +18,9 @@ from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import Sqli
 T0 = 1_793_955_600
 SPEC = GridSpec(origin_x=0.0, origin_y=0.0, cell_m=0.5, nx=4, ny=2)
 COLUMNS = ["camera_id", "start_utc", "cell_m", "layer", "grid_blob", "n_unique", "incomplete"]
+MINUTE_COLUMNS = [
+    "camera_id", "start_utc", "cell_m", "minute", "person_s", "observed_s", "incomplete"
+]  # fmt: skip
 
 
 def run(path):
@@ -27,7 +32,7 @@ def run(path):
     store.close()
 
 
-def test_the_database_holds_only_the_slots_table(tmp_path):
+def test_the_database_holds_only_the_slots_and_minute_totals_tables(tmp_path):
     run(tmp_path / "x.db")
 
     with sqlite3.connect(tmp_path / "x.db") as db:
@@ -35,9 +40,22 @@ def test_the_database_holds_only_the_slots_table(tmp_path):
             "SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall()
         columns = [row[1] for row in db.execute("PRAGMA table_info(slots)")]
+        minute_columns = [row[1] for row in db.execute("PRAGMA table_info(slot_minutes)")]
 
-    assert objects == [("table", "slots")]
+    assert sorted(objects) == [("table", "slot_minutes"), ("table", "slots")]
     assert columns == COLUMNS
+    assert minute_columns == MINUTE_COLUMNS
+
+
+def test_minute_totals_are_one_number_per_minute_for_the_whole_grid(tmp_path):
+    run(tmp_path / "x.db")
+
+    with sqlite3.connect(tmp_path / "x.db") as db:
+        rows = db.execute("SELECT minute, person_s, observed_s FROM slot_minutes").fetchall()
+
+    assert sorted(r[0] for r in rows) == list(range(15))  # one row per minute of the slot
+    assert all(isinstance(p, float) and isinstance(o, float) for _, p, o in rows)
+    assert sum(o for _, _, o in rows) == 50.0  # 50 one-second frames
 
 
 def test_a_grid_blob_is_one_floor_grid(tmp_path):

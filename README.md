@@ -7,8 +7,8 @@ plan, never images or identities. Python, runs locally on a modest NVIDIA GPU.
 
 Camera 645 of scene 071 at 2x speed (`scripts/demo-gif.py`): the foot point of
 each person in the image, the same positions on the floor plan, and the dwell
-accumulated since the video started, shown only in cells at least 5 people
-have crossed. Synthetic scene, adapted (overlays, resized) from
+accumulated since the video started, shown only in cells where at least 5
+distinct track ids were seen. Synthetic scene, adapted (overlays, resized) from
 [NVIDIA PhysicalAI-SmartSpaces](https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces),
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
@@ -85,10 +85,31 @@ whose fused dwell map holds against stride 2 (`scripts/stride-sweep.py`; TVD
 `space-usage serve` hosts a page with the floor-plan heatmap of one camera: the
 live layer (60 s half-life, held in memory only) updating every second, and the
 persisted 15-minute slots. With `--source` it records that camera in the same
-process, so the live layer never leaves memory; without it, it shows slots only.
-Both layers read a cell with fewer than 5 distinct people as empty: a slot over
-its quarter, the live layer over the last 2 minutes. It binds to 127.0.0.1
-unless `--host` says otherwise, and warns when it binds beyond loopback.
+process, so the live layer never leaves memory; without it, it opens on the
+newest stored slot and never asks for a live layer. Both layers hide the cells
+where fewer than 5 distinct track ids were seen: a slot over its quarter, the
+live layer over the last 2 minutes. Track ids are not people (one person's path
+can be split into several ids, and foot-point error spreads a person over
+neighbouring cells), so this threshold reduces but does not guarantee anonymity
+at cell level. It binds to 127.0.0.1 unless `--host` says otherwise, and warns
+when it binds beyond loopback.
+
+A slot reads as occupancy, never as a count of ids: people in view on average
+(the slot's recorded dwell over the seconds the source covered) and the peak
+1-minute occupancy. Both come from one stored total per minute for the whole
+grid (person-seconds and observed seconds, table `slot_minutes`), which places
+no one and includes the dwell of hidden cells. That is a deliberate privacy
+decision: per slot (and per minute), the whole-floor total minus the dwell the
+map shows gives the total dwell inside the cells that k=5 hides, a value with
+no location in it. A minute in which fewer than 5 distinct track ids were seen
+stores 0 person-seconds but keeps its observed seconds, so it counts as 0 in the
+mean. A slot recorded before `slot_minutes` existed has no reading. With one
+camera, people hidden from it are not counted, so a slot reads low where its
+view is occluded. Passage reads in crossings: the
+distinct track ids that crossed a cell, a relative measure of foot traffic, not
+a number of people. Beside the map (below it on a phone) a table ranks the top
+10 of the grid's 2 m zones by dwell, with their coordinates; a stored map is
+cropped to its observed extent plus 2 m.
 
 ```bash
 uv run space-usage serve --config configs/h5-best.yaml --db slots.db \
@@ -99,7 +120,8 @@ uv run space-usage serve --config configs/h5-best.yaml --db slots.db \
 API: `GET /api/live?camera=` returns `{cell_m, origin, shape, dwell, passage, t}`,
 or 503 once the recorder has failed; `GET /api/slots?camera=&from=&to=` returns
 the slots starting in `[from, to)` (ISO 8601 with a zone, or epoch seconds,
-clamped to 1970 to 2100), k-suppressed as they are stored.
+clamped to 1970 to 2100), k-suppressed as they are stored, each with
+`mean_occupancy`, `peak_occupancy`, `peak_start` and `observed_s`.
 
 ### A local RTSP stream from a video file
 
@@ -149,7 +171,9 @@ weights made for other cameras, another grid or another fusion. To calibrate
 again, delete the weights file.
 
 The fused passage of a cell is the weighted mean of the covering cameras'
-distinct people, so a cell shows only where at least one camera saw 5 or more
-distinct people. A slot's people count is the largest count of any one camera,
-because ids are per camera. The page shows the fused live layer and slots, the
-fusion, and each camera's state and processed frame rate.
+distinct track ids, so a cell shows only where at least one camera saw 5 or
+more distinct track ids. A slot's minute totals are the cameras' per-minute
+dwell fused with the same weights, using in each minute only the cameras that
+covered it (weights renormalised per cell over them); its observed seconds per
+minute are the most any one camera covered. The page shows the fused live layer and slots, their
+occupancy, the fusion, and each camera's state and processed frame rate.
