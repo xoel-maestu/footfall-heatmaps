@@ -46,7 +46,7 @@ Choices fixed here before the first run (not in the pre-registration):
   the coverage; pooled sum over sum. Guard: delta against Z0 (point) <= +.10,
   on both surfaces.
 - TVD guard: dwell TVD at full@joint of the fused shown map after k, on the
-  evaluation's 0.5 m grid (compare_layer), each display unit's dwell spread
+  evaluation's 0.5 m grid (compare_layer's TVD), each display unit's dwell spread
   evenly over its cells as the page draws it. Per scene, then the mean over
   the 5 scenes. Guard: delta against Z0 (point) <= +.02. Reported too: the
   same TVD with prediction and truth summed to the display unit (own
@@ -80,7 +80,6 @@ import numpy as np
 
 from space_usage_heatmaps.cli import data_dir, load_config, load_fusion, source_sha256, track_source
 from space_usage_heatmaps.evaluation.application.evaluate_oracle import recipe_floor_points
-from space_usage_heatmaps.evaluation.domain.metrics import compare_layer
 from space_usage_heatmaps.evaluation.domain.splits import SPLITS
 from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from space_usage_heatmaps.floorplan.domain.homography import Homography
@@ -330,8 +329,9 @@ def tvd(pred, truth, mask, f):
     p, t = np.where(mask, pred, 0.0), np.where(mask, truth, 0.0)
     if f > 1:
         p, t = block_sum(p, f), block_sum(t, f)
-        mask = np.ones(p.shape, bool)
-    return float(compare_layer(p, t, mask, CELL_M * f, zones=False).tvd)
+    # compare_layer's formula; it is not called because its EMD needs cells of at most 1 m
+    sp, st = p.sum(), t.sum()
+    return 1.0 if sp == 0 else float(0.5 * np.abs(p / sp - t / st).sum())
 
 
 def pooled(units, arm, truth, key="violations", total="shown"):
