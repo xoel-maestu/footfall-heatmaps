@@ -59,7 +59,7 @@ tensorrt = [
     "tensorrt-cu13-libs>=10.16,<11",
 ]
 
-# Detector export only (scripts/export-detector.sh): each family's official
+# Detector export only (scripts/export-detector.py): each family's official
 # exporter turns its release checkpoint into the ONNX file the runtime group
 # runs. Never imported by the package; CPU is enough. Not a default group.
 # Install locally with: uv sync --group runtime --group export

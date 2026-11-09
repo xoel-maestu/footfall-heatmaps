@@ -201,7 +201,9 @@ weights file are under the data dir. The sources are all video files (replayed
 file-paced, no frame dropped) or all `rtsp://` streams (each camera keeps its
 newest frame; drops reconnect with backoff and mark the slot incomplete).
 Calibrations are read in NVIDIA's `calibration_2025_format.json` layout
-(`nvidia-mtmc/<scene>/<camera>` under the data dir).
+(the config key `nvidia-mtmc/<scene>/<camera>` resolves to
+`nvidia/MTMC_Tracking_2024/test/scene_<scene>/calibration_2025_format.json`
+under the data dir).
 
 ```bash
 # 1. Freeze the fusion weights once, from the calibration window (calibration.minutes)
@@ -245,7 +247,8 @@ existed has no reading. With one camera, people hidden from it are not
 counted, so it usually reads low where the view is occluded, yet some cameras
 read above the truth; the page reads "about N people in view on average",
 never a bound. On the held-out scenes a single camera's average was off by
-14.5 % at the median; a fused site read 3.6 % below
+14.5 % at the median (absolute error); the 15-camera site of scene 071 (tune)
+read 3.6 % below
 ([docs/results.md](docs/results.md#occupancy-reading)). Passage reads in
 crossings: the distinct track ids that crossed a cell, a relative measure of
 foot traffic, not a number of people. Beside the map (below it on a phone) a
@@ -260,7 +263,7 @@ uv run --no-sync space-usage serve --config configs/h5-best.yaml --db slots.db \
 
 API:
 
-- `GET /api/live?camera=` returns `{cell_m, origin, shape, dwell, passage, t}`,
+- `GET /api/live?camera=` returns `{cell_m, origin, shape, dwell, passage, t, ended}`,
   or 503 once the recorder has failed.
 - `GET /api/slots?camera=&from=&to=` returns the slots starting in
   `[from, to)` (ISO 8601 with a zone, or epoch seconds, clamped to 1970 to
@@ -297,7 +300,7 @@ at the end. Dwell maps on 0.5 m cells.
 | Ground position error, WILDTRACK C5 (never tuned on) | median 21.8 cm, p90 45.1 cm | median ≤ 30 cm |
 | Speed, one 1080p camera, GTX 1650 Ti | 42.5 fps mean, 174 MB VRAM | ≥ 15 fps, ≤ 3.5 GB |
 | Cameras per GTX 1650 Ti at stride 10 | 8 (15 do not fit) | – |
-| Occupancy, one camera, sealed (median error) | 14.5 % | – |
+| Occupancy, one camera, sealed (median absolute error) | 14.5 % | – |
 
 The single-camera targets are missed on the sealed scenes. The confidence
 intervals, each accepted step, the external datasets (WILDTRACK, CAVIAR,
@@ -317,8 +320,8 @@ iteration 0, tune and sealed) are in [docs/results.md](docs/results.md).
 - **Synthetic scenes.** Tuning and the main evaluation use NVIDIA's synthetic
   indoor scenes. Real footage was only scored on the external datasets
   (WILDTRACK, CAVIAR, MOT17), never on a deployed site.
-- **k=5 is not anonymity.** Up to 19 % of shown slot cells were crossed by
-  fewer than 5 different people (see
+- **k=5 is not anonymity.** Up to 19 % of shown slot cells, and up to 58 % of
+  live cells, were crossed by fewer than 5 different people (see
   [What k=5 does and does not guarantee](#what-k5-does-and-does-not-guarantee)).
 - **Calibration format.** Cameras are calibrated through NVIDIA's calibration
   layout; there is no calibration tool for a new site yet.

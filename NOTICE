@@ -21,6 +21,6 @@ redistributed with it (see docs/licenses.md):
   tensorrt  NVIDIA TensorRT libraries (proprietary NVIDIA licence), an
             optional speed-up installed from NVIDIA's own index.
 
-src/space_usage_heatmaps/perception/infrastructure/ucmc_tracker.py is an independent implementation
-after UCMCTrack (https://github.com/corfyi/UCMCTrack, MIT,
+src/space_usage_heatmaps/perception/infrastructure/ucmc_tracker.py
+is an independent implementation after UCMCTrack (https://github.com/corfyi/UCMCTrack, MIT,
 Copyright (c) 2023 Kefu Yi); no code was copied.
