@@ -130,7 +130,7 @@ def test_a_single_camera_note_gives_the_held_out_error_range():
         "One camera: people hidden from it are not counted, so it usually reads low "
         "where the view is occluded. On held-out scenes (80 cameras), a single camera's "
         "average was off by about 14.5 % at the median, and between 43 % below and 5 % "
-        "above the true value for 8 cameras in 10. A site of several cameras reads closer."
+        "above the people in view for 8 cameras in 10."
     )
     assert run_js(["reading"], "oneCameraNote(false)") == note
     assert run_js(["reading"], "oneCameraNote(true)") is None

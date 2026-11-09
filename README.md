@@ -112,8 +112,8 @@ was off by 14.5 % at the median (median error -14 %), between 43 % below and 5 %
 above the people visible to it for 8 cameras in 10, and from 100 % below to 43 %
 above in all. One global recall factor (x1.13, fitted on the tune scenes
 071-075) did not bring the sealed cameras within 10 % (median |error| 13.8 %),
-so no factor is applied (`scripts/recall-factor.py`, H7). A site of several
-cameras reads closer. Passage reads in crossings: the
+so no factor is applied (`scripts/recall-factor.py`, H7). The 15-camera site
+of scene 071 read 3.6 % below. Passage reads in crossings: the
 distinct track ids that crossed a cell, a relative measure of foot traffic, not
 a number of people. Beside the map (below it on a phone) a table ranks the top
 10 of the grid's 2 m zones by dwell, with their coordinates; a stored map is
