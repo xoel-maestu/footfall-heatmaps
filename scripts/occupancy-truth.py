@@ -15,10 +15,10 @@ back with k=5). Pass: within +-10 %.
     uv run --no-sync python scripts/occupancy-truth.py --config data/cam-645-s10.yaml \
         --db data/cam645.db --start 2026-11-06T09:00:00Z --out reports/occupancy-truth-645.json
 
-The truth is every person of the scene (full truth, as eval's full@ blocks),
-binned on the recording's grid by evaluation.domain.bootstrap.block_layers, the
-dwell the evaluation scores against; the coverage is Homography.sees per
-camera, as evaluate_fusion builds it. A video's frame f is at start + f / fps.
+Both truths are binned on the recording's grid by
+evaluation.domain.bootstrap.block_layers, the dwell the evaluation scores
+against; the coverage is Homography.sees per camera, as evaluate_fusion builds
+it. A video's frame f is at start + f / fps.
 """
 
 import argparse

@@ -172,7 +172,8 @@ dd { margin: 0; text-align: right; }
         <dt>Peak 1-minute occupancy</dt><dd id="occ-peak">-</dd>
         <dt>Observed time</dt><dd id="occ-observed">-</dd>
       </dl>
-      <p class="note" id="reading-note">Dwell recorded on the whole floor (person-seconds, including cells the map hides under 5 track ids) divided by the seconds the source covered. Identity-free: no person is counted by id.</p>
+      <p class="note" id="reading-note">Dwell recorded on the whole floor (person-seconds, including cells the map hides under 5 track ids) divided by the seconds the source covered. Minutes in which fewer than 5 track ids were seen count as 0. Identity-free: no person is counted by id.</p>
+      <p class="note" id="reading-one-camera" hidden></p>
     </section>
     <fieldset>
       <legend>Layer</legend>
@@ -427,6 +428,12 @@ function slotReading(s) {
       : `${one.format(s.peak_occupancy)} people, ${hhmm(s.peak_start)} to ${hhmm(s.peak_start, 1)} UTC`,
     "occ-observed": `${min} min${rest ? ` ${rest} s` : ""} of 15 min`,
   };
+}
+
+// A single camera misses people it cannot see; a site fuses many views.
+function oneCameraNote(site) {
+  return site ? null
+    : "One camera: people hidden from it are not counted, so this reads low where the view is occluded.";
 }
 
 // The slot picker's option text.
@@ -742,6 +749,11 @@ const latestDay = getJson(`/api/slots/latest?camera=${encodeURIComponent(camera)
   .then((d) => { if (d.start) $("slot-day").value = d.start.slice(0, 10); })
   .catch(() => {});
 $("fused-choice").hidden = !hasFused;
+{
+  const n = oneCameraNote(isSite);
+  $("reading-one-camera").textContent = n || "";
+  $("reading-one-camera").hidden = !n;
+}
 if (isSite) {
   for (const el of document.querySelectorAll(".site-only")) el.hidden = false;
   loadSite().then((d) => {

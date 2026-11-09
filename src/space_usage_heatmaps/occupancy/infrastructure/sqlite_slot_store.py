@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 import numpy as np
 
 from space_usage_heatmaps.occupancy.domain.slots import (
+    MINUTE_S,
     MINUTES,
     SlotGrid,
     SlotMinutes,
@@ -112,10 +113,11 @@ class SqliteSlotStore:
                 return  # a complete slot's minutes are never replaced by an incomplete pass
             if old is not None:
                 m = merge_incomplete_minutes(old, m)
+        observed = np.minimum(np.asarray(m.observed_s, float), MINUTE_S)  # overlapping passes
         self.db.executemany(
             "INSERT OR REPLACE INTO slot_minutes VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
-                (*key, i, float(m.person_s[i]), float(m.observed_s[i]), int(m.incomplete))
+                (*key, i, float(m.person_s[i]), float(observed[i]), int(m.incomplete))
                 for i in range(MINUTES)
             ],
         )

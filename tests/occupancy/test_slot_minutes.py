@@ -19,6 +19,7 @@ from space_usage_heatmaps.occupancy.domain.slots import (
     MINUTES,
     SLOT_S,
     SlotAccumulator,
+    SlotGrid,
     SlotMinutes,
     merge_incomplete_minutes,
     slot_reading,
@@ -73,12 +74,13 @@ def test_a_minute_observed_under_30_s_is_not_a_peak_candidate():
     assert r["observed_s"] == 70.0
 
 
-def test_a_complete_slot_without_minutes_reads_over_the_whole_quarter():
+def test_a_complete_slot_without_minutes_has_no_reading():
+    # a slot recorded before the minute totals: its shown grid leaves out the
+    # cells k hides, so it would read low under the whole-floor headline
     r = slot_reading(np.full((2, 4), 450.0), None, incomplete=False)
 
-    assert r["mean_occupancy"] == pytest.approx(8 * 450 / SLOT_S)
-    assert r["observed_s"] == SLOT_S
-    assert r["peak_occupancy"] is None and r["peak_start"] is None
+    assert r == {"mean_occupancy": None, "peak_occupancy": None, "peak_start": None,
+                 "observed_s": None}  # fmt: skip
 
 
 def test_an_incomplete_slot_without_minutes_has_no_reading():
@@ -163,16 +165,49 @@ def test_record_site_fuses_the_minutes_with_the_site_weights():
                    now=lambda: T0)  # fmt: skip
     for s in range(120):
         r.add("a", T0 + s, *crowd(6), seconds=1.0)
-        if s < 60:  # b stops after one minute
-            r.add("b", T0 + s, *crowd(6), seconds=1.0)
+        r.add("b", T0 + s, *crowd(6), seconds=1.0)
     r.close()
 
     (m,) = store.read_minutes("site", T0, T0 + SLOT_S)
     (dwell,) = [s for s in store.read("site", T0, T0 + SLOT_S) if s.layer == "dwell"]
 
-    assert m.person_s[:2].tolist() == [360.0, 180.0]  # .5 x 360 + .5 x 360, then .5 x 360
-    assert m.observed_s[:2].tolist() == [60.0, 60.0]  # time any camera covered
+    assert m.person_s[:2].tolist() == [360.0, 360.0]  # .5 x 360 + .5 x 360
+    assert m.observed_s[:2].tolist() == [60.0, 60.0]
     assert m.person_s.sum() == pytest.approx(dwell.grid.sum())
+
+
+def site_minutes(feed):
+    weights = np.zeros((2, 2, 4))
+    weights[:, 0, 0] = 0.5  # cell (0, 0) seen by both cameras, half each
+    store = SqliteSlotStore(":memory:")
+    r = RecordSite(store, "site", ["a", "b"], weights, SPEC, retention_days=90,
+                   now=lambda: T0)  # fmt: skip
+    feed(r)
+    r.close()
+    (m,) = store.read_minutes("site", T0, T0 + SLOT_S)
+    return m
+
+
+def test_a_minute_with_one_camera_down_fuses_the_cameras_that_covered_it():
+    def feed(r):
+        for s in range(120):
+            r.add("a", T0 + s, *crowd(6), seconds=1.0)
+            if s < 60:  # b is down in minute 1
+                r.add("b", T0 + s, *crowd(6), seconds=1.0)
+
+    m = site_minutes(feed)
+
+    # minute 1: a alone carries the cell, its weight renormalised to 1, not .5 x 360
+    assert m.person_s[:2].tolist() == [360.0, 360.0]
+    assert m.observed_s[:2].tolist() == [60.0, 60.0]  # time any camera covered
+
+
+def test_a_camera_that_never_reported_in_the_slot_does_not_dilute_its_minutes():
+    def feed(r):
+        for s in range(60):
+            r.add("a", T0 + s, *crowd(6), seconds=1.0)
+
+    assert site_minutes(feed).person_s[0] == 360.0
 
 
 def test_store_keeps_a_complete_slots_minutes_over_an_incomplete_pass():
@@ -193,3 +228,36 @@ def test_store_merges_two_incomplete_passes_of_minutes():
     (m,) = store.read_minutes("cam", T0, T0 + SLOT_S)
 
     assert m.person_s[:2].tolist() == [60.0, 30.0] and m.observed_s.sum() == 120.0
+
+
+def test_store_clamps_a_minutes_observed_time_to_60_s():
+    # two incomplete passes that overlap in time add up; no minute covers more than 60 s
+    store = SqliteSlotStore(":memory:")
+    store.write([], [minutes([60.0], [60.0], incomplete=True)])
+    store.write([], [minutes([30.0], [40.0], incomplete=True)])
+
+    (m,) = store.read_minutes("cam", T0, T0 + SLOT_S)
+
+    assert m.observed_s[0] == 60.0 and m.person_s[0] == 90.0
+
+
+def test_a_slots_grids_and_minutes_follow_one_write_rule():
+    def slot(value, incomplete):
+        grids = [SlotGrid("cam", T0, 0.5, layer, np.full((2, 4), value), 6, incomplete)
+                 for layer in ("dwell", "passage")]  # fmt: skip
+        return grids, [minutes([value], [60.0], incomplete=incomplete)]
+
+    store = SqliteSlotStore(":memory:")
+    store.write(*slot(10.0, False))
+    store.write(*slot(7.0, True))  # an incomplete pass over a complete slot: dropped in both
+
+    grids = store.read("cam", T0, T0 + SLOT_S)
+    (m,) = store.read_minutes("cam", T0, T0 + SLOT_S)
+    assert all(g.grid[0, 0] == 10.0 and not g.incomplete for g in grids)
+    assert m.person_s[0] == 10.0 and not m.incomplete
+
+    store.write(*slot(8.0, False))  # a complete pass replaces both
+
+    grids = store.read("cam", T0, T0 + SLOT_S)
+    (m,) = store.read_minutes("cam", T0, T0 + SLOT_S)
+    assert all(g.grid[0, 0] == 8.0 for g in grids) and m.person_s[0] == 8.0

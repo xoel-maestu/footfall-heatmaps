@@ -112,3 +112,18 @@ def test_the_zone_table_keeps_the_top_ten():
 
     assert len(t["rows"]) == 10 and t["rows"][0][4] == "12" and t["rows"][-1][4] == "3"
     assert t["note"].startswith("10 of 12 zones with dwell")
+
+
+def test_the_reading_note_says_sparse_minutes_count_as_zero():
+    from space_usage_heatmaps.web.server import PAGE
+
+    assert "Minutes in which fewer than 5 track ids were seen count as 0." in PAGE.read_text()
+
+
+def test_a_single_camera_reading_says_it_reads_low_where_the_view_is_occluded():
+    note = (
+        "One camera: people hidden from it are not counted, "
+        "so this reads low where the view is occluded."
+    )
+    assert run_js(["reading"], "oneCameraNote(false)") == note
+    assert run_js(["reading"], "oneCameraNote(true)") is None

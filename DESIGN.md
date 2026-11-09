@@ -74,7 +74,8 @@ None: no sheets, no dialogs, no shadows.
   "on average N people in view"; hidden in live mode.
 - Occupancy (slot only): people in view on average (22 px), the peak 1-minute
   occupancy with its minute, and the observed time. Identity-free: dwell over
-  observed seconds, never a count of ids.
+  observed seconds, never a count of ids. On a single camera (not a site) a
+  second note says people hidden from it are not counted.
 - Zone table: the top 10 of the grid's 2 m zones by dwell, with their x and y
   ranges in metres, share of the dwell shown and person-seconds.
 - Legend: the ramp from 0 to the highest cell shown, with the unit.

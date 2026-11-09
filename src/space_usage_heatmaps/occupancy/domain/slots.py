@@ -74,14 +74,11 @@ def merge_incomplete_minutes(old, new):
 def slot_reading(dwell, minutes, incomplete):
     """The slot's occupancy from its minute totals: mean (people in view on
     average: the minutes' dwell over their observed seconds), the peak
-    minute's occupancy and start, and the observed seconds. Without minutes (a
-    slot recorded before them) a complete slot reads its shown dwell grid over
-    the whole quarter, an incomplete one has none."""
-    total = float(np.asarray(dwell).sum())
+    minute's occupancy and start, and the observed seconds. A slot without
+    minutes (recorded before them) has no reading: its shown dwell grid leaves
+    out the cells k hides, so it would read low under the same headline."""
     out = {"mean_occupancy": None, "peak_occupancy": None, "peak_start": None, "observed_s": None}
     if minutes is None:
-        if not incomplete:
-            out |= {"mean_occupancy": total / SLOT_S, "observed_s": float(SLOT_S)}
         return out
     observed = np.asarray(minutes.observed_s, float)
     if observed.sum() <= 0:

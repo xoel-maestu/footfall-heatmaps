@@ -19,7 +19,9 @@ adding them would count a person seen by two cameras twice.
 The slot's minute totals (phase 6, H4) are the cameras' per-minute dwell
 fused with the same weights, summed over the whole grid (hidden cells too: a
 floor total places no one); a minute reads as 0 when no camera saw k distinct
-ids in it.
+ids in it. In each minute only the cameras that covered it (observed time > 0)
+are fused, their weights renormalised per cell over those cameras, so a camera
+that is down for a minute does not dilute it with zeros.
 Its observed seconds are the most any one camera covered in that minute.
 """
 
@@ -134,11 +136,18 @@ class RecordSite:
         """The fused slot's minute totals over the whole grid, 0 below k ids."""
         cells = self.spec.ny * self.spec.nx
         shown = np.ones(cells, bool)
-        zeros = np.zeros((MINUTES, cells))
-        fused = fuse_layers(
-            self.weights.reshape(len(self.cameras), cells),
-            [slot[c].minute_dwell if c in slot else zeros for c in self.cameras],
-        )
+        weights = self.weights.reshape(len(self.cameras), cells)
+        dwell = np.zeros((len(self.cameras), MINUTES, cells))
+        covered = np.zeros((len(self.cameras), MINUTES), bool)
+        for i, c in enumerate(self.cameras):
+            if c in slot:
+                dwell[i], covered[i] = slot[c].minute_dwell, slot[c].observed > 0
+        # (cameras, minutes, cells): each camera's weight where it covered the minute,
+        # renormalised per cell over those cameras
+        w = weights[:, None, :] * covered[:, :, None]
+        total = w.sum(axis=0)
+        w = np.divide(w, total, out=np.zeros_like(w), where=total > 0)
+        fused = (w * dwell).sum(axis=0)
         ids = np.zeros(MINUTES, int)
         observed = np.zeros(MINUTES)
         for a in slot.values():

@@ -98,7 +98,14 @@ A slot reads as occupancy, never as a count of ids: people in view on average
 (the slot's recorded dwell over the seconds the source covered) and the peak
 1-minute occupancy. Both come from one stored total per minute for the whole
 grid (person-seconds and observed seconds, table `slot_minutes`), which places
-no one and includes the dwell of hidden cells. Passage reads in crossings: the
+no one and includes the dwell of hidden cells. That is a deliberate privacy
+decision: per slot (and per minute), the whole-floor total minus the dwell the
+map shows gives the total dwell inside the cells that k=5 hides, a value with
+no location in it. A minute in which fewer than 5 distinct track ids were seen
+stores 0 person-seconds but keeps its observed seconds, so it counts as 0 in the
+mean. A slot recorded before `slot_minutes` existed has no reading. With one
+camera, people hidden from it are not counted, so a slot reads low where its
+view is occluded. Passage reads in crossings: the
 distinct track ids that crossed a cell, a relative measure of foot traffic, not
 a number of people. Beside the map (below it on a phone) a table ranks the top
 10 of the grid's 2 m zones by dwell, with their coordinates; a stored map is
@@ -166,6 +173,7 @@ again, delete the weights file.
 The fused passage of a cell is the weighted mean of the covering cameras'
 distinct track ids, so a cell shows only where at least one camera saw 5 or
 more distinct track ids. A slot's minute totals are the cameras' per-minute
-dwell fused with the same weights; its observed seconds per minute are the most
-any one camera covered. The page shows the fused live layer and slots, their
+dwell fused with the same weights, using in each minute only the cameras that
+covered it (weights renormalised per cell over them); its observed seconds per
+minute are the most any one camera covered. The page shows the fused live layer and slots, their
 occupancy, the fusion, and each camera's state and processed frame rate.
