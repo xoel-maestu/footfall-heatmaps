@@ -49,3 +49,13 @@ def test_k_notes_state_the_measured_violation_rate_of_their_layer():
     for source in ("live", "slot"):
         for site in (False, True):
             assert "fewer than 5 different people" in note(source, site)
+
+
+def test_k_notes_name_the_tune_scenes_they_were_measured_on():
+    """H8 (phase 7): the rates come from the tune scenes 071-075, so the notes
+    say so; "test" or "held-out" scenes would claim a held-out measurement."""
+    for source in ("live", "slot"):
+        for site in (False, True):
+            text = note(source, site)
+            assert "On the tune scenes" in text
+            assert "test scenes" not in text and "held-out" not in text

@@ -98,7 +98,12 @@ camera's slot, 18 % for a site's fused slot, and 58 % (camera) and 48 % (site)
 for the live layer over 2 minutes. Counting k on 1 m cells or 2 m zones instead
 was measured and not adopted: it kept the slot rate at 14-16 %, because a
 coarser unit also gathers more track ids per person, and the coarser map lost
-accuracy (`scripts/k-zones-sweep.py`). It binds to 127.0.0.1 unless `--host` says otherwise, and warns
+accuracy (`scripts/k-zones-sweep.py`). Raising the threshold to 7, 10 or 15
+track ids per 0.5 m cell was measured and not adopted either: no threshold
+brought both slot rates to 5 % or less while keeping the map within its accuracy
+guards. At 10 ids the slot rates fall to 6 % (camera) and 5 % (site), but the map
+hides 43 % of the true dwell instead of 20 %, and its total variation distance
+to the true dwell map grows from .34 to .50 (`scripts/k-threshold-sweep.py`). It binds to 127.0.0.1 unless `--host` says otherwise, and warns
 when it binds beyond loopback.
 
 A slot reads as occupancy, never as a count of ids: people in view on average

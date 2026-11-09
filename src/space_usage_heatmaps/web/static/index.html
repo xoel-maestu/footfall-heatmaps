@@ -290,10 +290,11 @@ function colourScale(grid) {
 
 // legend-state:begin
 const K_NOTE = "Track ids are not people, so this threshold reduces but does not guarantee anonymity at cell level.";
-// Measured on the tune scenes 071-075 (improvements plan phases 6-7, H3 and H6): the share of
-// shown cells that fewer than 5 different people crossed in truth. Counting k on 1 m or 2 m
-// units did not bring it under 5 % (H6), so k stays on the 0.5 m cell.
-const K_RATE = (share, window) => ` On test scenes, ${share} of the shown cells had fewer than 5 ` +
+// Measured on the tune scenes 071-075 (improvements plan phases 6-7, H3, H6 and H8): the share
+// of shown cells that fewer than 5 different people crossed in truth. Counting k on 1 m or 2 m
+// units (H6) or raising the threshold to 7, 10 or 15 ids (H8) did not bring it under 5 % within
+// the accuracy guards, so k stays at 5 ids on the 0.5 m cell.
+const K_RATE = (share, window) => ` On the tune scenes, ${share} of the shown cells had fewer than 5 ` +
   `different people in ${window}.`;
 const K_RATES = {
   live: K_RATE("58 %", "the last 2 minutes"), slot: K_RATE("19 %", "the slot"),
