@@ -86,3 +86,33 @@ def test_a_camera_without_truth_is_left_out_of_the_errors():
     e = m.error_summary(cams, 1.0)
 
     assert e["n"] == 1 and e["left_out"] == 1
+
+
+def sealed_run(m, tmp_path, monkeypatch, measure):
+    monkeypatch.setattr(m, "REPORTS", tmp_path)
+    monkeypatch.setattr(m, "measure", measure)
+    monkeypatch.setattr("sys.argv", ["recall-factor.py", "sealed"])
+    (tmp_path / "recall-factor-tune.json").write_text('{"factor": 1.0}')
+    m.main()
+
+
+def test_sealed_scoring_leaves_a_started_marker_even_when_it_crashes(tmp_path, monkeypatch):
+    m = script()
+
+    def crash(split):
+        assert (tmp_path / "recall-factor-sealed.started").exists()  # written before scoring
+        raise RuntimeError("crash halfway")
+
+    with pytest.raises(RuntimeError):
+        sealed_run(m, tmp_path, monkeypatch, crash)
+    assert (tmp_path / "recall-factor-sealed.started").exists()
+
+
+def test_sealed_scoring_refuses_to_run_after_a_started_marker(tmp_path, monkeypatch):
+    m = script()
+    (tmp_path / "recall-factor-sealed.started").write_text("")
+    called = []
+
+    with pytest.raises(SystemExit, match="scored once"):
+        sealed_run(m, tmp_path, monkeypatch, called.append)
+    assert called == []

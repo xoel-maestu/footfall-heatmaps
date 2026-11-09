@@ -122,30 +122,40 @@ def test_the_reading_note_says_sparse_minutes_count_as_zero():
     assert "Minutes in which fewer than 5 track ids were seen count as 0." in PAGE.read_text()
 
 
-def test_a_single_camera_reading_is_a_lower_bound_with_the_measured_error_range():
-    # H7 (phase 7): one recall factor did not bring a single camera within 10 %
-    # on sealed scenes, so its reading is "at least N" with the tune error range
+def test_a_single_camera_note_gives_the_held_out_error_range():
+    # H7 (phase 7): one recall factor did not bring a single camera within 10 %,
+    # so the reading is approximate, with the error measured on the sealed scenes
+    # 076-080 (80 cameras, uncorrected), never on the tune scenes it was fitted on
     note = (
-        "One camera: people hidden from it are not counted. On the test scenes "
-        "(79 cameras), a single camera read 10 % below the people in view at the "
-        "median, between 36 % below and 13 % above for 8 cameras in 10, and from "
-        "100 % below to 33 % above in all."
+        "One camera: people hidden from it are not counted, so it usually reads low "
+        "where the view is occluded. On held-out scenes (80 cameras), a single camera's "
+        "average was off by about 14.5 % at the median, and between 43 % below and 5 % "
+        "above the true value for 8 cameras in 10. A site of several cameras reads closer."
     )
     assert run_js(["reading"], "oneCameraNote(false)") == note
     assert run_js(["reading"], "oneCameraNote(true)") is None
 
 
-def test_a_single_camera_slot_reads_at_least_n_people_in_view():
+def test_a_single_camera_slot_reads_about_n_people_never_a_bound():
     one = run_js(["reading"], f"slotReading({js(SLOT)}, false)")
-    assert one["occ-mean-bound"] == "at least" and one["occ-mean"] == "4.7"
+    assert one["occ-mean-bound"] == "about" and one["occ-mean"] == "4.7"
+    assert one["occ-peak"] == "about 9.1 people, 09:07 to 09:08 UTC"
     assert run_js(["reading"], f"slotOption({js(SLOT)}, false)") == (
-        "09:00 to 09:15, on average at least 4.7 people in view, incomplete"
+        "09:00 to 09:15, on average about 4.7 people in view, incomplete"
     )
+
+
+def test_no_reading_claims_a_bound():
+    from space_usage_heatmaps.web.server import PAGE
+
+    block = PAGE.read_text().split("// reading:begin")[1].split("// reading:end")[0]
+    assert "at least" not in block
 
 
 def test_a_site_slot_reads_without_a_bound():
     site = run_js(["reading"], f"slotReading({js(SLOT)}, true)")
     assert site["occ-mean-bound"] == "" and site["occ-mean"] == "4.7"
+    assert site["occ-peak"] == "9.1 people, 09:07 to 09:08 UTC"
     assert run_js(["reading"], f"slotOption({js(SLOT)}, true)") == (
         "09:00 to 09:15, on average 4.7 people in view, incomplete"
     )

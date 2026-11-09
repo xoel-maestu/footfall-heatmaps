@@ -4,6 +4,7 @@ phase 7, H7), as pre-registered in iterations.md, "Improvements plan, phase 7"
 
     CUDA_VISIBLE_DEVICES= uv run --no-sync python scripts/recall-factor.py tune
     CUDA_VISIBLE_DEVICES= uv run --no-sync python scripts/recall-factor.py sealed   # once
+    (refuses if reports/recall-factor-sealed.json or .started exists)
 
 Hypothesis: a single camera's mean occupancy is biased low by a stable recall
 factor. f = sum of visible truth / sum of shown mean occupancy over every
@@ -241,10 +242,15 @@ def main():
               f"p90 {k['p90_abs']:.3f}; per scene f {report['per_scene_factor']}")  # fmt: skip
     elif mode == "sealed":
         out = REPORTS / "recall-factor-sealed.json"
-        if out.exists():
-            raise SystemExit(f"{out} exists: the sealed split is scored once")
+        started = REPORTS / "recall-factor-sealed.started"
+        for p in (out, started):
+            if p.exists():
+                raise SystemExit(f"{p} exists: the sealed split is scored once")
         tune = json.loads((REPORTS / "recall-factor-tune.json").read_text())
         f = tune["factor"]
+        # written before any scoring, so a run that crashes halfway still counts
+        started.parent.mkdir(parents=True, exist_ok=True)
+        started.write_text(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n")
         report = measure("sealed")
         corrected = error_summary(report["cameras"], f)
         report |= {
