@@ -119,6 +119,8 @@ dd { margin: 0; text-align: right; }
 .site-only[hidden], .slot-only[hidden] { display: none; }
 #reading .headline { margin: 0 0 6px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 #occ-mean { font-size: 22px; font-weight: 600; }
+#occ-mean-bound { font-size: 13px; }
+#occ-mean-bound:empty { display: none; }
 #occ-mean-unit { font-size: 13px; }
 #reading dl { margin-bottom: 8px; }
 #zones { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -167,7 +169,7 @@ dd { margin: 0; text-align: right; }
     </div>
     <section id="reading" class="slot-only" hidden aria-labelledby="reading-title">
       <div class="label" id="reading-title">Occupancy in this slot</div>
-      <p class="headline"><span id="occ-mean">-</span><span id="occ-mean-unit">people in view on average</span></p>
+      <p class="headline"><span id="occ-mean-bound"></span><span id="occ-mean">-</span><span id="occ-mean-unit">people in view on average</span></p>
       <dl aria-label="Occupancy of the slot">
         <dt>Peak 1-minute occupancy</dt><dd id="occ-peak">-</dd>
         <dt>Observed time</dt><dd id="occ-observed">-</dd>
@@ -417,30 +419,44 @@ function zoneTable(z) {
 // A slot's occupancy as text, from /api/slots: identity-free, derived from dwell.
 const one = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const hhmm = (iso, plusMin = 0) => new Date(Date.parse(iso) + plusMin * 60000).toISOString().slice(11, 16);
-function slotReading(s) {
+// One camera's mean and peak read as approximate (H7, phase 7): it misses people
+// hidden from it, yet reads above the truth for some cameras, so it is no bound;
+// one recall factor did not correct it within 10 % on the sealed scenes.
+function slotReading(s, site) {
   if (!s || s.mean_occupancy == null) {
-    return { "occ-mean": "-", "occ-peak": "-", "occ-observed": s ? "Not recorded for this slot" : "-" };
+    return {
+      "occ-mean-bound": "", "occ-mean": "-", "occ-peak": "-",
+      "occ-observed": s ? "Not recorded for this slot" : "-",
+    };
   }
   const sec = Math.round(s.observed_s), min = Math.floor(sec / 60), rest = sec % 60;
+  const about = site ? "" : "about ";
   return {
+    "occ-mean-bound": about.trim(),
     "occ-mean": one.format(s.mean_occupancy),
     "occ-peak": s.peak_occupancy == null ? "-"
-      : `${one.format(s.peak_occupancy)} people, ${hhmm(s.peak_start)} to ${hhmm(s.peak_start, 1)} UTC`,
+      : `${about}${one.format(s.peak_occupancy)} people, ${hhmm(s.peak_start)} to ${hhmm(s.peak_start, 1)} UTC`,
     "occ-observed": `${min} min${rest ? ` ${rest} s` : ""} of 15 min`,
   };
 }
 
-// A single camera misses people it cannot see; a site fuses many views.
+// A single camera misses people it cannot see; a site fuses many views. The
+// range is H7's held-out measurement (scripts/recall-factor.py, phase 7): every
+// calibrated camera of the sealed scenes 076-080, uncorrected, against the
+// people visible to it (median |error| 14.5 %, p10 -43 %, p90 +5 %).
 function oneCameraNote(site) {
   return site ? null
-    : "One camera: people hidden from it are not counted, so this reads low where the view is occluded.";
+    : "One camera: people hidden from it are not counted, so it usually reads low where "
+      + "the view is occluded. On held-out scenes (80 cameras), a single camera's average "
+      + "was off by about 14.5 % at the median, and between 43 % below and 5 % above the "
+      + "people in view for 8 cameras in 10.";
 }
 
 // The slot picker's option text.
-function slotOption(s) {
+function slotOption(s, site) {
   const span = `${hhmm(s.start)} to ${hhmm(s.start, 15)}`;
   const occ = s.mean_occupancy == null ? "occupancy not recorded"
-    : `on average ${one.format(s.mean_occupancy)} people in view`;
+    : `on average ${site ? "" : "about "}${one.format(s.mean_occupancy)} people in view`;
   return `${span}, ${occ}${s.incomplete ? ", incomplete" : ""}`;
 }
 // reading:end
@@ -479,7 +495,7 @@ function showZones(z) {
 }
 
 function showReading(s) {
-  for (const [id, text] of Object.entries(slotReading(s))) $(id).textContent = text;
+  for (const [id, text] of Object.entries(slotReading(s, isSite))) $(id).textContent = text;
 }
 
 function draw() {
@@ -629,7 +645,7 @@ async function loadSlots() {
     select.disabled = true;
   } else {
     select.disabled = false;
-    for (const [i, s] of state.slots.entries()) select.append(new Option(slotOption(s), String(i)));
+    for (const [i, s] of state.slots.entries()) select.append(new Option(slotOption(s, isSite), String(i)));
     select.value = String(state.slots.length - 1);
   }
   showSlot();

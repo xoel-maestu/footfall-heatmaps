@@ -230,15 +230,19 @@ def test_store_merges_two_incomplete_passes_of_minutes():
     assert m.person_s[:2].tolist() == [60.0, 30.0] and m.observed_s.sum() == 120.0
 
 
-def test_store_clamps_a_minutes_observed_time_to_60_s():
-    # two incomplete passes that overlap in time add up; no minute covers more than 60 s
+def test_store_clamps_a_minutes_observed_time_to_60_s_and_scales_its_dwell():
+    # two incomplete passes that overlap in time add up; no minute covers more
+    # than 60 s, and its person-seconds shrink in the same ratio, so one person
+    # in view through both passes still reads 1, not 1.5
     store = SqliteSlotStore(":memory:")
-    store.write([], [minutes([60.0], [60.0], incomplete=True)])
-    store.write([], [minutes([30.0], [40.0], incomplete=True)])
+    store.write([], [minutes([60.0, 30.0], [60.0, 30.0], incomplete=True)])
+    store.write([], [minutes([30.0, 30.0], [30.0, 30.0], incomplete=True)])
 
     (m,) = store.read_minutes("cam", T0, T0 + SLOT_S)
 
-    assert m.observed_s[0] == 60.0 and m.person_s[0] == 90.0
+    assert m.observed_s[:2].tolist() == [60.0, 60.0]
+    assert m.person_s[:2].tolist() == [60.0, 60.0]  # 90 x 60/90; 60 under the clamp, unscaled
+    assert slot_reading(None, m, True)["mean_occupancy"] == 1.0
 
 
 def test_a_slots_grids_and_minutes_follow_one_write_rule():

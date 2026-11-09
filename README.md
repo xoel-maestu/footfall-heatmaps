@@ -104,8 +104,16 @@ map shows gives the total dwell inside the cells that k=5 hides, a value with
 no location in it. A minute in which fewer than 5 distinct track ids were seen
 stores 0 person-seconds but keeps its observed seconds, so it counts as 0 in the
 mean. A slot recorded before `slot_minutes` existed has no reading. With one
-camera, people hidden from it are not counted, so a slot reads low where its
-view is occluded. Passage reads in crossings: the
+camera, people hidden from it are not counted, so it usually reads low where
+the view is occluded, yet some cameras read above the truth; the page reads
+"about N people in view on average", never a bound. On the held-out sealed
+scenes (076-080, 80 cameras, stride 10, uncorrected) a single camera's average
+was off by 14.5 % at the median (median error -14 %), between 43 % below and 5 %
+above the people visible to it for 8 cameras in 10, and from 100 % below to 43 %
+above in all. One global recall factor (x1.13, fitted on the tune scenes
+071-075) did not bring the sealed cameras within 10 % (median |error| 13.8 %),
+so no factor is applied (`scripts/recall-factor.py`, H7). The 15-camera site
+of scene 071 read 3.6 % below. Passage reads in crossings: the
 distinct track ids that crossed a cell, a relative measure of foot traffic, not
 a number of people. Beside the map (below it on a phone) a table ranks the top
 10 of the grid's 2 m zones by dwell, with their coordinates; a stored map is

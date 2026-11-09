@@ -1,7 +1,7 @@
 """SlotStore over SQLite (standard library): aggregated grids only (R4).
 
 slots holds one floor grid per slot and layer; slot_minutes one row per minute
-of a slot, two numbers for the whole grid (person-seconds over the shown cells
+of a slot, two numbers for the whole grid (person-seconds over every cell, 0 below k ids,
 and observed seconds), nothing per cell or per track.
 """
 
@@ -113,11 +113,17 @@ class SqliteSlotStore:
                 return  # a complete slot's minutes are never replaced by an incomplete pass
             if old is not None:
                 m = merge_incomplete_minutes(old, m)
-        observed = np.minimum(np.asarray(m.observed_s, float), MINUTE_S)  # overlapping passes
+        # Overlapping incomplete passes can add up to more than a minute: clamp the
+        # observed time to 60 s and scale the dwell in the same ratio, so the
+        # minute's occupancy (person_s / observed_s) is what the passes read.
+        raw = np.asarray(m.observed_s, float)
+        observed = np.minimum(raw, MINUTE_S)
+        scale = np.divide(observed, raw, out=np.ones(MINUTES), where=raw > MINUTE_S)
+        person_s = np.asarray(m.person_s, float) * scale
         self.db.executemany(
             "INSERT OR REPLACE INTO slot_minutes VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
-                (*key, i, float(m.person_s[i]), float(observed[i]), int(m.incomplete))
+                (*key, i, float(person_s[i]), float(observed[i]), int(m.incomplete))
                 for i in range(MINUTES)
             ],
         )
