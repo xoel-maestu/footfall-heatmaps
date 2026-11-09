@@ -8,7 +8,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-ALLOWED = {"numpy", "ot"}  # pure numerical libraries (docs/architecture/hexagonal.md)
+ALLOWED = {"numpy", "ot"}  # pure numerical libraries (docs/architecture.md)
 CONTRACT = "domain and application import no third-party package but numpy and ot"
 
 

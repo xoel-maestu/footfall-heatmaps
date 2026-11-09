@@ -133,7 +133,7 @@ pythonpath = ["."]
 filterwarnings = ["ignore:invalid escape sequence:SyntaxWarning"]
 
 # The generated contracts of scripts/check-layers.sh (--print-config py), with
-# two exceptions (docs/architecture/hexagonal.md, "Exceptions"): numpy and ot
+# two exceptions (docs/architecture.md, rule 3): numpy and ot
 # (POT) are pure numerical libraries without I/O, and the grid, homography and
 # metrics are array maths. Every other installed distribution stays forbidden,
 # plus the planned I/O and model packages before they are installed.

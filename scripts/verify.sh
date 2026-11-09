@@ -7,15 +7,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Local tooling that is not part of the published repo. Absent in CI and in a
-# fresh clone: skipped, never a failure.
-if [ -x scripts/harness-check.sh ]; then
-  ./scripts/harness-check.sh
-else
-  echo "== harness =="
-  echo "(scripts/harness-check.sh not present in this checkout: skipped)"
-fi
-
 if [ -f pyproject.toml ]; then
   echo "== python (uv) =="
   if ! command -v uv >/dev/null; then
