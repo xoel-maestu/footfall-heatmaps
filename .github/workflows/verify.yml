@@ -33,8 +33,8 @@ jobs:
       # Fake fixtures marked `secret-scan: allow` are skipped (.gitleaks.toml).
       - name: gitleaks
         env:
-          EVENTO: ${{ github.event_name }}
-          ANTES: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           dir="$(mktemp -d)"
           url="https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION"
@@ -45,10 +45,10 @@ jobs:
           (cd "$dir" && echo "$GITLEAKS_SHA256  $tarball" | sha256sum -c --quiet -)
           tar -xzf "$dir/$tarball" -C "$dir" gitleaks
           range="origin/main..HEAD"
-          if [ "$EVENTO" = push ]; then
+          if [ "$EVENT_NAME" = push ]; then
             # A new branch or the first push: no previous commit, whole history.
             range=""
-            if git cat-file -e "$ANTES^{commit}" 2>/dev/null; then range="$ANTES..HEAD"; fi
+            if git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then range="$BEFORE_SHA..HEAD"; fi
           fi
           if [ -z "$range" ]; then
             "$dir/gitleaks" git --redact --verbose --no-banner
