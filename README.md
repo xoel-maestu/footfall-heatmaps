@@ -91,7 +91,14 @@ where fewer than 5 distinct track ids were seen: a slot over its quarter, the
 live layer over the last 2 minutes. Track ids are not people (one person's path
 can be split into several ids, and foot-point error spreads a person over
 neighbouring cells), so this threshold reduces but does not guarantee anonymity
-at cell level. It binds to 127.0.0.1 unless `--host` says otherwise, and warns
+at cell level. Measured on the tune scenes (NVIDIA 071-075, every calibrated
+camera, against ground truth of the people a camera has a visible box of), the
+share of shown cells that fewer than 5 different people crossed is 19 % for a
+camera's slot, 18 % for a site's fused slot, and 58 % (camera) and 48 % (site)
+for the live layer over 2 minutes. Counting k on 1 m cells or 2 m zones instead
+was measured and not adopted: it kept the slot rate at 14-16 %, because a
+coarser unit also gathers more track ids per person, and the coarser map lost
+accuracy (`scripts/k-zones-sweep.py`). It binds to 127.0.0.1 unless `--host` says otherwise, and warns
 when it binds beyond loopback.
 
 A slot reads as occupancy, never as a count of ids: people in view on average

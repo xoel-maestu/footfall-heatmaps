@@ -37,3 +37,15 @@ def test_site_notes_say_the_map_is_every_camera_fused_with_frozen_weights():
 
 def test_camera_notes_stay_as_they_were():
     assert note("slot", False).startswith("Slot layer")
+
+
+def test_k_notes_state_the_measured_violation_rate_of_their_layer():
+    """H6 (phase 7): the page states how often a shown cell had fewer than 5
+    people in truth, measured on the tune scenes, per layer and per mode."""
+    assert "19 %" in note("slot", False)
+    assert "18 %" in note("slot", True)
+    assert "58 %" in note("live", False)
+    assert "48 %" in note("live", True)
+    for source in ("live", "slot"):
+        for site in (False, True):
+            assert "fewer than 5 different people" in note(source, site)

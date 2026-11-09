@@ -290,12 +290,23 @@ function colourScale(grid) {
 
 // legend-state:begin
 const K_NOTE = "Track ids are not people, so this threshold reduces but does not guarantee anonymity at cell level.";
+// Measured on the tune scenes 071-075 (improvements plan phases 6-7, H3 and H6): the share of
+// shown cells that fewer than 5 different people crossed in truth. Counting k on 1 m or 2 m
+// units did not bring it under 5 % (H6), so k stays on the 0.5 m cell.
+const K_RATE = (share, window) => ` On test scenes, ${share} of the shown cells had fewer than 5 ` +
+  `different people in ${window}.`;
+const K_RATES = {
+  live: K_RATE("58 %", "the last 2 minutes"), slot: K_RATE("19 %", "the slot"),
+  siteLive: K_RATE("48 %", "the last 2 minutes"), siteSlot: K_RATE("18 %", "the slot"),
+};
 const UNITS = { dwell: "person-seconds", passage: "crossings" };
 const LAYER_TITLES = { dwell: "Dwell (person-seconds)", passage: "Passage (crossings)" };
 const NOTES = {
   live: "Live layer: 60 s half-life, held in memory only and never stored. " +
-    "Cells where fewer than 5 distinct track ids were seen in the last 2 minutes are hidden. " + K_NOTE,
-  slot: "Slot layer: cells where fewer than 5 distinct track ids were seen are hidden. " + K_NOTE,
+    "Cells where fewer than 5 distinct track ids were seen in the last 2 minutes are hidden. " + K_NOTE +
+    K_RATES.live,
+  slot: "Slot layer: cells where fewer than 5 distinct track ids were seen are hidden. " + K_NOTE +
+    K_RATES.slot,
   fused: "Fused scene layer: every camera's grid of this scene on one floor. Where cameras " +
     "overlap, each cell is a weighted average of the cameras that cover it, so a person seen " +
     "by several cameras is counted once. From an evaluation export of the whole video; cells " +
@@ -305,11 +316,11 @@ const SITE_NOTES = {
   live: "Fused live layer: every camera of the site on one floor, 60 s half-life, held in memory " +
     "only and never stored. Where cameras overlap, each cell is a weighted mean of the cameras " +
     "that cover it, with weights frozen at the site's calibration. Cells where fewer than 5 " +
-    "distinct track ids were seen in the last 2 minutes are hidden. " + K_NOTE,
+    "distinct track ids were seen in the last 2 minutes are hidden. " + K_NOTE + K_RATES.siteLive,
   slot: "Fused slot: every camera of the site on one floor over 15 minutes. Where cameras " +
     "overlap, each cell is a weighted mean of the cameras that cover it, with weights frozen at " +
     "the site's calibration. Cells where fewer than 5 distinct track ids were seen are hidden. " +
-    K_NOTE,
+    K_NOTE + K_RATES.siteSlot,
 };
 const PASSAGE_NOTE = "Passage counts the distinct track ids that crossed each cell. A track id " +
   "is not a person: one person's path can be split into several ids, so passage is a relative " +
