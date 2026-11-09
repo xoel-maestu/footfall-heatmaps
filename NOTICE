@@ -1,0 +1,26 @@
+space-usage-heatmaps
+Copyright 2026 Xoel Maestu
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The following file is not covered by the Apache License, Version 2.0:
+
+  docs/media/demo.gif
+    Frames of a synthetic scene from NVIDIA PhysicalAI-SmartSpaces
+    (https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces),
+    licensed under the Creative Commons Attribution 4.0 International
+    licence (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/).
+    Adapted: overlays drawn on the frames and resized, by
+    scripts/demo-gif.py. It is distributed under CC BY 4.0.
+
+Optional dependency groups that are not part of this product and are not
+redistributed with it (see docs/licenses.md):
+
+  baseline  ultralytics (AGPL-3.0), used for evaluation only and never
+            installed by CI or needed to run the pipeline.
+  tensorrt  NVIDIA TensorRT libraries (proprietary NVIDIA licence), an
+            optional speed-up installed from NVIDIA's own index.
+
+src/space_usage_heatmaps/perception/infrastructure/ucmc_tracker.py is an independent implementation
+after UCMCTrack (https://github.com/corfyi/UCMCTrack, MIT,
+Copyright (c) 2023 Kefu Yi); no code was copied.
