@@ -1,4 +1,4 @@
-# H6f (spec 8, hypothesis 6): configs/h1-best.yaml with the detector's NMS IoU
+# H6f (hypothesis 6): configs/h1-best.yaml with the detector's NMS IoU
 # threshold 0.45 -> 0.6: overlapping people (queues, aisles) keep both boxes.
 # The detections are cached again with this NMS.
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960

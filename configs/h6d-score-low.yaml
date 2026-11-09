@@ -1,4 +1,4 @@
-# H6d (spec 8, hypothesis 6): configs/h1-best.yaml with the detector's score
+# H6d (hypothesis 6): configs/h1-best.yaml with the detector's score
 # threshold 0.1 -> 0.05: ByteTrack's low stage gets weaker boxes (partly hidden
 # people). The detections are cached again at this floor.
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960

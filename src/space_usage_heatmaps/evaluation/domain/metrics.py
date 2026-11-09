@@ -25,7 +25,7 @@ class LayerMetrics:
 
 
 def compare_grids(pred, truth, mask):
-    """Metrics per layer for two Grids on the same spec; WAPE for dwell only (spec 6)."""
+    """Metrics per layer for two Grids on the same spec; WAPE for dwell only."""
     if pred.spec != truth.spec:
         raise ValueError("prediction and truth grids differ in extent or cell size")
     cell = truth.spec.cell_m

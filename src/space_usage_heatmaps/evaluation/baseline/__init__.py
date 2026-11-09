@@ -1,4 +1,4 @@
-"""Iteration 0 baseline (spec 8): the Ultralytics reference recipe, measured.
+"""Iteration 0 baseline: the Ultralytics reference recipe, measured.
 
 ultralytics is AGPL-3.0: this package is evaluation-only, installed with the
 optional `baseline` dependency group, and nothing else in space_usage_heatmaps

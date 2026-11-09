@@ -1,4 +1,4 @@
-"""Multi-camera IDF1 on the floor (E2b, spec 6): TrackEval's identity metric
+"""Multi-camera IDF1 on the floor (E2b, multi-camera identity): TrackEval's identity metric
 with floor distance in place of box IoU.
 
 A truth position and a predicted floor point of the same frame can match when

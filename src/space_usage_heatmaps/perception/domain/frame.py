@@ -1,7 +1,7 @@
 """What perception passes between its ports: a frame in memory, person boxes, tracks.
 
-A Frame's image never leaves perception and is never written anywhere (spec 3,
-R1); Detections and TrackedBoxes carry positions and scores only (R3).
+A Frame's image never leaves perception and is never written anywhere (privacy
+rule R1); Detections and TrackedBoxes carry positions and scores only (R3).
 """
 
 from dataclasses import dataclass

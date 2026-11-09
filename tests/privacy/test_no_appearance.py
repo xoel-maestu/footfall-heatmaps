@@ -1,4 +1,4 @@
-"""R3 (spec 3): no appearance, facial or biometric feature in any module.
+"""Privacy rule R3: no appearance, facial or biometric feature in any module.
 
 Statically, over every module of the package: no import of a re-identification,
 embedding or face library, and no identifier that names one; the only tracker

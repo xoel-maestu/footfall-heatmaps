@@ -1,5 +1,5 @@
 """One global recall factor for single-camera mean occupancy (improvements plan,
-phase 7, H7), as pre-registered in iterations.md, "Improvements plan, phase 7"
+phase 7, H7), as pre-registered in the experiment log, "Improvements plan, phase 7"
 (row H7).
 
     CUDA_VISIBLE_DEVICES= uv run --no-sync python scripts/recall-factor.py tune

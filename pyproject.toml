@@ -25,7 +25,7 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.8",
 ]
-# Iteration 0 only (spec 3): the Ultralytics reference recipe, measured.
+# Iteration 0 (the baseline) only: the Ultralytics reference recipe, measured.
 # ultralytics is AGPL-3.0: evaluation-only, imported only under
 # space_usage_heatmaps/evaluation/baseline and never by the pipeline. Not a default
 # group, so CI (scripts/verify.sh: uv sync --locked) never installs it.

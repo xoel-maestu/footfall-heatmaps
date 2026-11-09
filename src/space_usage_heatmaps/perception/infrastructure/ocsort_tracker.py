@@ -3,7 +3,7 @@ pinned package as ByteTrack.
 
 Motion and IoU only: a Kalman filter on the box, IoU plus a direction
 consistency term (observation-centric momentum), and a second pass against each
-lost track's last observed box; no appearance features (spec 3, R3) and never
+lost track's last observed box; no appearance features (privacy rule R3) and never
 the image. Parameters are the library's defaults, which are the OC-SORT paper's
 (det_thresh 0.6, max_age 30, min_hits 3, iou 0.3, delta_t 3, inertia 0.2),
 except frame_rate, which scales the lost track buffer to the source, and the

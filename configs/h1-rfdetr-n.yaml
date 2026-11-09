@@ -1,4 +1,4 @@
-# H1c (spec 8, hypothesis 1): configs/h1-yolox-s.yaml with RF-DETR Nano in place
+# H1c (hypothesis 1): configs/h1-yolox-s.yaml with RF-DETR Nano in place
 # of YOLOX-s: Roboflow's COCO Nano checkpoint (Apache-2.0, rfdetr 1.11.2),
 # exported to a 384 x 384 ONNX by the rfdetr package (scripts/export-detector.py rfdetr-n).
 detector: rfdetr-n     # RF-DETR Nano COCO; class person, score > 0.1, no NMS (a DETR)

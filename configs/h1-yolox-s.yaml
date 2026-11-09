@@ -1,4 +1,4 @@
-# H1, first candidate (spec 8, hypothesis 1): the perception pipeline with the
+# H1, first candidate (hypothesis 1): the perception pipeline with the
 # official YOLOX-s COCO model (Apache-2.0) in place of the Ultralytics reference
 # recipe's detector, and the accepted foot point of h4-auto-track.yaml.
 detector: yolox-s      # Megvii YOLOX-s, release 0.1.1rc0 ONNX; class person, score > 0.1, NMS 0.45 (the official demo's)

@@ -13,7 +13,7 @@ track_height_max_m: 2.0
 stride: 2
 
 # occupancy.domain.fusion: how covering cameras are weighed per cell. Chosen on
-# tune 071-075 by pooled full@joint TVD (reports/iterations-phase9.md):
+# tune 071-075 by pooled full@joint TVD (the experiment log):
 # visibility weighting, power 1, the visibility ratio measured on 2 m zones.
 fusion:
   weighting: visibility
@@ -22,7 +22,7 @@ fusion:
 
 # occupancy.domain.association: cross-camera global ids from floor co-location,
 # no appearance. Chosen on tune 071-075 by the rule pre-registered in
-# reports/iterations-phase10.md (highest pooled mc-IDF1 among the accepted
+# the experiment log (highest pooled mc-IDF1 among the accepted
 # variants A1-A4; sweep in reports/e2b-sweep-tune.json): A4, colocate with a
 # 1 m gate plus a 2 s handover.
 association:

@@ -1,5 +1,5 @@
 """k=5 counted on coarser units (improvements plan, phase 7, H6), as
-pre-registered in iterations.md, "Improvements plan, phase 7" (row H6).
+pre-registered in the experiment log, "Improvements plan, phase 7" (row H6).
 
     CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 uv run --no-sync python scripts/k-zones-sweep.py
 

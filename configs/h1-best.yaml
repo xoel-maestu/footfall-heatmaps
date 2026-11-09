@@ -1,7 +1,7 @@
 # Accepted detector configuration after phase 3b-2 (H1, H2): a copy of
 # configs/h2-yolox-s-960.yaml, which beat h1-yolox-s, h1-dfine-s and h1-rfdetr-n.
 #
-# H2a (spec 8, hypothesis 2): configs/h1-yolox-s.yaml with the same YOLOX-s COCO
+# H2a (hypothesis 2): configs/h1-yolox-s.yaml with the same YOLOX-s COCO
 # checkpoint (Apache-2.0) exported at a 960 x 960 input, for smaller and more
 # distant people (under-detection was h1's main remaining error).
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960

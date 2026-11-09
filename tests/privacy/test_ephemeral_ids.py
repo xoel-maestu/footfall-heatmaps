@@ -1,4 +1,4 @@
-"""R2 (spec 3): track ids are ephemeral, run-local counters.
+"""Privacy rule R2: track ids are ephemeral, run-local counters.
 
 Ids count up from 0 within a run, a new run starts again from 0, and they
 depend on where the boxes are, never on what the image shows.

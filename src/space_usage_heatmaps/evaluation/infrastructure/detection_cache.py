@@ -1,6 +1,6 @@
 """Person detections of a detector recipe saved under the data dir, so tracker
 variants rerun in minutes instead of running the detector again. Boxes and
-scores per processed frame only, never an image (spec 3, R1, R3), plus the
+scores per processed frame only, never an image (privacy rules R1, R3), plus the
 recipe metadata (weights, input size, thresholds, runtime) and the video's
 identity, checked on load as in track_cache: a file whose metadata differs, or
 that cannot be read, is recomputed."""

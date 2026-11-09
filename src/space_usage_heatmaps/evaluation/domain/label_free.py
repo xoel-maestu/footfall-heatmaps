@@ -1,4 +1,4 @@
-"""Label-free metrics of spec 6: computed from the tracks alone, so they run on
+"""Label-free metrics: computed from the tracks alone, so they run on
 any camera, and validated against the error the truth gives on NVIDIA.
 
 - Occupancy conservation: people enter and leave the view at the edge of what

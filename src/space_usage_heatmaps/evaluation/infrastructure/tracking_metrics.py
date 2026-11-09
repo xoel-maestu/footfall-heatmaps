@@ -1,4 +1,4 @@
-"""Tracking guards of spec 6: HOTA and IDF1 of a camera's tracked boxes against
+"""Tracking guards: HOTA and IDF1 of a camera's tracked boxes against
 its ground-truth boxes, in image space, with roboflow `trackers`' port of
 TrackEval (Apache-2.0 over TrackEval's MIT code): HOTA over IoU thresholds
 0.05-0.95, IDF1 at IoU 0.5.

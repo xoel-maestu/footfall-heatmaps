@@ -1,4 +1,4 @@
-# H2a, second size (spec 8, hypothesis 2): configs/h1-yolox-s.yaml with the same YOLOX-s COCO
+# H2a, second size (hypothesis 2): configs/h1-yolox-s.yaml with the same YOLOX-s COCO
 # checkpoint (Apache-2.0) exported at a 1280 x 1280 input (960 was accepted), for smaller and more
 # distant people (under-detection was h1's main remaining error).
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-1280

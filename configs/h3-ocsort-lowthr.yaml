@@ -1,4 +1,4 @@
-# H3a-2 (spec 8, hypothesis 3): configs/h3-ocsort.yaml with its detection
+# H3a-2 (hypothesis 3): configs/h3-ocsort.yaml with its detection
 # threshold lowered to the lowest box configs/h1-best.yaml's ByteTrack uses
 # (the detector's score_thr 0.1), so the comparison tests association and not
 # thresholds. OC-SORT has no low-score stage: boxes from 0.1 also start

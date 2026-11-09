@@ -1,5 +1,5 @@
 """Ground position error of a pipeline's floor points against annotated floor
-positions (WILDTRACK), spec 6 complementary metric.
+positions (WILDTRACK), a complementary metric.
 
 Tracked boxes and annotated boxes are paired per frame in image space
 (Hungarian on IoU, at least MIN_IOU), as the tracking guards match them; each

@@ -1,4 +1,4 @@
-# H3a (spec 8, hypothesis 3): configs/h1-best.yaml with OC-SORT in place of
+# H3a (hypothesis 3): configs/h1-best.yaml with OC-SORT in place of
 # ByteTrack. Same detections (the detection cache replays them).
 #
 # OC-SORT corrects the Kalman drift of a track that was lost behind a shelf

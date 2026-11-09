@@ -1,4 +1,4 @@
-# H6c (spec 8, hypothesis 6): configs/h1-best.yaml with ByteTrack's lost
+# H6c (hypothesis 6): configs/h1-best.yaml with ByteTrack's lost
 # track buffer 30 -> 60 frames at 30 fps: a track hidden behind a shelf waits
 # 2 s to be matched again. Same cached detections.
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960

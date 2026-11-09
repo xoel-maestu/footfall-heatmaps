@@ -1,9 +1,9 @@
 """space-usage eval --suite e1-final: the E1 report of the accepted config.
 
 It gathers, for configs/h5-best.yaml, the tune and sealed map metrics with the
-20 % rule and the spec 7 targets (recalibrated once after iteration 0), HOTA
+20 % rule and the accuracy targets (recalibrated once after iteration 0), HOTA
 and IDF1 on tune and sealed for information, the sealed confirmation of every
-accepted step with its spec 6 tracking guard, the external datasets, the
+accepted step with its tracking guard, the external datasets, the
 label-free metrics with their correlation against the true error, and the
 bench's fps and VRAM. Tracks come from the caches (the detector does not run
 where a valid cache exists); an eval report under reports/ is reused when it
@@ -25,7 +25,7 @@ from space_usage_heatmaps.evaluation.application.label_free_validation import (
 from space_usage_heatmaps.evaluation.domain.splits import SPLITS
 
 SUITE_CONFIG = "configs/h5-best.yaml"
-# Each accepted step against the config it was accepted over (iterations.md).
+# Each accepted step against the config it was accepted over (experiment log).
 # "accuracy": accepted on a TVD gain, holds when the sealed CI is below 0.
 # "no-loss": an engine change, holds when the sealed CI does not sit above 0.
 CONFIRMATIONS = (
@@ -35,7 +35,7 @@ CONFIRMATIONS = (
     ("H5 TensorRT fp16", "configs/h5-best.yaml", "configs/h1-best.yaml", "no-loss"),
 )
 TRUTH = "visible@coverage"  # E1 primary block, dwell layer
-# Spec 7 after the one recalibration (iterations.md, "Target recalibration").
+# Accuracy targets after the one recalibration (experiment log, "Target recalibration").
 MAP_TARGETS = {"tvd": 0.30, "mass_error": 0.10, "wape_zone": 0.30, "emd_m": 1.2}
 SEALED_MAX_DEGRADATION = 0.20
 FPS_MIN, VRAM_MAX_MB = 15.0, 3500.0
@@ -175,7 +175,7 @@ def assemble(inputs):
     for metric in ("hota", "idf1"):
         t = tune["tracking"]["pooled"][name][metric]
         s = sealed["tracking"]["pooled"][name][metric]
-        # Information only: the spec 6 guard is per step (tracking_guard below).
+        # Information only: the tracking guard is per step (tracking_guard below).
         tracking[metric] = {"tune": t, "sealed": s, "degradation": _degradation(t, s, True)}
     scenes = {
         split: {
@@ -236,7 +236,7 @@ def assemble(inputs):
 
 
 def _tracking_guard(report):
-    """Spec 6 on a step's sealed run: HOTA and IDF1 against its baseline, in
+    """Tracking guard on a step's sealed run: HOTA and IDF1 against its baseline, in
     points, dropping at most cli.GUARD_POINTS (eval's exit code 3)."""
     t = report["tracking"]
     d = t["delta"]["pooled"]
@@ -359,10 +359,11 @@ def render_markdown(s):
         "",
         f"Config `{s['config']}`. Dwell maps on {m['block']}, {m['cell_m']} m cells, pooled over "
         f"5 scenes per split, 95 % paired block-bootstrap CI ({m['n_resamples']} resamples). "
-        "Targets are spec 7 after its one recalibration; on the map metrics the sealed split "
+        "Targets are the accuracy targets after their one recalibration; on the map metrics "
+        "the sealed split "
         f"must stay within {100 * m['sealed_max_degradation']:.0f} % of tune. Degradation is "
         "the relative change from tune to sealed, positive when sealed is worse. HOTA and IDF1 "
-        "are shown for information; their spec 6 guard is checked per step below.",
+        "are shown for information; their tracking guard is checked per step below.",
         "",
         f"E1 accepted: **{'yes' if s['e1_accepted'] else 'no'}**.",
         "",
@@ -385,7 +386,7 @@ def render_markdown(s):
         )
     full = m["full_coverage_tvd"]
     lines += [
-        f"| TVD full@coverage (phase 9 target) | {_ci(full['tune'])} | {_ci(full['sealed'])} "
+        f"| TVD full@coverage (multi-camera target) | {_ci(full['tune'])} | {_ci(full['sealed'])} "
         f"| {_pct(_degradation(full['tune']['value'], full['sealed']['value']))} | | | | |",
         "",
         "TVD per scene: "
@@ -397,7 +398,7 @@ def render_markdown(s):
         "",
         "## Sealed confirmation of each accepted step",
         "",
-        "Paired ΔTVD (config minus the one it was accepted over). Tracking guard (spec 6): "
+        "Paired ΔTVD (config minus the one it was accepted over). Tracking guard: "
         f"on sealed, HOTA and IDF1 drop at most {cli.GUARD_POINTS:g} point against the "
         "baseline; ΔHOTA / ΔIDF1 in points, positive is better.",
         "",

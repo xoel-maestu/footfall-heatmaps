@@ -1,4 +1,4 @@
-"""R7 (spec 3): slots older than the retention (90 days by default) are purged."""
+"""Privacy rule R7: slots older than the retention (90 days by default) are purged."""
 
 import numpy as np
 
