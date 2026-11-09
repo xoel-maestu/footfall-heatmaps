@@ -19,3 +19,9 @@ def read_slots(store, camera_id, start_utc, end_utc, k=K_MIN_PEOPLE):
         grid = people if s.layer == "passage" else dwell
         out.append(replace(s, grid=grid, n_unique=suppress_count(s.n_unique, k)))
     return out
+
+
+def read_minutes(store, camera_id, start_utc, end_utc):
+    """The slots' minute totals, as written: k already applied per minute
+    over the cells the slot shows (SlotAccumulator.minutes, RecordSite)."""
+    return store.read_minutes(camera_id, start_utc, end_utc)

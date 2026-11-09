@@ -15,7 +15,15 @@ open, never reported it, or when the sources ended inside it. Samples a
 camera sends for a quarter already written are dropped (counted in late).
 n_unique is the most distinct ids any one camera saw: ids are per camera, so
 adding them would count a person seen by two cameras twice.
+
+The slot's minute totals (phase 6, H4) are the cameras' per-minute dwell
+fused with the same weights, summed over the whole grid (hidden cells too: a
+floor total places no one); a minute reads as 0 when no camera saw k distinct
+ids in it.
+Its observed seconds are the most any one camera covered in that minute.
 """
+
+from dataclasses import replace
 
 import numpy as np
 
@@ -29,9 +37,11 @@ from space_usage_heatmaps.occupancy.domain.live import LiveLayer
 from space_usage_heatmaps.occupancy.domain.slots import (
     K_MIN_PEOPLE,
     LAYERS,
+    MINUTES,
     SLOT_S,
     SlotAccumulator,
     SlotGrid,
+    SlotMinutes,
     slot_start,
     suppress,
     suppress_count,
@@ -85,7 +95,7 @@ class RecordSite:
         slot = self._open.setdefault(start, {})
         if camera_id not in slot:
             slot[camera_id] = SlotAccumulator(self.spec, start, incomplete=t - start > seconds)
-        slot[camera_id].add(ids, cells, seconds)
+        slot[camera_id].add(ids, cells, seconds, t)
         self._current[camera_id] = max(start, self._current.get(camera_id, start))
         self._close_passed()
 
@@ -120,6 +130,23 @@ class RecordSite:
             if (every is not None and start < every) or start + SLOT_S < newest:
                 self._write(start)
 
+    def _minutes(self, slot, start):
+        """The fused slot's minute totals over the whole grid, 0 below k ids."""
+        cells = self.spec.ny * self.spec.nx
+        shown = np.ones(cells, bool)
+        zeros = np.zeros((MINUTES, cells))
+        fused = fuse_layers(
+            self.weights.reshape(len(self.cameras), cells),
+            [slot[c].minute_dwell if c in slot else zeros for c in self.cameras],
+        )
+        ids = np.zeros(MINUTES, int)
+        observed = np.zeros(MINUTES)
+        for a in slot.values():
+            ids = np.maximum(ids, a.minute_raw(shown)[1])
+            observed = np.maximum(observed, a.observed)
+        person_s = np.where(ids < self.k, 0.0, fused[:, shown].sum(axis=1))
+        return SlotMinutes(self.site_id, start, self.spec.cell_m, person_s, observed, False)
+
     def _write(self, start, ended=False):
         slot = self._open.pop(start)
         self._closed_until = max(start + SLOT_S, self._closed_until or 0)
@@ -132,6 +159,7 @@ class RecordSite:
                 for c in self.cameras]  # fmt: skip
         dwell = fuse_layers(self.weights, [r[0] for r in raws])
         passage = fuse_layers(self.weights, [r[1] for r in raws])
+        minutes = self._minutes(slot, start)
         dwell, passage = suppress(dwell, passage, self.k)
         n = suppress_count(max(len(a.ids) for a in slot.values()), self.k)
         incomplete = (
@@ -141,7 +169,8 @@ class RecordSite:
             [
                 SlotGrid(self.site_id, start, self.spec.cell_m, layer, grid, n, incomplete)
                 for layer, grid in zip(LAYERS, (dwell, passage), strict=True)
-            ]
+            ],
+            [replace(minutes, incomplete=incomplete)],
         )
         self.written += 1
         if now is not None:

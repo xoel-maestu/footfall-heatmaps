@@ -31,7 +31,8 @@ def test_site_notes_say_the_map_is_every_camera_fused_with_frozen_weights():
     for source in ("live", "slot"):
         text = note(source, True)
         assert "every camera of the site" in text and "calibration" in text
-        assert "fewer than 5 distinct people" in text
+        assert "fewer than 5 distinct track ids were seen" in text
+        assert "does not guarantee anonymity" in text
 
 
 def test_camera_notes_stay_as_they_were():

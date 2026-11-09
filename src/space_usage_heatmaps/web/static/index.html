@@ -66,15 +66,17 @@ main {
 #empty-note[hidden] { display: none; }
 #map { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
 aside { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.panel-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 @media (min-width: 960px) {
-  /* the map takes the width its grid needs at full height; the panel takes the rest */
+  /* the map takes the width its grid needs at full height; the panel takes the rest:
+     controls and the slot's reading in one column, the zone ranking and summary beside it */
   main { grid-template-columns: auto minmax(340px, 1fr); height: calc(100vh - 54px); }
   #map-wrap {
     aspect-ratio: auto; min-height: 0;
     width: min(var(--map-w, 60vw), calc(100vw - 340px - 3 * var(--gap)));
   }
   aside {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     align-content: start; gap: 20px var(--gap); overflow-y: auto;
   }
 }
@@ -114,7 +116,17 @@ dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; f
 dt { color: var(--muted); }
 dd { margin: 0; text-align: right; }
 .note { font-size: 13px; color: var(--muted); margin: 0; }
-.site-only[hidden] { display: none; }
+.site-only[hidden], .slot-only[hidden] { display: none; }
+#reading .headline { margin: 0 0 6px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+#occ-mean { font-size: 22px; font-weight: 600; }
+#occ-mean-unit { font-size: 13px; }
+#reading dl { margin-bottom: 8px; }
+#zones { width: 100%; border-collapse: collapse; font-size: 13px; }
+#zones th, #zones td { padding: 6px 8px 6px 0; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+#zones th:last-child, #zones td:last-child { padding-right: 0; }
+#zones thead th { font-weight: 600; color: var(--muted); vertical-align: bottom; white-space: normal; }
+#zones tbody th { font-weight: 600; }
+#zones-note { margin-top: 6px; }
 #cameras { width: 100%; border-collapse: collapse; font-size: 13px; }
 #cameras th, #cameras td { padding: 6px 8px 6px 0; text-align: right; border-bottom: 1px solid var(--line); }
 #cameras td, #cameras tbody th { vertical-align: top; }
@@ -127,7 +139,7 @@ dd { margin: 0; text-align: right; }
 }
 </style>
 </head>
-<body data-camera="__CAMERA__" data-fused="__FUSED__" data-site="__SITE__">
+<body data-camera="__CAMERA__" data-fused="__FUSED__" data-site="__SITE__" data-live="__LIVE__">
 <header>
   <h1 id="title">Floor occupancy, camera <span id="camera"></span></h1>
   <p id="status" role="status" aria-live="polite">Loading…</p>
@@ -138,6 +150,7 @@ dd { margin: 0; text-align: right; }
     <p id="empty-note" role="note" hidden></p>
   </div>
   <aside>
+    <div class="panel-col">
     <fieldset>
       <legend>Source</legend>
       <div class="seg">
@@ -152,11 +165,20 @@ dd { margin: 0; text-align: right; }
       <label class="label" for="slot">Slot start</label>
       <select id="slot"></select>
     </div>
+    <section id="reading" class="slot-only" hidden aria-labelledby="reading-title">
+      <div class="label" id="reading-title">Occupancy in this slot</div>
+      <p class="headline"><span id="occ-mean">-</span><span id="occ-mean-unit">people in view on average</span></p>
+      <dl aria-label="Occupancy of the slot">
+        <dt>Peak 1-minute occupancy</dt><dd id="occ-peak">-</dd>
+        <dt>Observed time</dt><dd id="occ-observed">-</dd>
+      </dl>
+      <p class="note" id="reading-note">Dwell recorded on the whole floor (person-seconds, including cells the map hides under 5 track ids) divided by the seconds the source covered. Identity-free: no person is counted by id.</p>
+    </section>
     <fieldset>
       <legend>Layer</legend>
       <div class="seg">
         <label><input type="radio" name="layer" value="dwell" checked><span>Dwell (person-seconds)</span></label>
-        <label><input type="radio" name="layer" value="passage"><span>Passage (people)</span></label>
+        <label><input type="radio" name="layer" value="passage"><span>Passage (crossings)</span></label>
       </div>
     </fieldset>
     <div>
@@ -166,17 +188,29 @@ dd { margin: 0; text-align: right; }
       <div id="legend-unit"></div>
       <p class="note"><span class="swatch-empty" aria-hidden="true"></span>Empty cell</p>
     </div>
+    </div>
+    <div class="panel-col">
+    <section id="zones-group" aria-labelledby="zones-title">
+      <div class="label" id="zones-title">Top 2 m zones by dwell</div>
+      <table id="zones">
+        <thead><tr><th scope="col">Rank</th><th scope="col">x (m)</th><th scope="col">y (m)</th><th scope="col">Share of dwell</th><th scope="col">Person-seconds</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="note" id="zones-note"></p>
+    </section>
     <dl aria-label="Summary of the layer shown">
       <dt>Sum over cells</dt><dd id="sum-total">0</dd>
       <dt>Cells above zero</dt><dd id="sum-cells">0</dd>
       <dt>Highest cell</dt><dd id="sum-max">0</dd>
       <dt>Cell size</dt><dd id="sum-cell">0</dd>
       <dt>Data time</dt><dd id="sum-time">-</dd>
+      <dt>Map extent</dt><dd id="sum-extent">-</dd>
       <dt class="fused-only" hidden>Cameras fused</dt><dd class="fused-only" id="sum-cameras" hidden>-</dd>
       <dt class="fused-only" hidden>Overlap weighting</dt><dd class="fused-only" id="sum-fusion" hidden>-</dd>
       <dt class="fused-only" hidden>Passage counts</dt><dd class="fused-only" id="sum-passage-ids" hidden>-</dd>
     </dl>
     <p class="note" id="layer-note"></p>
+    </div>
     <section id="cameras-group" class="site-only" hidden aria-labelledby="cameras-title">
       <div class="label" id="cameras-title">Cameras of the site</div>
       <table id="cameras">
@@ -192,18 +226,21 @@ dd { margin: 0; text-align: right; }
 const camera = document.body.dataset.camera;
 const hasFused = document.body.dataset.fused === "1";
 const isSite = document.body.dataset.site === "1";
+const hasLive = document.body.dataset.live === "1";
 const EMPTY = {
-  live: "No cell reached 5 distinct people in the last 2 minutes.",
-  slot: "No cell reached 5 distinct people in this slot.",
-  fused: "No cell of the fused map reached 5 distinct people.",
+  live: "No cell reached 5 distinct track ids in the last 2 minutes.",
+  slot: "No cell reached 5 distinct track ids in this slot.",
+  fused: "No cell of the fused map reached 5 distinct track ids.",
 };
 const NO_DATA = {
-  live: "No live layer in this process. Start serve --site with --record to record the cameras and show it.",
+  live: isSite
+    ? "No live layer in this process. Start serve --site with --record to record the cameras and show it."
+    : "No live layer in this process. Start serve with --source to record the camera and show it.",
   slot: "No slot is stored for this day. A slot is written when its 15-minute quarter closes.",
 };
 const $ = (id) => document.getElementById(id);
 const desktop = window.matchMedia("(min-width: 960px)");
-const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false, noData: null };
+const state = { source: "live", layer: "dwell", data: null, slots: [], timer: null, busy: false, noData: null, slotSeq: 0 };
 const timeFmt = (t) => new Date(t * 1000).toISOString().slice(11, 19) + " UTC";
 const cameraEl = $("camera");
 cameraEl.textContent = camera;
@@ -249,25 +286,31 @@ function colourScale(grid) {
 // colour-scale:end
 
 // legend-state:begin
-const UNITS = { dwell: "person-seconds", passage: "people" };
+const K_NOTE = "Track ids are not people, so this threshold reduces but does not guarantee anonymity at cell level.";
+const UNITS = { dwell: "person-seconds", passage: "crossings" };
+const LAYER_TITLES = { dwell: "Dwell (person-seconds)", passage: "Passage (crossings)" };
 const NOTES = {
   live: "Live layer: 60 s half-life, held in memory only and never stored. " +
-    "Cells with fewer than 5 distinct people in the last 2 minutes read as empty.",
-  slot: "Slot layer: cells with fewer than 5 distinct people read as empty.",
+    "Cells where fewer than 5 distinct track ids were seen in the last 2 minutes are hidden. " + K_NOTE,
+  slot: "Slot layer: cells where fewer than 5 distinct track ids were seen are hidden. " + K_NOTE,
   fused: "Fused scene layer: every camera's grid of this scene on one floor. Where cameras " +
     "overlap, each cell is a weighted average of the cameras that cover it, so a person seen " +
     "by several cameras is counted once. From an evaluation export of the whole video; cells " +
-    "with fewer than 5 distinct people read as empty.",
+    "where fewer than 5 distinct track ids were seen are hidden. " + K_NOTE,
 };
 const SITE_NOTES = {
   live: "Fused live layer: every camera of the site on one floor, 60 s half-life, held in memory " +
     "only and never stored. Where cameras overlap, each cell is a weighted mean of the cameras " +
-    "that cover it, with weights frozen at the site's calibration. Cells with fewer than 5 " +
-    "distinct people in the last 2 minutes read as empty.",
+    "that cover it, with weights frozen at the site's calibration. Cells where fewer than 5 " +
+    "distinct track ids were seen in the last 2 minutes are hidden. " + K_NOTE,
   slot: "Fused slot: every camera of the site on one floor over 15 minutes. Where cameras " +
     "overlap, each cell is a weighted mean of the cameras that cover it, with weights frozen at " +
-    "the site's calibration. Cells with fewer than 5 distinct people read as empty.",
+    "the site's calibration. Cells where fewer than 5 distinct track ids were seen are hidden. " +
+    K_NOTE,
 };
+const PASSAGE_NOTE = "Passage counts the distinct track ids that crossed each cell. A track id " +
+  "is not a person: one person's path can be split into several ids, so passage is a relative " +
+  "measure of foot traffic per cell, and its sum over cells is not a count of people.";
 const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 
 // The legend and summary texts, by element id, for the data shown. With no data
@@ -275,9 +318,10 @@ const fmt = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 // site: the site's fused map (serve --site); its camera and fusion rows come from /api/site.
 function legendState(d, layer, source, site) {
   const unit = UNITS[layer];
+  const note = site ? SITE_NOTES[source] : NOTES[source];
   const out = {
-    "legend-title": layer === "dwell" ? "Dwell (person-seconds)" : "Passage (people)",
-    "layer-note": site ? SITE_NOTES[source] : NOTES[source],
+    "legend-title": LAYER_TITLES[layer],
+    "layer-note": layer === "passage" ? `${note} ${PASSAGE_NOTE}` : note,
   };
   if (!d) {
     const ids = ["legend-min", "legend-max", "sum-total", "sum-cells", "sum-max", "sum-cell", "sum-time"];
@@ -303,6 +347,97 @@ function legendState(d, layer, source, site) {
 }
 // legend-state:end
 
+// crop:begin
+// The part of the grid the map draws: the cells above zero in either layer, plus
+// a margin of marginM metres on each side, within the grid; the whole grid when
+// no cell is above zero. Rows and columns, as [first, end) indices.
+function cropBox(d, marginM = 2) {
+  const [ny, nx] = d.shape, m = Math.round(marginM / d.cell_m);
+  let i0 = ny, i1 = -1, j0 = nx, j1 = -1;
+  for (const grid of [d.dwell, d.passage]) {
+    for (let i = 0; i < ny; i++) for (let j = 0; j < nx; j++) {
+      if (grid[i][j] > 0) { i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j); }
+    }
+  }
+  if (i1 < 0) return { i0: 0, i1: ny, j0: 0, j1: nx };
+  return { i0: Math.max(0, i0 - m), i1: Math.min(ny, i1 + 1 + m), j0: Math.max(0, j0 - m), j1: Math.min(nx, j1 + 1 + m) };
+}
+
+// The extent a crop box covers, in metres, as text.
+function extentText(d, box) {
+  const c = d.cell_m, [ox, oy] = d.origin, f = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
+  return `x ${f.format(ox + box.j0 * c)} to ${f.format(ox + box.j1 * c)} m, ` +
+    `y ${f.format(oy + box.i0 * c)} to ${f.format(oy + box.i1 * c)} m`;
+}
+// crop:end
+
+// zones:begin
+// The 2 m zones of the floor (the grid's own 2 m blocks) ranked by dwell, the
+// largest first: each zone's extent in metres, its person-seconds and its share
+// of the dwell shown. zones: how many zones hold any dwell.
+function topZones(d, n = 10, zoneM = 2) {
+  const [ny, nx] = d.shape, c = d.cell_m, per = Math.max(1, Math.round(zoneM / c)), [ox, oy] = d.origin;
+  const sums = new Map();
+  let total = 0;
+  for (let i = 0; i < ny; i++) for (let j = 0; j < nx; j++) {
+    const v = d.dwell[i][j];
+    if (!(v > 0)) continue;
+    const key = `${Math.floor(i / per)},${Math.floor(j / per)}`;
+    sums.set(key, (sums.get(key) || 0) + v);
+    total += v;
+  }
+  const rows = [...sums].map(([key, dwell]) => {
+    const [zi, zj] = key.split(",").map(Number);
+    const x0 = ox + zj * per * c, y0 = oy + zi * per * c;
+    return { x0, x1: x0 + per * c, y0, y1: y0 + per * c, i0: zi * per, j0: zj * per, per, dwell, share: dwell / total };
+  });
+  rows.sort((a, b) => b.dwell - a.dwell || a.y0 - b.y0 || a.x0 - b.x0);
+  const top = rows.slice(0, n);
+  return { zones: rows.length, total, topShare: top.reduce((t, r) => t + r.share, 0), rows: top };
+}
+
+// The zone table's cells, as text, and its note.
+function zoneTable(z) {
+  const m = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
+  const pct = new Intl.NumberFormat("en", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const rows = z.rows.map((r, k) => [
+    String(k + 1), `${m.format(r.x0)} to ${m.format(r.x1)}`, `${m.format(r.y0)} to ${m.format(r.y1)}`,
+    pct.format(r.share), m.format(r.dwell),
+  ]);
+  const note = z.zones
+    ? `${z.rows.length} of ${z.zones} zones with dwell, together ${pct.format(z.topShare)} of the dwell shown. ` +
+      "Numbered on the map."
+    : "No dwell to rank.";
+  return { rows, note };
+}
+// zones:end
+
+// reading:begin
+// A slot's occupancy as text, from /api/slots: identity-free, derived from dwell.
+const one = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const hhmm = (iso, plusMin = 0) => new Date(Date.parse(iso) + plusMin * 60000).toISOString().slice(11, 16);
+function slotReading(s) {
+  if (!s || s.mean_occupancy == null) {
+    return { "occ-mean": "-", "occ-peak": "-", "occ-observed": s ? "Not recorded for this slot" : "-" };
+  }
+  const sec = Math.round(s.observed_s), min = Math.floor(sec / 60), rest = sec % 60;
+  return {
+    "occ-mean": one.format(s.mean_occupancy),
+    "occ-peak": s.peak_occupancy == null ? "-"
+      : `${one.format(s.peak_occupancy)} people, ${hhmm(s.peak_start)} to ${hhmm(s.peak_start, 1)} UTC`,
+    "occ-observed": `${min} min${rest ? ` ${rest} s` : ""} of 15 min`,
+  };
+}
+
+// The slot picker's option text.
+function slotOption(s) {
+  const span = `${hhmm(s.start)} to ${hhmm(s.start, 15)}`;
+  const occ = s.mean_occupancy == null ? "occupancy not recorded"
+    : `on average ${one.format(s.mean_occupancy)} people in view`;
+  return `${span}, ${occ}${s.incomplete ? ", incomplete" : ""}`;
+}
+// reading:end
+
 // camera-rows:begin
 // The cells of the site's camera table, as text: counts and rates only.
 const fps1 = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -321,6 +456,25 @@ function showLegend(d) {
   for (const [id, text] of Object.entries(legendState(d, state.layer, state.source, isSite))) $(id).textContent = text;
 }
 
+function showZones(z) {
+  const t = z ? zoneTable(z) : { rows: [], note: "No map shown." };
+  $("zones").tBodies[0].replaceChildren(...t.rows.map((cells) => {
+    const tr = document.createElement("tr");
+    for (const [k, text] of cells.entries()) {
+      const td = document.createElement(k === 0 ? "th" : "td");
+      if (k === 0) td.scope = "row";
+      td.textContent = text;
+      tr.append(td);
+    }
+    return tr;
+  }));
+  $("zones-note").textContent = t.note;
+}
+
+function showReading(s) {
+  for (const [id, text] of Object.entries(slotReading(s))) $(id).textContent = text;
+}
+
 function draw() {
   const canvas = $("map"), wrap = $("map-wrap"), d = state.data;
   const dpr = window.devicePixelRatio || 1;
@@ -332,11 +486,19 @@ function draw() {
   $("empty-note").hidden = true;
   showLegend(d);
   if (!d) {
+    showZones(null);
+    $("sum-extent").textContent = "-";
     canvas.setAttribute("aria-label", "Occupancy heatmap: no data");
     if (state.noData) { $("empty-note").textContent = state.noData; $("empty-note").hidden = false; }
     return;
   }
-  const [ny, nx] = d.shape, cell = d.cell_m, [ox, oy] = d.origin;
+  // a stored map (slot, fused) is cropped to its observed extent plus 2 m; the live one,
+  // which moves every second, keeps the whole grid
+  const box = state.source === "live" ? { i0: 0, i1: d.shape[0], j0: 0, j1: d.shape[1] } : cropBox(d);
+  const ny = box.i1 - box.i0, nx = box.j1 - box.j0, cell = d.cell_m;
+  const ox = d.origin[0] + box.j0 * cell, oy = d.origin[1] + box.i0 * cell;
+  const full = d.shape[0] === ny && d.shape[1] === nx;
+  $("sum-extent").textContent = `${extentText(d, box)}${full ? ", the whole grid" : ", observed area plus 2 m"}`;
   wrap.style.setProperty("--map-aspect", `${nx + 13} / ${ny + 10}`); // the map and its axes, on narrow screens
   const pad = { l: 44, b: 32, t: 8, r: 8 };
   const px = Math.max(1, Math.min((W - pad.l - pad.r) / nx, (H - pad.t - pad.b) / ny));
@@ -347,6 +509,7 @@ function draw() {
     if (wrap.style.getPropertyValue("--map-w") !== w) wrap.style.setProperty("--map-w", w);
   }
   const grid = d[state.layer];
+  const zones = topZones(d);
   const stops = ["--ramp-0", "--ramp-1", "--ramp-2", "--ramp-3"].map((v) => hexRgb(cssVar(v)));
   const { max, cap, cells } = colourScale(grid);
   $("empty-note").hidden = cells > 0;
@@ -355,34 +518,45 @@ function draw() {
   ctx.fillRect(x0, y0, mw, mh);
   for (let i = 0; i < ny; i++) {
     for (let j = 0; j < nx; j++) {
-      const v = grid[i][j];
+      const v = grid[i + box.i0][j + box.j0];
       if (v <= 0) continue;
       ctx.fillStyle = rampColour(v / cap, stops);
       // row 0 is the smallest y: drawn at the bottom, y grows up the screen
       ctx.fillRect(x0 + j * px, y0 + (ny - 1 - i) * px, Math.ceil(px), Math.ceil(px));
     }
   }
-  // floor grid every 2 m, labelled in metres
+  // floor grid on the grid's 2 m blocks, labelled in metres
   ctx.strokeStyle = cssVar("--line"); ctx.lineWidth = 1;
   ctx.fillStyle = cssVar("--muted"); ctx.font = "12px system-ui, sans-serif";
   const step = 2, perStep = Math.round(step / cell), labelEvery = px * perStep < 28 ? 2 : 1;
+  const firstLine = (k0) => (perStep - (k0 % perStep)) % perStep; // the first block edge in the crop
   ctx.textAlign = "center"; ctx.textBaseline = "top";
-  for (let j = 0, k = 0; j <= nx; j += perStep, k++) {
+  for (let j = firstLine(box.j0); j <= nx; j += perStep) {
     const x = Math.round(x0 + j * px) + 0.5;
     ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + mh); ctx.stroke();
-    if (k % (2 * labelEvery) === 0) ctx.fillText(fmt.format(ox + j * cell), x, y0 + mh + 4);
+    if (((j + box.j0) / perStep) % (2 * labelEvery) === 0) ctx.fillText(fmt.format(ox + j * cell), x, y0 + mh + 4);
   }
   ctx.textAlign = "right"; ctx.textBaseline = "middle";
-  for (let i = 0, k = 0; i <= ny; i += perStep, k++) {
+  for (let i = firstLine(box.i0); i <= ny; i += perStep) {
     const y = Math.round(y0 + mh - i * px) + 0.5;
     ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + mw, y); ctx.stroke();
-    if (k % (2 * labelEvery) === 0) ctx.fillText(fmt.format(oy + i * cell), x0 - 6, y);
+    if (((i + box.i0) / perStep) % (2 * labelEvery) === 0) ctx.fillText(fmt.format(oy + i * cell), x0 - 6, y);
   }
+  // the ranked zones of the table, outlined and numbered
+  ctx.strokeStyle = cssVar("--ink"); ctx.fillStyle = cssVar("--ink"); ctx.lineWidth = 1.5;
+  ctx.textAlign = "left"; ctx.textBaseline = "top";
+  for (const [k, z] of zones.rows.entries()) {
+    const zx = x0 + (z.j0 - box.j0) * px, zy = y0 + (ny - (z.i0 - box.i0) - z.per) * px, zs = z.per * px;
+    ctx.strokeRect(Math.round(zx) + 0.5, Math.round(zy) + 0.5, Math.round(zs) - 1, Math.round(zs) - 1);
+    if (zs >= 14) ctx.fillText(String(k + 1), zx + 2, zy + 2);
+  }
+  ctx.lineWidth = 1;
   ctx.textAlign = "right"; ctx.textBaseline = "top";
   ctx.fillText("x (m)", x0 + mw, y0 + mh + 18);
   ctx.save(); ctx.translate(x0 - 34, y0); ctx.rotate(-Math.PI / 2);
   ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText("y (m)", 0, 0); ctx.restore();
 
+  showZones(zones);
   const unit = UNITS[state.layer];
   canvas.setAttribute("aria-label",
     `Heatmap of ${unit} over a ${fmt.format(nx * cell)} by ${fmt.format(ny * cell)} m floor grid: ` +
@@ -426,28 +600,29 @@ function dayBounds(day) {
 }
 
 async function loadSlots() {
+  const seq = ++state.slotSeq; // a later call (another day) wins over this one
+  await latestDay;
   const day = $("slot-day").value;
   const select = $("slot");
-  select.replaceChildren();
-  if (!day) return;
-  const [from, to] = dayBounds(day);
-  try {
-    const d = await getJson(`/api/slots?camera=${encodeURIComponent(camera)}&from=${from}&to=${to}`);
-    state.slots = d.slots.map((s) => ({ ...s, cell_m: d.cell_m, origin: d.origin, shape: d.shape }));
-  } catch (e) {
-    state.slots = [];
-    setStatus(`Slots unavailable: ${e.message}`, true);
+  let slots = [];
+  if (day) {
+    const [from, to] = dayBounds(day);
+    try {
+      const d = await getJson(`/api/slots?camera=${encodeURIComponent(camera)}&from=${from}&to=${to}`);
+      slots = d.slots.map((s) => ({ ...s, cell_m: d.cell_m, origin: d.origin, shape: d.shape }));
+    } catch (e) {
+      if (seq === state.slotSeq) setStatus(`Slots unavailable: ${e.message}`, true);
+    }
   }
+  if (seq !== state.slotSeq) return;
+  state.slots = slots;
+  select.replaceChildren();
   if (!state.slots.length) {
     select.append(new Option("No slots on this day", ""));
     select.disabled = true;
   } else {
     select.disabled = false;
-    for (const [i, s] of state.slots.entries()) {
-      const start = s.start.slice(11, 16), end = new Date(Date.parse(s.start) + 900000).toISOString().slice(11, 16);
-      const people = s.n_unique ? `${s.n_unique} people` : "under 5 people";
-      select.append(new Option(`${start} to ${end}, ${people}${s.incomplete ? ", incomplete" : ""}`, String(i)));
-    }
+    for (const [i, s] of state.slots.entries()) select.append(new Option(slotOption(s), String(i)));
     select.value = String(state.slots.length - 1);
   }
   showSlot();
@@ -456,8 +631,9 @@ async function loadSlots() {
 function showSlot() {
   if (state.source !== "slot") return;
   const s = state.slots[Number($("slot").value)];
+  showReading(s && $("slot").value !== "" ? s : null);
   if (!s || $("slot").value === "") {
-    state.noData = isSite ? NO_DATA.slot : null;
+    state.noData = NO_DATA.slot;
     state.data = null; draw();
     setStatus("No persisted slot on this day");
     return;
@@ -529,6 +705,7 @@ function setSource(source) {
   state.source = source;
   state.noData = null;
   $("slot-picker").hidden = source !== "slot";
+  for (const el of document.querySelectorAll(".slot-only")) el.hidden = source !== "slot";
   for (const el of document.querySelectorAll(".fused-only")) el.hidden = !(source === "fused" || isSite);
   $("title").replaceChildren(
     ...(source === "fused" ? ["Floor occupancy, fused scene"]
@@ -537,7 +714,7 @@ function setSource(source) {
   if (source === "fused") {
     state.data = null; draw();
     loadFused();
-  } else if (source === "live" && isSite && !state.recording) {
+  } else if (source === "live" && !(isSite ? state.recording : hasLive)) {
     // a server that only reads the slots has no live layer: say so, do not poll for one
     state.noData = NO_DATA.live; state.data = null; draw();
     setStatus("Stored slots only: no live layer in this process");
@@ -559,11 +736,11 @@ new ResizeObserver(draw).observe($("map-wrap"));
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
 desktop.addEventListener("change", draw);
 $("slot-day").value = new Date().toISOString().slice(0, 10);
-// the picker opens on the day of the newest persisted slot, today when there is none
-getJson(`/api/slots/latest?camera=${encodeURIComponent(camera)}`)
+// the picker opens on the day of the newest persisted slot, today when there is none;
+// loadSlots waits for it, so the first list is that day's
+const latestDay = getJson(`/api/slots/latest?camera=${encodeURIComponent(camera)}`)
   .then((d) => { if (d.start) $("slot-day").value = d.start.slice(0, 10); })
-  .catch(() => {})
-  .finally(() => { if (state.source === "slot") loadSlots(); });
+  .catch(() => {});
 $("fused-choice").hidden = !hasFused;
 if (isSite) {
   for (const el of document.querySelectorAll(".site-only")) el.hidden = false;
@@ -580,7 +757,10 @@ if (isSite) {
   document.querySelector('input[name="source"][value="fused"]').checked = true;
   setSource("fused");
 } else {
-  setSource("live");
+  // a process without a live source opens on its newest stored slot and never polls /api/live
+  const source = hasLive ? "live" : "slot";
+  document.querySelector(`input[name="source"][value="${source}"]`).checked = true;
+  setSource(source);
 }
 </script>
 </body>
