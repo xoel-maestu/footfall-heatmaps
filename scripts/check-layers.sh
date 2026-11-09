@@ -278,7 +278,7 @@ done
 if [ -n "$cargo_toml" ]; then
   checked=1
   # rustup installs into ~/.cargo/bin, which a non-interactive shell (ssh, CI,
-  # an agent's tool call) often does not have on its PATH.
+  # a scripted run) often does not have on its PATH.
   if ! command -v cargo >/dev/null && [ -x "${CARGO_HOME:-$HOME/.cargo}/bin/cargo" ]; then
     PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
   fi
