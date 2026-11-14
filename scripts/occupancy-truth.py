@@ -28,8 +28,8 @@ from pathlib import Path
 
 import numpy as np
 
-from space_usage_heatmaps.evaluation.domain.bootstrap import block_layers
-from space_usage_heatmaps.occupancy.domain.slots import SLOT_S, slot_reading
+from footfall_heatmaps.evaluation.domain.bootstrap import block_layers
+from footfall_heatmaps.occupancy.domain.slots import SLOT_S, slot_reading
 
 TOLERANCE = 0.10
 END_OF_TIME = 4_102_444_800
@@ -56,20 +56,20 @@ def truth_person_seconds(spec, frames, world, fps, coverage, video_start, slot_s
 
 
 def main():
-    from space_usage_heatmaps.cli import (
+    from footfall_heatmaps.cli import (
         calibration_of,
         data_dir,
         load_run_settings,
         utc_epoch,
     )
-    from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
+    from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
         NvidiaMtmcReader,
     )
-    from space_usage_heatmaps.floorplan.domain.homography import Homography
-    from space_usage_heatmaps.occupancy.application.read_slots import read_minutes, read_slots
-    from space_usage_heatmaps.occupancy.domain.grid import GridSpec
-    from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
-    from space_usage_heatmaps.site_recording import load_site
+    from footfall_heatmaps.floorplan.domain.homography import Homography
+    from footfall_heatmaps.occupancy.application.read_slots import read_minutes, read_slots
+    from footfall_heatmaps.occupancy.domain.grid import GridSpec
+    from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+    from footfall_heatmaps.site_recording import load_site
 
     p = argparse.ArgumentParser()
     p.add_argument("--site", help="site config (its cameras, spec and start_utc)")

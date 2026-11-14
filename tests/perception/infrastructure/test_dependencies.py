@@ -10,13 +10,13 @@ REPO = Path(__file__).resolve().parents[3]
 
 IMPORT_ADAPTERS = """
 import sys
-import space_usage_heatmaps.perception.infrastructure.container
-import space_usage_heatmaps.perception.infrastructure.bytetrack_tracker
-import space_usage_heatmaps.perception.infrastructure.ocsort_tracker
-import space_usage_heatmaps.perception.infrastructure.ucmc_tracker
-import space_usage_heatmaps.evaluation.infrastructure.tracking_metrics
-import space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector
-import space_usage_heatmaps.perception.infrastructure.opencv_file_source
+import footfall_heatmaps.perception.infrastructure.container
+import footfall_heatmaps.perception.infrastructure.bytetrack_tracker
+import footfall_heatmaps.perception.infrastructure.ocsort_tracker
+import footfall_heatmaps.perception.infrastructure.ucmc_tracker
+import footfall_heatmaps.evaluation.infrastructure.tracking_metrics
+import footfall_heatmaps.perception.infrastructure.onnx_yolox_detector
+import footfall_heatmaps.perception.infrastructure.opencv_file_source
 import supervision, trackers
 print(sorted(m for m in sys.modules if m == "av" or m.startswith("av.")))
 """

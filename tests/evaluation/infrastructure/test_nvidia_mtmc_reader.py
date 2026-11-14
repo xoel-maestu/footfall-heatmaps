@@ -4,7 +4,7 @@ import shutil
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from tests.conftest import BOX_W, H, write_scene
 
 

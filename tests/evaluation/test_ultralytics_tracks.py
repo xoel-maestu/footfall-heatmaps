@@ -2,8 +2,8 @@ import pytest
 
 pytest.importorskip("ultralytics")  # optional baseline group; skipped in CI
 
-from space_usage_heatmaps.evaluation.baseline import ultralytics_tracks  # noqa: E402
-from space_usage_heatmaps.evaluation.domain.run_config import RunConfig  # noqa: E402
+from footfall_heatmaps.evaluation.baseline import ultralytics_tracks  # noqa: E402
+from footfall_heatmaps.evaluation.domain.run_config import RunConfig  # noqa: E402
 
 CONFIG = RunConfig("yolov8n", "bytetrack", 640, "centroid", "ultralytics", 1)
 

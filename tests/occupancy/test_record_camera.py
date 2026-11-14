@@ -3,14 +3,14 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.domain.dataset_reader import CameraCalibration
-from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
-from space_usage_heatmaps.occupancy.application.record_camera import record_camera
-from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
-from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
-from space_usage_heatmaps.perception.domain.frame import Detections
-from space_usage_heatmaps.perception.domain.privacy_mask import PrivacyMask
+from footfall_heatmaps.evaluation.domain.dataset_reader import CameraCalibration
+from footfall_heatmaps.evaluation.domain.run_config import RunConfig
+from footfall_heatmaps.occupancy.application.record_camera import record_camera
+from footfall_heatmaps.occupancy.application.record_slots import RecordSlots
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from footfall_heatmaps.perception.domain.frame import Detections
+from footfall_heatmaps.perception.domain.privacy_mask import PrivacyMask
 from tests.conftest import H
 from tests.perception.fakes import ListFrameSource
 

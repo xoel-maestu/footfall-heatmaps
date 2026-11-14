@@ -6,15 +6,15 @@ import logging
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.perception.domain.frame import Frame
-from space_usage_heatmaps.perception.infrastructure.onnx_session import (
+from footfall_heatmaps.perception.domain.frame import Frame
+from footfall_heatmaps.perception.infrastructure.onnx_session import (
     CPU,
     CUDA,
     TENSORRT,
     open_session,
     tensorrt_options,
 )
-from space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector import OnnxYoloxDetector
+from footfall_heatmaps.perception.infrastructure.onnx_yolox_detector import OnnxYoloxDetector
 from tests.perception.infrastructure.test_onnx_yolox_detector import FakeSession, OutOfMemorySession
 
 
@@ -95,7 +95,7 @@ def test_tensorrt_runs_fp16_with_its_engines_cached_on_disk(tmp_path):
 def test_without_the_tensorrt_group_the_engine_fails_with_the_install_command(monkeypatch):
     import sys
 
-    from space_usage_heatmaps.perception.infrastructure import onnx_session
+    from footfall_heatmaps.perception.infrastructure import onnx_session
 
     monkeypatch.setitem(sys.modules, "tensorrt_libs", None)  # import raises ImportError
 
@@ -108,7 +108,7 @@ def test_onnx_trt_without_tensorrt_runs_on_cuda(monkeypatch, tmp_path, caplog):
     import sys
     import types
 
-    from space_usage_heatmaps.perception.infrastructure.onnx_session import engine_chain
+    from footfall_heatmaps.perception.infrastructure.onnx_session import engine_chain
 
     monkeypatch.setitem(sys.modules, "tensorrt_libs", None)
     ort = types.SimpleNamespace(

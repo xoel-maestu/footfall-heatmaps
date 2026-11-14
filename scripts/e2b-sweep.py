@@ -21,7 +21,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
-from space_usage_heatmaps.cli import (
+from footfall_heatmaps.cli import (
     ASSOCIATION_CONFIG,
     _assoc_dict,
     data_dir,
@@ -29,11 +29,11 @@ from space_usage_heatmaps.cli import (
     load_fusion,
     track_source,
 )
-from space_usage_heatmaps.evaluation.application.evaluate_identity import evaluate_identity
-from space_usage_heatmaps.evaluation.domain.splits import SPLITS
-from space_usage_heatmaps.evaluation.infrastructure.floor_identity import floor_identity
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
-from space_usage_heatmaps.occupancy.domain.association import NONE, Association
+from footfall_heatmaps.evaluation.application.evaluate_identity import evaluate_identity
+from footfall_heatmaps.evaluation.domain.splits import SPLITS
+from footfall_heatmaps.evaluation.infrastructure.floor_identity import floor_identity
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.occupancy.domain.association import NONE, Association
 
 MIN_DELTA = 0.01
 VARIANTS = {

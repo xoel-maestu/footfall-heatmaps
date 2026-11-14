@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from space_usage_heatmaps.perception.domain.frame import Detections, Frame
+from footfall_heatmaps.perception.domain.frame import Detections, Frame
 
 
 class ListFrameSource:

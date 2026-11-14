@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "occupancy-truth.py"
 T0 = 1_793_955_600  # 2026-11-06T09:00:00Z

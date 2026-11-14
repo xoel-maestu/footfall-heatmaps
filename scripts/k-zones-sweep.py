@@ -78,14 +78,14 @@ from pathlib import Path
 
 import numpy as np
 
-from space_usage_heatmaps.cli import data_dir, load_config, load_fusion, source_sha256, track_source
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import recipe_floor_points
-from space_usage_heatmaps.evaluation.domain.splits import SPLITS
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
-from space_usage_heatmaps.floorplan.domain.homography import Homography
-from space_usage_heatmaps.occupancy.domain.fusion import CameraGrid, fusion_weights
-from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec
-from space_usage_heatmaps.occupancy.domain.live import RECENT_S
+from footfall_heatmaps.cli import data_dir, load_config, load_fusion, source_sha256, track_source
+from footfall_heatmaps.evaluation.application.evaluate_oracle import recipe_floor_points
+from footfall_heatmaps.evaluation.domain.splits import SPLITS
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.floorplan.domain.homography import Homography
+from footfall_heatmaps.occupancy.domain.fusion import CameraGrid, fusion_weights
+from footfall_heatmaps.occupancy.domain.grid import Grid, GridSpec
+from footfall_heatmaps.occupancy.domain.live import RECENT_S
 
 RECIPE = "configs/e2a-weights.yaml"
 STRIDE, CACHED_STRIDE = 10, 2

@@ -1,6 +1,6 @@
 import numpy as np
 
-from space_usage_heatmaps.perception.infrastructure.ocsort_tracker import OcSortTracker
+from footfall_heatmaps.perception.infrastructure.ocsort_tracker import OcSortTracker
 
 
 def walk(x0, frame):

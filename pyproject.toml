@@ -1,5 +1,5 @@
 [project]
-name = "space-usage-heatmaps"
+name = "footfall-heatmaps"
 version = "0.1.0"
 description = "Anonymous foot-traffic heatmaps on the floor plan from fixed cameras"
 readme = "README.md"
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-space-usage = "space_usage_heatmaps.cli:main"
+footfall = "footfall_heatmaps.cli:main"
 
 [dependency-groups]
 dev = [
@@ -27,7 +27,7 @@ dev = [
 ]
 # Iteration 0 (the baseline) only: the Ultralytics reference recipe, measured.
 # ultralytics is AGPL-3.0: evaluation-only, imported only under
-# space_usage_heatmaps/evaluation/baseline and never by the pipeline. Not a default
+# footfall_heatmaps/evaluation/baseline and never by the pipeline. Not a default
 # group, so CI (scripts/verify.sh: uv sync --locked) never installs it.
 # Install locally with: uv sync --group baseline
 baseline = [
@@ -117,7 +117,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/space_usage_heatmaps"]
+packages = ["src/footfall_heatmaps"]
 
 [tool.ruff]
 line-length = 100
@@ -138,56 +138,56 @@ filterwarnings = ["ignore:invalid escape sequence:SyntaxWarning"]
 # metrics are array maths. Every other installed distribution stays forbidden,
 # plus the planned I/O and model packages before they are installed.
 [tool.importlinter]
-root_packages = ["space_usage_heatmaps"]
+root_packages = ["footfall_heatmaps"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "domain imports only domain"
 type = "forbidden"
 source_modules = [
-    "space_usage_heatmaps.evaluation.domain",
-    "space_usage_heatmaps.floorplan.domain",
-    "space_usage_heatmaps.occupancy.domain",
-    "space_usage_heatmaps.perception.domain",
+    "footfall_heatmaps.evaluation.domain",
+    "footfall_heatmaps.floorplan.domain",
+    "footfall_heatmaps.occupancy.domain",
+    "footfall_heatmaps.perception.domain",
 ]
 forbidden_modules = [
-    "space_usage_heatmaps.evaluation.application",
-    "space_usage_heatmaps.evaluation.infrastructure",
-    "space_usage_heatmaps.occupancy.application",
-    "space_usage_heatmaps.occupancy.infrastructure",
-    "space_usage_heatmaps.perception.application",
-    "space_usage_heatmaps.perception.infrastructure",
-    "space_usage_heatmaps.cli",
-    "space_usage_heatmaps.web",
+    "footfall_heatmaps.evaluation.application",
+    "footfall_heatmaps.evaluation.infrastructure",
+    "footfall_heatmaps.occupancy.application",
+    "footfall_heatmaps.occupancy.infrastructure",
+    "footfall_heatmaps.perception.application",
+    "footfall_heatmaps.perception.infrastructure",
+    "footfall_heatmaps.cli",
+    "footfall_heatmaps.web",
 ]
 
 [[tool.importlinter.contracts]]
 name = "application imports only domain and application"
 type = "forbidden"
 source_modules = [
-    "space_usage_heatmaps.evaluation.application",
-    "space_usage_heatmaps.occupancy.application",
-    "space_usage_heatmaps.perception.application",
+    "footfall_heatmaps.evaluation.application",
+    "footfall_heatmaps.occupancy.application",
+    "footfall_heatmaps.perception.application",
 ]
 forbidden_modules = [
-    "space_usage_heatmaps.evaluation.infrastructure",
-    "space_usage_heatmaps.occupancy.infrastructure",
-    "space_usage_heatmaps.perception.infrastructure",
-    "space_usage_heatmaps.cli",
-    "space_usage_heatmaps.web",
+    "footfall_heatmaps.evaluation.infrastructure",
+    "footfall_heatmaps.occupancy.infrastructure",
+    "footfall_heatmaps.perception.infrastructure",
+    "footfall_heatmaps.cli",
+    "footfall_heatmaps.web",
 ]
 
 [[tool.importlinter.contracts]]
 name = "domain and application import no third-party package but numpy and ot"
 type = "forbidden"
 source_modules = [
-    "space_usage_heatmaps.evaluation.domain",
-    "space_usage_heatmaps.floorplan.domain",
-    "space_usage_heatmaps.occupancy.domain",
-    "space_usage_heatmaps.perception.domain",
-    "space_usage_heatmaps.evaluation.application",
-    "space_usage_heatmaps.occupancy.application",
-    "space_usage_heatmaps.perception.application",
+    "footfall_heatmaps.evaluation.domain",
+    "footfall_heatmaps.floorplan.domain",
+    "footfall_heatmaps.occupancy.domain",
+    "footfall_heatmaps.perception.domain",
+    "footfall_heatmaps.evaluation.application",
+    "footfall_heatmaps.occupancy.application",
+    "footfall_heatmaps.perception.application",
 ]
 forbidden_modules = [
     "click", "grimp", "importlinter", "iniconfig", "markdown_it", "mdurl",

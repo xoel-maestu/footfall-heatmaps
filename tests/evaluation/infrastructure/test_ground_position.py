@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.domain.dataset_reader import Samples
-from space_usage_heatmaps.evaluation.domain.tracks import Tracks
-from space_usage_heatmaps.evaluation.infrastructure.ground_position import (
+from footfall_heatmaps.evaluation.domain.dataset_reader import Samples
+from footfall_heatmaps.evaluation.domain.tracks import Tracks
+from footfall_heatmaps.evaluation.infrastructure.ground_position import (
     GROUND_GATE_M,
     ground_plane_error,
     matched_ground_error,

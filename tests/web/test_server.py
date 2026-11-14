@@ -9,11 +9,11 @@ import urllib.request
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
-from space_usage_heatmaps.occupancy.domain.slots import MINUTES, SLOT_S, SlotGrid, SlotMinutes
-from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
-from space_usage_heatmaps.web.server import LiveSource, make_server
+from footfall_heatmaps.occupancy.application.record_slots import RecordSlots
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.domain.slots import MINUTES, SLOT_S, SlotGrid, SlotMinutes
+from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from footfall_heatmaps.web.server import LiveSource, make_server
 
 T0 = 1_793_955_600  # 2026-11-06T09:00:00Z
 SPEC = GridSpec(origin_x=-1.0, origin_y=2.0, cell_m=0.5, nx=4, ny=2)

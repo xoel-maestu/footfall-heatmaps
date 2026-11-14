@@ -17,10 +17,10 @@ import numpy as np
 import pytest
 import trackers
 
-from space_usage_heatmaps.perception.infrastructure.bytetrack_tracker import ByteTrackTracker
-from space_usage_heatmaps.perception.infrastructure.ocsort_tracker import OcSortTracker
+from footfall_heatmaps.perception.infrastructure.bytetrack_tracker import ByteTrackTracker
+from footfall_heatmaps.perception.infrastructure.ocsort_tracker import OcSortTracker
 
-PACKAGE = Path(__file__).resolve().parents[2] / "src" / "space_usage_heatmaps"
+PACKAGE = Path(__file__).resolve().parents[2] / "src" / "footfall_heatmaps"
 LIBRARIES = {
     "torchreid", "fastreid", "boxmot", "deep_sort", "deep_sort_realtime", "deep_sort_pytorch",
     "insightface", "face_recognition", "facenet_pytorch", "deepface", "retinaface", "dlib",

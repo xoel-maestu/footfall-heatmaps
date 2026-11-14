@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.domain.label_free import (
+from footfall_heatmaps.evaluation.domain.label_free import (
     label_free_blocks,
     label_free_metrics,
     pearson,

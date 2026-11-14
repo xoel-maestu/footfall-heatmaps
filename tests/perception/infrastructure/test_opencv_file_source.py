@@ -1,6 +1,6 @@
 import pytest
 
-from space_usage_heatmaps.perception.infrastructure.opencv_file_source import OpenCvFileSource
+from footfall_heatmaps.perception.infrastructure.opencv_file_source import OpenCvFileSource
 from tests.perception.synthetic_video import write_video
 
 

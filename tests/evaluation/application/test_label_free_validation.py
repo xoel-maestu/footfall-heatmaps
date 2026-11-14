@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.application.label_free_validation import (
+from footfall_heatmaps.evaluation.application.label_free_validation import (
     LABEL_FREE,
     TRUE_ERRORS,
     validate_label_free,
 )
-from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.evaluation.domain.run_config import RunConfig
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from tests.conftest import write_scene
 from tests.evaluation.application.test_evaluate_config import (
     InMemoryTrackSource,

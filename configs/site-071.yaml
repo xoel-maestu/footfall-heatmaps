@@ -1,12 +1,12 @@
 # Improvements plan, phase 5: every calibrated camera of NVIDIA MTMC scene 071
 # as one site, replayed from its video files (file-paced, no frame dropped).
 #
-#   uv run space-usage calibrate --site configs/site-071.yaml
-#   uv run space-usage run --site configs/site-071.yaml --db data/site-071.db
-#   uv run space-usage serve --site configs/site-071.yaml --db data/site-071.db
+#   uv run footfall calibrate --site configs/site-071.yaml
+#   uv run footfall run --site configs/site-071.yaml --db data/site-071.db
+#   uv run footfall serve --site configs/site-071.yaml --db data/site-071.db
 #
 # Relative sources and the weights file are under the data dir
-# (SPACE_USAGE_DATA_DIR, default ~/datasets/space-usage-heatmaps).
+# (FOOTFALL_DATA_DIR, default ~/datasets/footfall-heatmaps).
 site: "071"
 recipe: configs/e2a-record.yaml
 stride: 10            # phase 3: 8 cameras keep up with 30 fps sources at stride 10
@@ -18,7 +18,7 @@ fusion:               # W1 (phase 4): visibility, power 2, on 2 m zones
   weighting: visibility
   power: 2
   zone_m: 2.0
-  weights: sites/071/weights.npz      # frozen by space-usage calibrate
+  weights: sites/071/weights.npz      # frozen by footfall calibrate
 calibration:
   minutes: 15         # the whole 13.3-min videos
 cameras:

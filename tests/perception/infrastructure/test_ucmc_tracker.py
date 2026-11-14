@@ -7,7 +7,7 @@ v = 50; a box whose bottom is above it does not touch the floor.
 
 import numpy as np
 
-from space_usage_heatmaps.perception.infrastructure.ucmc_tracker import (
+from footfall_heatmaps.perception.infrastructure.ucmc_tracker import (
     UcmcTracker,
     floor_points,
 )

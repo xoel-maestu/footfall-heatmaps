@@ -1,7 +1,7 @@
 import pytest
 
-from space_usage_heatmaps.perception.domain.ports import SourceDropped
-from space_usage_heatmaps.perception.infrastructure.opencv_stream_source import (
+from footfall_heatmaps.perception.domain.ports import SourceDropped
+from footfall_heatmaps.perception.infrastructure.opencv_stream_source import (
     OpenCvStreamSource,
 )
 from tests.perception.synthetic_video import write_video

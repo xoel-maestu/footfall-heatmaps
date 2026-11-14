@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 

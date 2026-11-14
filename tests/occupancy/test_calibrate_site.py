@@ -8,9 +8,9 @@ fusion (occupancy.domain.fusion.fusion_weights), and never any ground truth.
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.application.calibrate_site import CalibrateSite
-from space_usage_heatmaps.occupancy.domain.fusion import Fusion
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.application.calibrate_site import CalibrateSite
+from footfall_heatmaps.occupancy.domain.fusion import Fusion
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
 
 T0 = 1_793_955_600
 SPEC = GridSpec(origin_x=0.0, origin_y=0.0, cell_m=0.5, nx=4, ny=2)

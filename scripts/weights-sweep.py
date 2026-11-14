@@ -25,7 +25,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
-from space_usage_heatmaps.cli import (
+from footfall_heatmaps.cli import (
     BASELINE_CONFIG,
     data_dir,
     load_config,
@@ -33,10 +33,10 @@ from space_usage_heatmaps.cli import (
     source_sha256,
     track_source,
 )
-from space_usage_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
-from space_usage_heatmaps.evaluation.domain.splits import SPLITS
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
-from space_usage_heatmaps.occupancy.domain.fusion import Fusion
+from footfall_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
+from footfall_heatmaps.evaluation.domain.splits import SPLITS
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.occupancy.domain.fusion import Fusion
 
 RECIPE = "configs/e2a-stitch.yaml"
 STRIDE, CACHED_STRIDE = 10, 2

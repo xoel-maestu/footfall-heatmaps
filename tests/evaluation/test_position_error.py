@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.domain.position_error import position_error
+from footfall_heatmaps.evaluation.domain.position_error import position_error
 
 
 def test_errors_are_matched_by_track_and_frame_whatever_the_order():

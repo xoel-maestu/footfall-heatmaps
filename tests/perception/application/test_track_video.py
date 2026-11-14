@@ -1,6 +1,6 @@
 import numpy as np
 
-from space_usage_heatmaps.perception.application.track_video import collect_tracks, track_video
+from footfall_heatmaps.perception.application.track_video import collect_tracks, track_video
 from tests.perception.fakes import EchoTracker, ListFrameSource, ScriptedDetector
 
 IMAGES = [np.zeros((120, 160, 3), np.uint8) for _ in range(4)]
@@ -45,7 +45,7 @@ def test_collect_tracks_of_no_boxes_is_empty_with_the_right_shapes():
 def test_detect_then_track_is_track_video():
     """The two halves, run apart (as when detections are replayed from a cache),
     give what track_video gives."""
-    from space_usage_heatmaps.perception.application.track_video import (
+    from footfall_heatmaps.perception.application.track_video import (
         detect_video,
         track_detections,
     )
@@ -61,7 +61,7 @@ def test_detect_then_track_is_track_video():
 
 
 def _detections(scores_by_frame):
-    from space_usage_heatmaps.perception.domain.frame import Detections
+    from footfall_heatmaps.perception.domain.frame import Detections
 
     return [
         (i, Detections(np.tile([[0.0, 0.0, 10.0, 20.0]], (len(s), 1)), np.array(s, float)))
@@ -70,7 +70,7 @@ def _detections(scores_by_frame):
 
 
 def test_select_detections_keeps_every_stride_th_frame_and_scores_above_the_threshold():
-    from space_usage_heatmaps.perception.application.track_video import select_detections
+    from footfall_heatmaps.perception.application.track_video import select_detections
 
     cached = _detections([[0.05, 0.1, 0.3], [0.9], [0.2, 0.1], [0.5], []])
 
@@ -82,7 +82,7 @@ def test_select_detections_keeps_every_stride_th_frame_and_scores_above_the_thre
 
 
 def test_select_detections_with_no_change_is_the_identity():
-    from space_usage_heatmaps.perception.application.track_video import select_detections
+    from footfall_heatmaps.perception.application.track_video import select_detections
 
     cached = _detections([[0.15, 0.3], [0.9]])
 
@@ -94,7 +94,7 @@ def test_select_detections_with_no_change_is_the_identity():
 
 def _tracked(rows):
     """rows: frame index -> {track id: x1}; boxes 10 x 20 px."""
-    from space_usage_heatmaps.perception.domain.frame import TrackedBoxes
+    from footfall_heatmaps.perception.domain.frame import TrackedBoxes
 
     return [
         TrackedBoxes(
@@ -107,7 +107,7 @@ def _tracked(rows):
 
 
 def test_fill_stride_interpolates_between_two_processed_frames_of_a_track():
-    from space_usage_heatmaps.perception.application.track_video import fill_stride
+    from footfall_heatmaps.perception.application.track_video import fill_stride
 
     out = list(fill_stride(_tracked([(0, {1: 0.0}), (2, {1: 8.0}), (4, {1: 12.0})]), 2))
 
@@ -117,7 +117,7 @@ def test_fill_stride_interpolates_between_two_processed_frames_of_a_track():
 
 
 def test_fill_stride_holds_a_track_that_is_not_seen_next():
-    from space_usage_heatmaps.perception.application.track_video import fill_stride
+    from footfall_heatmaps.perception.application.track_video import fill_stride
 
     # Track 2 ends at frame 0, track 1 starts at 3: each holds for its own stride.
     out = list(fill_stride(_tracked([(0, {2: 5.0}), (3, {1: 0.0}), (6, {})]), 3))
@@ -130,7 +130,7 @@ def test_fill_stride_holds_a_track_that_is_not_seen_next():
 def test_fill_stride_keeps_dwell_time_correct():
     """Every processed sample stands for stride frames, so the filled samples
     at 1 / fps give the dwell of the processed ones at stride / fps."""
-    from space_usage_heatmaps.perception.application.track_video import fill_stride
+    from footfall_heatmaps.perception.application.track_video import fill_stride
 
     rng = np.random.default_rng(0)
     rows = [
@@ -145,7 +145,7 @@ def test_fill_stride_keeps_dwell_time_correct():
 
 
 def test_fill_stride_of_one_is_the_identity():
-    from space_usage_heatmaps.perception.application.track_video import fill_stride
+    from footfall_heatmaps.perception.application.track_video import fill_stride
 
     rows = _tracked([(0, {1: 0.0}), (1, {1: 2.0, 4: 9.0})])
 
@@ -156,7 +156,7 @@ def test_fill_stride_of_one_is_the_identity():
 
 
 def test_fill_stride_never_fills_past_the_last_frame_of_the_video():
-    from space_usage_heatmaps.perception.application.track_video import fill_stride
+    from footfall_heatmaps.perception.application.track_video import fill_stride
 
     # A 6-frame video at stride 4: processed frames 0 and 4, frame 5 is the last.
     out = list(fill_stride(_tracked([(0, {1: 0.0}), (4, {1: 8.0})]), 4, end=6))

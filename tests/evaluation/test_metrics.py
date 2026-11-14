@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.domain.metrics import compare_layer
+from footfall_heatmaps.evaluation.domain.metrics import compare_layer
 
 # 2 rows x 4 columns of 1 m cells: two 2 m zones, left and right.
 TRUTH = np.array([[2.0, 0, 0, 0], [0, 2.0, 0, 0]])

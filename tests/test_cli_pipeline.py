@@ -1,4 +1,4 @@
-"""space-usage eval --config on the perception pipeline, with a ground-truth
+"""footfall eval --config on the perception pipeline, with a ground-truth
 detector in place of YOLOX: video decoding, ByteTrack, the track cache and the
 scoring are the real ones."""
 
@@ -6,8 +6,8 @@ import json
 
 import numpy as np
 
-from space_usage_heatmaps import cli
-from space_usage_heatmaps.perception.infrastructure import container
+from footfall_heatmaps import cli
+from footfall_heatmaps.perception.infrastructure import container
 from tests.conftest import write_scene
 from tests.perception.oracle_detector import GroundTruthDetector
 from tests.perception.synthetic_video import write_video
@@ -21,7 +21,7 @@ CONFIG = (
 def test_eval_config_runs_the_pipeline_and_caches_its_recipe(tmp_path, rows, monkeypatch, capsys):
     data = write_scene(tmp_path / "data", rows)
     write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4", n=12)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     loaded = []
@@ -65,7 +65,7 @@ def test_the_cache_records_the_provider_each_video_ran_on(tmp_path, rows, monkey
 
     data = write_scene(tmp_path / "data", rows)
     write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4", n=12)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
@@ -103,7 +103,7 @@ def test_the_best_config_is_the_accepted_h2_one():
 def test_a_second_tracker_replays_the_cached_detections(tmp_path, rows, monkeypatch, capsys):
     data = write_scene(tmp_path / "data", rows)
     write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4", n=12)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     loaded = []
@@ -140,7 +140,7 @@ def test_the_caches_check_the_video_and_ucmc_tracks_the_calibration(tmp_path, ro
     data = write_scene(tmp_path / "data", rows)
     video = data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4"
     write_video(video, n=12)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     loaded = []
@@ -185,7 +185,7 @@ def test_tracker_params_get_their_own_track_cache(tmp_path):
 def test_a_broken_tracking_guard_fails_the_eval(tmp_path, rows, monkeypatch, capsys):
     data = write_scene(tmp_path / "data", rows)
     write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4", n=12)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
@@ -239,7 +239,7 @@ def _tiny(tmp_path, rows, monkeypatch, n=12):
 
     data = write_scene(tmp_path / "data", rows)
     write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4", n=n)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)

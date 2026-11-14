@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from trackers.eval import compute_identity_metrics
 
-from space_usage_heatmaps.evaluation.infrastructure.floor_identity import floor_identity
+from footfall_heatmaps.evaluation.infrastructure.floor_identity import floor_identity
 
 
 def _points(rng, n_frames, n_ids, jitter):

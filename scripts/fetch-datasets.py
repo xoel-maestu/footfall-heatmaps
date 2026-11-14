@@ -3,8 +3,8 @@
     uv run --no-sync python scripts/fetch-datasets.py wildtrack|caviar|mot17
     uv run --no-sync python scripts/fetch-datasets.py nvidia <scene> [<scene> ...]
 
-Only what `space-usage eval --dataset` reads, into SPACE_USAGE_DATA_DIR
-(default ~/datasets/space-usage-heatmaps), never into the repo:
+Only what `footfall eval --dataset` reads, into FOOTFALL_DATA_DIR
+(default ~/datasets/footfall-heatmaps), never into the repo:
 - wildtrack: calibrations, annotations and the frames of cameras C1-C7
   (multi-camera IDs, phase 10), read by HTTP range from the official 6.8 GB
   zip (whose offsets above 4 GiB wrap: it was written without zip64);
@@ -31,7 +31,7 @@ import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from space_usage_heatmaps.perception.infrastructure.model_weights import check_url
+from footfall_heatmaps.perception.infrastructure.model_weights import check_url
 
 HOSTS = {"documents.epfl.ch", "homepages.inf.ed.ac.uk", "motchallenge.net"}
 WILDTRACK_ZIP = (
@@ -267,7 +267,7 @@ def fetch(name, data_dir):
 
 
 def main(argv):
-    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    data = Path(os.environ.get("FOOTFALL_DATA_DIR", "~/datasets/footfall-heatmaps"))
     if len(argv) > 1 and argv[0] == "nvidia":
         print(f"nvidia: {fetch_nvidia(argv[1:], data.expanduser())} files written")
         return

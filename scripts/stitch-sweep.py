@@ -29,7 +29,7 @@ from pathlib import Path
 
 import numpy as np
 
-from space_usage_heatmaps.cli import (
+from footfall_heatmaps.cli import (
     BASELINE_CONFIG,
     FUSION_CONFIG,
     data_dir,
@@ -39,9 +39,9 @@ from space_usage_heatmaps.cli import (
     source_sha256,
     track_source,
 )
-from space_usage_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
-from space_usage_heatmaps.evaluation.domain.splits import SPLITS
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
+from footfall_heatmaps.evaluation.domain.splits import SPLITS
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 
 STITCH_CONFIG = "configs/e2a-stitch.yaml"
 E1_STITCH_CONFIG = "configs/h5-stitch.yaml"

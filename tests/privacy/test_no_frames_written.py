@@ -147,10 +147,10 @@ import json
 import os
 from pathlib import Path
 
-from space_usage_heatmaps import cli
-from space_usage_heatmaps.perception.domain.frame import Detections
-from space_usage_heatmaps.perception.infrastructure import container
-from space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector import preprocess
+from footfall_heatmaps import cli
+from footfall_heatmaps.perception.domain.frame import Detections
+from footfall_heatmaps.perception.infrastructure import container
+from footfall_heatmaps.perception.infrastructure.onnx_yolox_detector import preprocess
 from tests.perception.oracle_detector import GroundTruthDetector
 
 class LetterboxingDetector(GroundTruthDetector):
@@ -205,7 +205,7 @@ def test_the_output_check_rejects_image_bytes():
 def real_models():
     """The real weights' directory, or a skip when the runtime or the weights are missing."""
     pytest.importorskip("onnxruntime", reason="runtime group not installed")
-    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    data = Path(os.environ.get("FOOTFALL_DATA_DIR", "~/datasets/footfall-heatmaps"))
     models = data.expanduser() / "models"
     if not (models / "yolox_s.onnx").exists():
         pytest.skip(f"no YOLOX-s weights in {models}")
@@ -229,7 +229,7 @@ def run_audited(tmp_path, rows, extra):
         "HOME": str(home),
         "TMPDIR": str(tmp),
         "LC_ALL": "C.UTF-8",
-        "SPACE_USAGE_DATA_DIR": str(data),
+        "FOOTFALL_DATA_DIR": str(data),
         "PYTHONPATH": str(REPO),
         "PYTHONDONTWRITEBYTECODE": "1",
         "AUDIT_LOG": str(log),

@@ -2,7 +2,7 @@ import itertools
 
 import pytest
 
-from space_usage_heatmaps.evaluation.infrastructure.round_robin import round_robin
+from footfall_heatmaps.evaluation.infrastructure.round_robin import round_robin
 
 
 class Clock:

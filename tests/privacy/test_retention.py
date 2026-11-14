@@ -2,11 +2,11 @@
 
 import numpy as np
 
-from space_usage_heatmaps.occupancy.application.purge_slots import RETENTION_DAYS, purge_slots
-from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
-from space_usage_heatmaps.occupancy.domain.slots import SlotGrid
-from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from footfall_heatmaps.occupancy.application.purge_slots import RETENTION_DAYS, purge_slots
+from footfall_heatmaps.occupancy.application.record_slots import RecordSlots
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.domain.slots import SlotGrid
+from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
 DAY = 86_400
 NOW = 1_793_955_600

@@ -1,4 +1,4 @@
-"""space-usage serve: the viewer's server with the recorder in the same process, on a
+"""footfall serve: the viewer's server with the recorder in the same process, on a
 video file with a ground-truth detector in place of YOLOX (as tests/test_cli_run.py)."""
 
 import argparse
@@ -11,8 +11,8 @@ import urllib.request
 import numpy as np
 import pytest
 
-from space_usage_heatmaps import cli
-from space_usage_heatmaps.perception.infrastructure import container
+from footfall_heatmaps import cli
+from footfall_heatmaps.perception.infrastructure import container
 from tests.conftest import write_scene
 from tests.perception.oracle_detector import GroundTruthDetector
 from tests.perception.synthetic_video import write_video
@@ -23,7 +23,7 @@ from tests.test_cli_run import CONFIG
 def setup(tmp_path, rows, monkeypatch):
     data = write_scene(tmp_path / "data", rows)
     video = write_video(data / "nvidia/MTMC_Tracking_2024/test/scene_001/camera_0007/video.mp4")
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
     monkeypatch.setattr(container, "load_detector", lambda *_: GroundTruthDetector(rows))
     config = tmp_path / "c.yaml"

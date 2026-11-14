@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.domain.slots import SlotGrid
-from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from footfall_heatmaps.occupancy.domain.slots import SlotGrid
+from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "site-parity.py"
 T0 = 1_793_955_600

@@ -12,10 +12,10 @@ it (R5).
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.application.record_site import RecordSite
-from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
-from space_usage_heatmaps.occupancy.domain.slots import (
+from footfall_heatmaps.occupancy.application.record_site import RecordSite
+from footfall_heatmaps.occupancy.application.record_slots import RecordSlots
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.domain.slots import (
     MINUTES,
     SLOT_S,
     SlotAccumulator,
@@ -24,7 +24,7 @@ from space_usage_heatmaps.occupancy.domain.slots import (
     merge_incomplete_minutes,
     slot_reading,
 )
-from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
 T0 = 1_793_955_600  # 2026-11-06T09:00:00Z
 SPEC = GridSpec(origin_x=0.0, origin_y=0.0, cell_m=0.5, nx=4, ny=2)

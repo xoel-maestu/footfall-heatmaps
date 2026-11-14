@@ -15,11 +15,11 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-from space_usage_heatmaps.cli import BASELINE_CONFIG, data_dir, load_config, track_source
-from space_usage_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
-from space_usage_heatmaps.evaluation.domain.splits import SPLITS
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
-from space_usage_heatmaps.occupancy.domain.fusion import Fusion
+from footfall_heatmaps.cli import BASELINE_CONFIG, data_dir, load_config, track_source
+from footfall_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
+from footfall_heatmaps.evaluation.domain.splits import SPLITS
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.occupancy.domain.fusion import Fusion
 
 CONFIG = "configs/e2a-stride2.yaml"
 VARIANTS = {

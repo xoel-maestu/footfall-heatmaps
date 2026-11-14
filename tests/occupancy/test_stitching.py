@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.domain.stitching import Stitch, stitch
+from footfall_heatmaps.occupancy.domain.stitching import Stitch, stitch
 
 FPS = 10.0
 S = Stitch(gap_s=2.0, radius_m=0.5)  # v_max 1.5 m/s
