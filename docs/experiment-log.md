@@ -7,6 +7,11 @@ comment in `configs/`, `scripts/` and `src/` can be checked. The current
 numbers, with their confidence intervals, are in [results.md](results.md); this
 page is the history behind them, rejected hypotheses included.
 
+The work ran in two plans. The [floor-heatmap plan](#floor-heatmap-plan) built
+the pipeline and its evaluation, phases 1 to 10. The
+[improvements plan](#improvements-plan) is the follow-up that started once the
+floor-heatmap plan closed, phases 1 to 8.
+
 ## How the experiments were run
 
 - **Data and splits.** NVIDIA MTMC_Tracking_2024, test scenes 071 to 080.
@@ -51,7 +56,7 @@ page is the history behind them, rejected hypotheses included.
 
 | Plan, phase | Hypothesis | Decision | Link |
 |---|---|---|---|
-| Floor heatmap, 1 | Evaluation harness, oracle runs | harness valid | [5ef57a5][c-phase1] |
+| Floor heatmap, 1 | Evaluation, oracle runs | evaluation valid | [5ef57a5][c-phase1] |
 | Floor heatmap, 2 | Iteration 0: the Ultralytics reference recipe | baseline | [#2][pr2] |
 | Floor heatmap, 3a | H4 foot point (auto-track) | accepted | [#4][pr4] |
 | Floor heatmap, 3b | H1 YOLOX-s, own pipeline | accepted | [#6][pr6] |
@@ -88,7 +93,7 @@ evidence (E1), then multi-camera fusion (E2a) and geometric cross-camera ids
 detector, input resolution, tracker, foot point of a truncated box, TensorRT
 fp16, detection and tracker thresholds, frame stride with interpolation.
 
-### Phase 1: evaluation harness (oracle)
+### Phase 1: evaluation (oracle)
 
 Question: does the evaluation score a perfect input as perfect, and how good is
 the box-to-floor geometry alone?
@@ -106,7 +111,7 @@ Result:
 - Against every person in coverage (full@coverage), camera 645 reaches TVD
   .517 with 41.6 % of the people occluded.
 
-Decision: harness valid. E1 is measured on visible@coverage (what one camera
+Decision: evaluation valid. E1 is measured on visible@coverage (what one camera
 can observe); full@coverage becomes the E2a target. Since the box ceiling
 already sat above the initial TVD target, the foot point (H4) was moved ahead
 of the tracker hypotheses. Link: [5ef57a5][c-phase1].
@@ -348,6 +353,16 @@ fused map (E2a) stays the passage layer. Link: [#26][pr26].
 Follow-up work in an order fixed by value per effort. Iteration rules are those
 of the floor-heatmap plan. The detection cache is the frozen input; everything
 downstream is deterministic (seed 0).
+
+Dropped before any run:
+- Reproducibility tooling (input checksums, a repro-check script): the
+  floor-heatmap phase 9 rerun already showed determinism, with 13 of 13 outputs
+  byte-identical.
+- E2b long-gap association: the heatmap does not need it, and its geometric
+  ceiling (mc-IDF1 .408 on 071) is below the .455 target of
+  [phase 10](#phase-10-e2b-geometric-cross-camera-ids). Its side effect on
+  mc-IDF1 is reported in phase 2 below.
+- E1 single-camera occlusion: fusion covers what one camera cannot see.
 
 ### Improvements plan, phase 1: demo GIF
 
