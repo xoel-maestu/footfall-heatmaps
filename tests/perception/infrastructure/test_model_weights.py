@@ -2,8 +2,8 @@ import hashlib
 
 import pytest
 
-from space_usage_heatmaps.perception.infrastructure import model_weights
-from space_usage_heatmaps.perception.infrastructure.model_weights import (
+from footfall_heatmaps.perception.infrastructure import model_weights
+from footfall_heatmaps.perception.infrastructure.model_weights import (
     Weights,
     check_url,
     ensure_weights,

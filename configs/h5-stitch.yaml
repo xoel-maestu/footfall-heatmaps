@@ -1,7 +1,7 @@
 # Improvements plan, phase 2 guard recipe: configs/h5-best.yaml (the E1
 # per-camera recipe) with the stitching of configs/e2a-stitch.yaml. HOTA/IDF1
 # of the E1 camera and the external datasets are scored with it. No run
-# section: space-usage run records the tracker's own ids.
+# section: footfall run records the tracker's own ids.
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960
 engine: onnx-trt       # ONNX Runtime, TensorRT execution provider, fp16 (CUDA, then CPU, fallback is logged)
 tracker: bytetrack     # roboflow trackers 2.6.1 ByteTrackTracker, its defaults

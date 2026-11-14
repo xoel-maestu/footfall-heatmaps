@@ -1,7 +1,7 @@
 import numpy as np
 
-from space_usage_heatmaps.evaluation.domain.tracks import Tracks
-from space_usage_heatmaps.evaluation.infrastructure.track_cache import CachedTrackSource
+from footfall_heatmaps.evaluation.domain.tracks import Tracks
+from footfall_heatmaps.evaluation.infrastructure.track_cache import CachedTrackSource
 
 TRACKS = Tracks(np.array([1, 2]), np.array([0, 5]), np.array([[1.0, 2, 3, 4], [5, 6, 7, 8]]))
 

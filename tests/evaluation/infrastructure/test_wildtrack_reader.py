@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.infrastructure.wildtrack_reader import (
+from footfall_heatmaps.evaluation.infrastructure.wildtrack_reader import (
     SCENE,
     WildtrackReader,
     position_to_world,

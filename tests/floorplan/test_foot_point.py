@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.floorplan.domain.foot_point import (
+from footfall_heatmaps.floorplan.domain.foot_point import (
     TrackHeights,
     camera_height,
     floor_points,

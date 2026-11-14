@@ -1,4 +1,4 @@
-"""space-usage eval --scene <id> --cameras all: the fused map of every camera,
+"""footfall eval --scene <id> --cameras all: the fused map of every camera,
 against the single-camera baseline, with tracks from memory."""
 
 import json
@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from space_usage_heatmaps import cli
+from footfall_heatmaps import cli
 from tests.conftest import gt_row, write_scene
 from tests.evaluation.application.test_evaluate_config import InMemoryTrackSource, tracks_from_rows
 from tests.evaluation.application.test_evaluate_fusion import joined
@@ -23,7 +23,7 @@ def fused_scene(tmp_path, rows, monkeypatch):
     # people in a cell is never reached, so k=5 suppression empties the export.
     rows = [*rows[:-1], gt_row(8, 9, 0, 6.03, 9.07)]
     data = write_scene(tmp_path / "data", rows, cameras=(7, 8))
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     seen_by_7 = tracks_from_rows(rows)

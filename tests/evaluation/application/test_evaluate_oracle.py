@@ -1,12 +1,12 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import (
+from footfall_heatmaps.evaluation.application.evaluate_oracle import (
     TRUTHS,
     build_ground_truth_grid,
     evaluate_oracle,
 )
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from tests.conftest import gt_row, write_scene
 
 FULL, VISIBLE, PRIMARY = "full@coverage", "visible@visibility", "visible@coverage"

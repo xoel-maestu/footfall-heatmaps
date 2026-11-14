@@ -4,10 +4,10 @@
     uv run --no-sync python scripts/export-detector.py yolox-s-960
 
 Each family uses its own official exporter at a pinned commit: the repository is
-cloned into SPACE_USAGE_DATA_DIR/export/src, the release checkpoint is fetched
+cloned into FOOTFALL_DATA_DIR/export/src, the release checkpoint is fetched
 anonymously from the vendor's release host and checked against its recorded
 sha256 before anything loads it, and the exporter writes the ONNX file into
-SPACE_USAGE_DATA_DIR/models. The checkpoint is loaded only by the official
+FOOTFALL_DATA_DIR/models. The checkpoint is loaded only by the official
 loader, with torch's weights_only=True. The ONNX file's sha256 is printed:
 record it in perception/infrastructure/model_weights.py and docs/licenses.md.
 CPU only; no GPU is used.
@@ -18,7 +18,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from space_usage_heatmaps.perception.infrastructure.model_weights import (
+from footfall_heatmaps.cli import data_dir
+from footfall_heatmaps.perception.infrastructure.model_weights import (
     EXPORT_HOSTS,
     EXPORTS,
     WEIGHTS,
@@ -27,10 +28,6 @@ from space_usage_heatmaps.perception.infrastructure.model_weights import (
 )
 
 HERE = Path(__file__).resolve().parent / "export"
-
-
-def data_dir():
-    return Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
 
 
 def checkout(repo, commit, dest):
@@ -73,7 +70,7 @@ def main(name):
     if name not in EXPORTS:
         raise SystemExit(f"no export for {name!r}; known: {sorted(EXPORTS)}")
     e, w = EXPORTS[name], WEIGHTS[name]
-    root = data_dir().expanduser()
+    root = data_dir()
     cwd, src = root / "export", []
     if e.repo:
         cwd = root / "export" / "src" / e.repo_dir

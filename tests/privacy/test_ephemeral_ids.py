@@ -6,11 +6,11 @@ depend on where the boxes are, never on what the image shows.
 
 import numpy as np
 
-from space_usage_heatmaps.perception.application.track_video import collect_tracks, track_video
-from space_usage_heatmaps.perception.domain.frame import Detections
-from space_usage_heatmaps.perception.infrastructure import container
-from space_usage_heatmaps.perception.infrastructure.bytetrack_tracker import ByteTrackTracker
-from space_usage_heatmaps.perception.infrastructure.opencv_file_source import OpenCvFileSource
+from footfall_heatmaps.perception.application.track_video import collect_tracks, track_video
+from footfall_heatmaps.perception.domain.frame import Detections
+from footfall_heatmaps.perception.infrastructure import container
+from footfall_heatmaps.perception.infrastructure.bytetrack_tracker import ByteTrackTracker
+from footfall_heatmaps.perception.infrastructure.opencv_file_source import OpenCvFileSource
 from tests.perception.synthetic_video import write_video
 
 

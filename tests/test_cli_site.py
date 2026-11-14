@@ -1,4 +1,4 @@
-"""space-usage calibrate/run/serve --site: every camera of a site in one process,
+"""footfall calibrate/run/serve --site: every camera of a site in one process,
 on video files with a ground-truth detector in place of YOLOX (as test_cli_run)."""
 
 import functools
@@ -8,8 +8,8 @@ import sqlite3
 import numpy as np
 import pytest
 
-from space_usage_heatmaps import cli, site_recording
-from space_usage_heatmaps.perception.infrastructure import container
+from footfall_heatmaps import cli, site_recording
+from footfall_heatmaps.perception.infrastructure import container
 from tests.conftest import write_scene
 from tests.perception.oracle_detector import GroundTruthDetector
 from tests.perception.synthetic_video import write_video
@@ -56,7 +56,7 @@ def site(tmp_path, rows, monkeypatch):
     scene = data / "nvidia/MTMC_Tracking_2024/test/scene_001"
     write_video(scene / "camera_0007/video.mp4")
     write_video(scene / "camera_0008/video.mp4", seed=1)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.setattr(container, "ensure_weights", lambda d, name: d / name)
     monkeypatch.setattr(container, "load_detector", lambda *_: GroundTruthDetector(rows))
     recipe = tmp_path / "recipe.yaml"
@@ -98,7 +98,7 @@ def test_run_needs_the_calibrated_weights(site, tmp_path, capsys):
     path, _ = site
 
     assert cli.main(["run", "--site", str(path), "--db", str(tmp_path / "x.db")]) == 1
-    assert "space-usage calibrate --site" in capsys.readouterr().err
+    assert "footfall calibrate --site" in capsys.readouterr().err
 
 
 def test_run_records_the_fused_slots_of_every_camera(site, tmp_path, monkeypatch, capsys):
@@ -232,7 +232,7 @@ class ScriptedStream:
     scripts = {}
 
     def __init__(self, url, stride):
-        from space_usage_heatmaps.perception.domain.ports import SourceDropped
+        from footfall_heatmaps.perception.domain.ports import SourceDropped
 
         step = self.scripts[url].pop(0)
         if step == "down":
@@ -242,7 +242,7 @@ class ScriptedStream:
     def frames(self):
         import time
 
-        from space_usage_heatmaps.perception.domain.frame import Frame
+        from footfall_heatmaps.perception.domain.frame import Frame
 
         for i in range(self.n):
             time.sleep(0.002)
@@ -263,7 +263,7 @@ def test_a_stream_down_at_start_does_not_stop_the_site_and_connects_later():
 
 
 def test_one_failing_camera_leaves_the_others_recording_and_its_slots_incomplete():
-    from space_usage_heatmaps.perception.infrastructure.round_robin_feed import round_robin_feed
+    from footfall_heatmaps.perception.infrastructure.round_robin_feed import round_robin_feed
     from tests.occupancy.test_record_camera import CONFIG, Crowd, IdPerBox
     from tests.occupancy.test_record_cameras import Log, pipe
 
@@ -291,7 +291,7 @@ def test_one_failing_camera_leaves_the_others_recording_and_its_slots_incomplete
 
 
 def record_cameras_of(feed, pipes, config, log, detector):
-    from space_usage_heatmaps.occupancy.application.record_cameras import record_cameras
+    from footfall_heatmaps.occupancy.application.record_cameras import record_cameras
 
     return record_cameras(feed, detector, pipes, config, log)
 

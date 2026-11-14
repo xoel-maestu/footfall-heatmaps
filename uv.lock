@@ -270,6 +270,93 @@ wheels = [
 ]
 
 [[package]]
+name = "footfall-heatmaps"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "numpy" },
+    { name = "opencv-python-headless" },
+    { name = "pot" },
+    { name = "pyyaml" },
+    { name = "scipy" },
+    { name = "trackers" },
+]
+
+[package.dev-dependencies]
+baseline = [
+    { name = "lap" },
+    { name = "nvidia-ml-py" },
+    { name = "torch" },
+    { name = "torchvision" },
+    { name = "ultralytics" },
+]
+dev = [
+    { name = "import-linter" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+export = [
+    { name = "faster-coco-eval" },
+    { name = "loguru" },
+    { name = "onnx" },
+    { name = "onnxsim" },
+    { name = "tabulate" },
+    { name = "tensorboard" },
+    { name = "thop" },
+    { name = "torch" },
+    { name = "torchvision" },
+]
+runtime = [
+    { name = "nvidia-ml-py" },
+    { name = "onnxruntime-gpu", extra = ["cuda", "cudnn"] },
+    { name = "pillow" },
+]
+tensorrt = [
+    { name = "tensorrt-cu13-libs" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.1" },
+    { name = "opencv-python-headless", specifier = ">=4.10" },
+    { name = "pot", specifier = ">=0.9.5" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "scipy", specifier = ">=1.14" },
+    { name = "trackers", specifier = "==2.6.1" },
+]
+
+[package.metadata.requires-dev]
+baseline = [
+    { name = "lap", specifier = ">=0.5.12" },
+    { name = "nvidia-ml-py", specifier = ">=13.0" },
+    { name = "torch", specifier = ">=2.14", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "footfall-heatmaps", group = "baseline" } },
+    { name = "torchvision", specifier = ">=0.29", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "footfall-heatmaps", group = "baseline" } },
+    { name = "ultralytics", specifier = ">=8.4" },
+]
+dev = [
+    { name = "import-linter", specifier = ">=2.1" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "ruff", specifier = ">=0.8" },
+]
+export = [
+    { name = "faster-coco-eval", specifier = ">=1.6.6" },
+    { name = "loguru", specifier = ">=0.7" },
+    { name = "onnx", specifier = ">=1.19" },
+    { name = "onnxsim", specifier = ">=0.4.36" },
+    { name = "tabulate", specifier = ">=0.9" },
+    { name = "tensorboard", specifier = ">=2.18" },
+    { name = "thop", specifier = ">=0.1.1.post2209072238" },
+    { name = "torch", specifier = ">=2.14", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "footfall-heatmaps", group = "export" } },
+    { name = "torchvision", specifier = ">=0.29", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "footfall-heatmaps", group = "export" } },
+]
+runtime = [
+    { name = "nvidia-ml-py", specifier = ">=13.0" },
+    { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], specifier = ">=1.31" },
+    { name = "pillow", specifier = ">=11" },
+]
+tensorrt = [{ name = "tensorrt-cu13-libs", specifier = ">=10.16,<11", index = "https://pypi.nvidia.com/", conflict = { package = "footfall-heatmaps", group = "tensorrt" } }]
+
+[[package]]
 name = "fsspec"
 version = "2026.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1133,93 +1220,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/70/b3/c19426f783614d625
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/55/6dc6d6bb953bdfc52519a0059592c52b6e3b8ad51cf8256dffceb55b0610/setuptools-84.2.1-py3-none-any.whl", hash = "sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2", size = 876263, upload-time = "2026-10-20T19:01:35.678Z" },
 ]
-
-[[package]]
-name = "space-usage-heatmaps"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "numpy" },
-    { name = "opencv-python-headless" },
-    { name = "pot" },
-    { name = "pyyaml" },
-    { name = "scipy" },
-    { name = "trackers" },
-]
-
-[package.dev-dependencies]
-baseline = [
-    { name = "lap" },
-    { name = "nvidia-ml-py" },
-    { name = "torch" },
-    { name = "torchvision" },
-    { name = "ultralytics" },
-]
-dev = [
-    { name = "import-linter" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-export = [
-    { name = "faster-coco-eval" },
-    { name = "loguru" },
-    { name = "onnx" },
-    { name = "onnxsim" },
-    { name = "tabulate" },
-    { name = "tensorboard" },
-    { name = "thop" },
-    { name = "torch" },
-    { name = "torchvision" },
-]
-runtime = [
-    { name = "nvidia-ml-py" },
-    { name = "onnxruntime-gpu", extra = ["cuda", "cudnn"] },
-    { name = "pillow" },
-]
-tensorrt = [
-    { name = "tensorrt-cu13-libs" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=2.1" },
-    { name = "opencv-python-headless", specifier = ">=4.10" },
-    { name = "pot", specifier = ">=0.9.5" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "scipy", specifier = ">=1.14" },
-    { name = "trackers", specifier = "==2.6.1" },
-]
-
-[package.metadata.requires-dev]
-baseline = [
-    { name = "lap", specifier = ">=0.5.12" },
-    { name = "nvidia-ml-py", specifier = ">=13.0" },
-    { name = "torch", specifier = ">=2.14", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "space-usage-heatmaps", group = "baseline" } },
-    { name = "torchvision", specifier = ">=0.29", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "space-usage-heatmaps", group = "baseline" } },
-    { name = "ultralytics", specifier = ">=8.4" },
-]
-dev = [
-    { name = "import-linter", specifier = ">=2.1" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "ruff", specifier = ">=0.8" },
-]
-export = [
-    { name = "faster-coco-eval", specifier = ">=1.6.6" },
-    { name = "loguru", specifier = ">=0.7" },
-    { name = "onnx", specifier = ">=1.19" },
-    { name = "onnxsim", specifier = ">=0.4.36" },
-    { name = "tabulate", specifier = ">=0.9" },
-    { name = "tensorboard", specifier = ">=2.18" },
-    { name = "thop", specifier = ">=0.1.1.post2209072238" },
-    { name = "torch", specifier = ">=2.14", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "space-usage-heatmaps", group = "export" } },
-    { name = "torchvision", specifier = ">=0.29", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "space-usage-heatmaps", group = "export" } },
-]
-runtime = [
-    { name = "nvidia-ml-py", specifier = ">=13.0" },
-    { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], specifier = ">=1.31" },
-    { name = "pillow", specifier = ">=11" },
-]
-tensorrt = [{ name = "tensorrt-cu13-libs", specifier = ">=10.16,<11", index = "https://pypi.nvidia.com/", conflict = { package = "space-usage-heatmaps", group = "tensorrt" } }]
 
 [[package]]
 name = "supervision"

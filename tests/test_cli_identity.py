@@ -1,11 +1,11 @@
-"""space-usage eval --cameras all --metric mc-idf1: multi-camera IDF1 on the
+"""footfall eval --cameras all --metric mc-idf1: multi-camera IDF1 on the
 floor (E2b), with tracks from memory."""
 
 import json
 
 import pytest
 
-from space_usage_heatmaps import cli
+from footfall_heatmaps import cli
 from tests.conftest import gt_row, write_scene
 from tests.evaluation.application.test_evaluate_config import InMemoryTrackSource, tracks_from_rows
 from tests.evaluation.application.test_evaluate_fusion import joined
@@ -26,7 +26,7 @@ SECTIONS = (
 def scene(tmp_path, rows, monkeypatch):
     rows = [*rows[:-1], gt_row(8, 9, 0, 6.03, 9.07)]
     data = write_scene(tmp_path / "data", rows, cameras=(7, 8))
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     seen = tracks_from_rows(rows)
@@ -97,12 +97,12 @@ def test_the_association_section_parses(scene):
 
 
 def test_wildtrack_scores_every_camera_with_its_own_recipe(tmp_path, monkeypatch, capsys):
-    from space_usage_heatmaps.evaluation.domain.tracks import Tracks
-    from space_usage_heatmaps.evaluation.infrastructure.wildtrack_reader import WildtrackReader
+    from footfall_heatmaps.evaluation.domain.tracks import Tracks
+    from footfall_heatmaps.evaluation.infrastructure.wildtrack_reader import WildtrackReader
     from tests.evaluation.infrastructure.test_wildtrack_reader import FRAMES, write_dataset
 
     data = write_dataset(tmp_path / "data", FRAMES)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     samples = WildtrackReader(data).samples("wildtrack", "C5")
     xyxy = samples.boxes.copy()

@@ -1,13 +1,13 @@
 import json
 
-from space_usage_heatmaps.cli import main
+from footfall_heatmaps.cli import main
 from tests.conftest import write_scene
 
 METRICS = {"mass_error", "tvd", "wape_zone", "emd_m", "pearson", "wape_zone_reason"}
 
 
 def test_eval_prints_both_truths_and_writes_the_report(tmp_path, rows, monkeypatch, capsys):
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(write_scene(tmp_path / "data", rows)))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(write_scene(tmp_path / "data", rows)))
     monkeypatch.chdir(tmp_path)
 
     code = main(["eval", "--source", "gt-world", "--scene", "001", "--camera", "7"])
@@ -36,7 +36,7 @@ def test_eval_prints_both_truths_and_writes_the_report(tmp_path, rows, monkeypat
 def test_gt_boxes_takes_a_foot_point_and_reports_the_position_error(
     tmp_path, rows, monkeypatch, capsys
 ):
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(write_scene(tmp_path / "data", rows)))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(write_scene(tmp_path / "data", rows)))
     monkeypatch.chdir(tmp_path)
 
     args = ["eval", "--source", "gt-boxes", "--scene", "001", "--camera", "7"]
@@ -54,7 +54,7 @@ def test_gt_boxes_takes_a_foot_point_and_reports_the_position_error(
 
 def test_all_cameras_prints_one_row_per_calibrated_camera(tmp_path, rows, monkeypatch, capsys):
     monkeypatch.setenv(
-        "SPACE_USAGE_DATA_DIR", str(write_scene(tmp_path / "data", rows, cameras=(7, 8)))
+        "FOOTFALL_DATA_DIR", str(write_scene(tmp_path / "data", rows, cameras=(7, 8)))
     )
     monkeypatch.chdir(tmp_path)
 
@@ -74,7 +74,7 @@ def test_a_camera_without_visible_people_is_an_error_not_a_score(
     tmp_path, rows, monkeypatch, capsys
 ):
     monkeypatch.setenv(
-        "SPACE_USAGE_DATA_DIR", str(write_scene(tmp_path / "data", rows, cameras=(7, 5)))
+        "FOOTFALL_DATA_DIR", str(write_scene(tmp_path / "data", rows, cameras=(7, 5)))
     )
     monkeypatch.chdir(tmp_path)
 
@@ -95,7 +95,7 @@ def test_all_cameras_reports_a_failing_camera_and_scores_the_rest(
         a for a in calib["sensors"][0]["attributes"] if a["name"] != "fps"
     ]  # camera 7 lacks its fps: a missing-data error, not a crash
     (path / "calibration_2025_format.json").write_text(json.dumps(calib))
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(root))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(root))
     monkeypatch.chdir(tmp_path)
 
     code = main(["eval", "--source", "gt-world", "--scene", "001", "--camera", "all"])
@@ -110,11 +110,11 @@ def test_all_cameras_reports_a_failing_camera_and_scores_the_rest(
 def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeypatch, capsys):
     import numpy as np
 
-    from space_usage_heatmaps import cli
-    from space_usage_heatmaps.evaluation.baseline.recipe import recipe_metadata
+    from footfall_heatmaps import cli
+    from footfall_heatmaps.evaluation.baseline.recipe import recipe_metadata
 
     data = write_scene(tmp_path / "data", rows)
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(cli.SPLITS, "tiny", (("001", "7"),))
     configs = tmp_path / "configs"
@@ -173,7 +173,7 @@ def test_eval_config_scores_cached_tracks_with_intervals(tmp_path, rows, monkeyp
 
 
 def test_report_names_come_from_the_config_path_so_stems_do_not_collide(tmp_path, monkeypatch):
-    from space_usage_heatmaps.cli import config_name
+    from footfall_heatmaps.cli import config_name
 
     monkeypatch.chdir(tmp_path)
 

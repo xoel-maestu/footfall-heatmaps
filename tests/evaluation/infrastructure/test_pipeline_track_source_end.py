@@ -1,10 +1,10 @@
 import numpy as np
 
-from space_usage_heatmaps.evaluation.infrastructure.pipeline_track_source import (
+from footfall_heatmaps.evaluation.infrastructure.pipeline_track_source import (
     PipelineTrackSource,
     SelectedDetections,
 )
-from space_usage_heatmaps.perception.domain.frame import Detections
+from footfall_heatmaps.perception.domain.frame import Detections
 
 
 class EveryFrame:

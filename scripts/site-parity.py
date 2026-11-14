@@ -19,13 +19,13 @@ from pathlib import Path
 
 import numpy as np
 
-from space_usage_heatmaps.cli import data_dir, fused_export, track_source
-from space_usage_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
-from space_usage_heatmaps.occupancy.application.read_slots import read_slots
-from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE
-from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
-from space_usage_heatmaps.site_recording import load_site
+from footfall_heatmaps.cli import data_dir, fused_export, track_source
+from footfall_heatmaps.evaluation.application.evaluate_fusion import evaluate_fusion
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.occupancy.application.read_slots import read_slots
+from footfall_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE
+from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from footfall_heatmaps.site_recording import load_site
 
 CACHED_STRIDE = 2
 TVD_MAX = 0.01

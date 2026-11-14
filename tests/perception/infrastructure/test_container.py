@@ -1,6 +1,6 @@
 import pytest
 
-from space_usage_heatmaps.perception.infrastructure import container
+from footfall_heatmaps.perception.infrastructure import container
 
 
 def test_detector_and_input_size_pick_the_model_file():
@@ -93,7 +93,7 @@ def test_each_tracker_has_its_own_track_recipe_on_the_same_detections():
 
 
 def test_build_tracker_picks_the_adapter_and_ucmc_needs_the_homography():
-    from space_usage_heatmaps.perception.infrastructure.ucmc_tracker import UcmcTracker
+    from footfall_heatmaps.perception.infrastructure.ucmc_tracker import UcmcTracker
 
     assert type(container.build_tracker("ocsort", 30.0)).__name__ == "OcSortTracker"
     assert isinstance(

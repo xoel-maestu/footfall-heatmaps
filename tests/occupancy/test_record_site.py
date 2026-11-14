@@ -8,10 +8,10 @@ site's frozen weights, k=5 applies to the fused grid, and only that is written.
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.application.record_site import RecordSite
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
-from space_usage_heatmaps.occupancy.domain.slots import SLOT_S
-from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from footfall_heatmaps.occupancy.application.record_site import RecordSite
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.domain.slots import SLOT_S
+from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
 T0 = 1_793_955_600  # 2026-11-06T09:00:00Z
 SPEC = GridSpec(origin_x=0.0, origin_y=0.0, cell_m=0.5, nx=4, ny=2)

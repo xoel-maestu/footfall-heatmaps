@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.application.evaluate_config import evaluate_config
-from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
-from space_usage_heatmaps.evaluation.domain.tracks import Tracks
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.evaluation.application.evaluate_config import evaluate_config
+from footfall_heatmaps.evaluation.domain.run_config import RunConfig
+from footfall_heatmaps.evaluation.domain.tracks import Tracks
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
 from tests.conftest import write_scene
 
 CFG = RunConfig("yolov8n", "bytetrack", 640, "bottom", "ultralytics", 1)

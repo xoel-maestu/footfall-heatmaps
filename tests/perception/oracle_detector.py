@@ -3,7 +3,7 @@ each frame: the pipeline runs end to end with no model and no GPU."""
 
 import numpy as np
 
-from space_usage_heatmaps.perception.domain.frame import Detections
+from footfall_heatmaps.perception.domain.frame import Detections
 
 
 class GroundTruthDetector:

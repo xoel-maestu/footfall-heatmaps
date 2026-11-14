@@ -9,13 +9,13 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.domain.dataset_reader import CameraCalibration
-from space_usage_heatmaps.occupancy.application.record_cameras import (
+from footfall_heatmaps.evaluation.domain.dataset_reader import CameraCalibration
+from footfall_heatmaps.occupancy.application.record_cameras import (
     CameraPipe,
     record_cameras,
 )
-from space_usage_heatmaps.perception.domain.frame import Detections, Frame
-from space_usage_heatmaps.perception.domain.privacy_mask import PrivacyMask
+from footfall_heatmaps.perception.domain.frame import Detections, Frame
+from footfall_heatmaps.perception.domain.privacy_mask import PrivacyMask
 from tests.conftest import H
 from tests.occupancy.test_record_camera import CONFIG, Crowd, IdPerBox
 

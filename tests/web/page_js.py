@@ -11,7 +11,7 @@ import subprocess
 
 import pytest
 
-from space_usage_heatmaps.web.server import PAGE
+from footfall_heatmaps.web.server import PAGE
 
 NODE = shutil.which("node")
 needs_node = pytest.mark.skipif(

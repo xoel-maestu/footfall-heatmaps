@@ -6,10 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-PACKAGE = Path("src/space_usage_heatmaps")
+PACKAGE = Path("src/footfall_heatmaps")
 BASELINE = PACKAGE / "evaluation" / "baseline"
 AGPL = ("ultralytics",)
-BASELINE_MODULE = "space_usage_heatmaps.evaluation.baseline"
+BASELINE_MODULE = "footfall_heatmaps.evaluation.baseline"
 
 
 def imports(path):
@@ -51,7 +51,7 @@ def test_only_the_cli_imports_the_baseline_and_never_at_import_time():
 
 def test_importing_the_cli_loads_no_agpl_module():
     code = (
-        "import sys, space_usage_heatmaps.cli; "
+        "import sys, footfall_heatmaps.cli; "
         f"print([m for m in sys.modules if m.split('.')[0] in {AGPL!r}])"
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)

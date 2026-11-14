@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.application.evaluate_identity import evaluate_identity
-from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
-from space_usage_heatmaps.evaluation.domain.tracks import Tracks
-from space_usage_heatmaps.evaluation.infrastructure.floor_identity import floor_identity
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
-from space_usage_heatmaps.occupancy.domain.association import NONE, Association
-from space_usage_heatmaps.occupancy.domain.fusion import Fusion
+from footfall_heatmaps.evaluation.application.evaluate_identity import evaluate_identity
+from footfall_heatmaps.evaluation.domain.run_config import RunConfig
+from footfall_heatmaps.evaluation.domain.tracks import Tracks
+from footfall_heatmaps.evaluation.infrastructure.floor_identity import floor_identity
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+from footfall_heatmaps.occupancy.domain.association import NONE, Association
+from footfall_heatmaps.occupancy.domain.fusion import Fusion
 from tests.conftest import gt_row, write_scene
 from tests.evaluation.application.test_evaluate_config import (
     InMemoryTrackSource,

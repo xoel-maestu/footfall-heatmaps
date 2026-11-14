@@ -2,8 +2,8 @@ import re
 import subprocess
 import sys
 
-from space_usage_heatmaps.evaluation.baseline.recipe import recipe_metadata
-from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
+from footfall_heatmaps.evaluation.baseline.recipe import recipe_metadata
+from footfall_heatmaps.evaluation.domain.run_config import RunConfig
 
 CONFIG = RunConfig("yolov8n", "bytetrack", 640, "centroid", "ultralytics", 1)
 
@@ -25,8 +25,8 @@ def test_the_metadata_names_everything_the_tracks_depend_on():
 def test_reading_the_metadata_does_not_import_ultralytics():
     code = (
         "import sys\n"
-        "from space_usage_heatmaps.evaluation.baseline.recipe import recipe_metadata\n"
-        "from space_usage_heatmaps.evaluation.domain.run_config import RunConfig\n"
+        "from footfall_heatmaps.evaluation.baseline.recipe import recipe_metadata\n"
+        "from footfall_heatmaps.evaluation.domain.run_config import RunConfig\n"
         "recipe_metadata(RunConfig('yolov8n', 'bytetrack', 640, 'centroid', 'ultralytics', 1))\n"
         "print([m for m in sys.modules if m.split('.')[0] == 'ultralytics'])"
     )

@@ -8,12 +8,12 @@ reaches the database, and the read path applies it again from that layer.
 
 import numpy as np
 
-from space_usage_heatmaps.occupancy.application.read_slots import read_slots
-from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
-from space_usage_heatmaps.occupancy.domain.grid import GridSpec
-from space_usage_heatmaps.occupancy.domain.live import RECENT_S, LiveLayer
-from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, SlotGrid, suppress
-from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+from footfall_heatmaps.occupancy.application.read_slots import read_slots
+from footfall_heatmaps.occupancy.application.record_slots import RecordSlots
+from footfall_heatmaps.occupancy.domain.grid import GridSpec
+from footfall_heatmaps.occupancy.domain.live import RECENT_S, LiveLayer
+from footfall_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, SlotGrid, suppress
+from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
 T0 = 1_793_955_600
 SPEC = GridSpec(origin_x=0.0, origin_y=0.0, cell_m=0.5, nx=4, ny=2)

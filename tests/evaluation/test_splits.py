@@ -1,5 +1,5 @@
-from space_usage_heatmaps import cli
-from space_usage_heatmaps.evaluation.domain.splits import SPLITS
+from footfall_heatmaps import cli
+from footfall_heatmaps.evaluation.domain.splits import SPLITS
 
 
 def test_sealed_split_is_scenes_076_to_080_one_camera_each():

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.floorplan.domain.homography import Homography
+from footfall_heatmaps.floorplan.domain.homography import Homography
 
 # A camera at the origin looking along +y: u = 100 x / y + 50, v = 100 / y + 50.
 # Ground points with y > 0 are in front of it.

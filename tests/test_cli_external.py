@@ -1,12 +1,12 @@
-"""space-usage eval --dataset: the external evaluation-only datasets."""
+"""footfall eval --dataset: the external evaluation-only datasets."""
 
 import json
 
 import numpy as np
 
-from space_usage_heatmaps import cli
-from space_usage_heatmaps.cli import main
-from space_usage_heatmaps.evaluation.baseline.recipe import recipe_metadata
+from footfall_heatmaps import cli
+from footfall_heatmaps.cli import main
+from footfall_heatmaps.evaluation.baseline.recipe import recipe_metadata
 from tests.evaluation.infrastructure.test_caviar_reader import write_clip
 from tests.evaluation.infrastructure.test_wildtrack_reader import FRAMES, write_dataset
 
@@ -30,7 +30,7 @@ def cache_truth_tracks(data, config, scene, camera, samples):
 
 def setup(tmp_path, monkeypatch, foot_point="bottom"):
     data = tmp_path / "data"
-    monkeypatch.setenv("SPACE_USAGE_DATA_DIR", str(data))
+    monkeypatch.setenv("FOOTFALL_DATA_DIR", str(data))
     monkeypatch.chdir(tmp_path)
     path = tmp_path / "configs" / "best.yaml"
     path.parent.mkdir()
@@ -43,7 +43,7 @@ def test_wildtrack_reports_the_ground_error_of_the_most_oblique_camera(
 ):
     data, path, config = setup(tmp_path, monkeypatch)
     write_dataset(data, FRAMES)
-    from space_usage_heatmaps.evaluation.infrastructure.wildtrack_reader import WildtrackReader
+    from footfall_heatmaps.evaluation.infrastructure.wildtrack_reader import WildtrackReader
 
     samples = WildtrackReader(data).samples("wildtrack", "C5")
     cache_truth_tracks(data, config, "wildtrack", "C5", samples)
@@ -73,7 +73,7 @@ def test_caviar_reports_the_tracking_guards_per_clip_and_pooled(tmp_path, monkey
     data, path, config = setup(tmp_path, monkeypatch)
     write_clip(data, "Walk1cor")
     write_clip(data, "Walk2cor")
-    from space_usage_heatmaps.evaluation.infrastructure.caviar_reader import CaviarReader
+    from footfall_heatmaps.evaluation.infrastructure.caviar_reader import CaviarReader
 
     for clip in ("Walk1cor", "Walk2cor"):
         cache_truth_tracks(data, config, clip, "cor", CaviarReader(data).samples(clip, "cor"))
@@ -103,7 +103,7 @@ def test_wildtrack_scores_the_stitched_ids(tmp_path, monkeypatch):
     data, path, config = setup(tmp_path, monkeypatch)
     path.write_text(path.read_text() + STITCH)
     write_dataset(data, FRAMES)
-    from space_usage_heatmaps.evaluation.infrastructure.wildtrack_reader import WildtrackReader
+    from footfall_heatmaps.evaluation.infrastructure.wildtrack_reader import WildtrackReader
 
     samples = WildtrackReader(data).samples("wildtrack", "C5")
     cache_truth_tracks(data, config, "wildtrack", "C5", samples)
@@ -119,7 +119,7 @@ def test_caviar_has_no_floor_so_stitching_is_not_applied_and_says_so(tmp_path, m
     data, path, config = setup(tmp_path, monkeypatch)
     path.write_text(path.read_text() + STITCH)
     write_clip(data, "Walk1cor")
-    from space_usage_heatmaps.evaluation.infrastructure.caviar_reader import CaviarReader
+    from footfall_heatmaps.evaluation.infrastructure.caviar_reader import CaviarReader
 
     cache_truth_tracks(
         data, config, "Walk1cor", "cor", CaviarReader(data).samples("Walk1cor", "cor")

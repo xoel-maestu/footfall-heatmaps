@@ -4,7 +4,7 @@ import math
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.domain.fusion import (
+from footfall_heatmaps.occupancy.domain.fusion import (
     CameraGrid,
     Fusion,
     fuse_grids,
@@ -13,7 +13,7 @@ from space_usage_heatmaps.occupancy.domain.fusion import (
     joint_coverage,
     overlap,
 )
-from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec
+from footfall_heatmaps.occupancy.domain.grid import Grid, GridSpec
 
 SPEC = GridSpec(origin_x=0.0, origin_y=0.0, cell_m=0.5, nx=4, ny=4)
 

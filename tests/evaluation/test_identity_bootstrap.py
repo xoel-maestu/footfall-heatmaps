@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.domain.bootstrap import IdentityBlocks, identity_bootstrap
+from footfall_heatmaps.evaluation.domain.bootstrap import IdentityBlocks, identity_bootstrap
 
 
 def blocks(idtp, n_truth, n_pred):

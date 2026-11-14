@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.perception.domain.frame import Frame
-from space_usage_heatmaps.perception.infrastructure.onnx_dfine_detector import (
+from footfall_heatmaps.perception.domain.frame import Frame
+from footfall_heatmaps.perception.infrastructure.onnx_dfine_detector import (
     PERSON,
     SCORE_THR,
     OnnxDfineDetector,
@@ -76,12 +76,12 @@ def test_the_exported_model_finds_people_in_a_real_frame():
     (scripts/export-detector.py dfine-s) and scene 071's video."""
     import cv2
 
-    from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
+    from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
         NvidiaMtmcReader,
     )
 
     pytest.importorskip("onnxruntime", reason="runtime group not installed")
-    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    data = Path(os.environ.get("FOOTFALL_DATA_DIR", "~/datasets/footfall-heatmaps"))
     data = data.expanduser()
     weights = data / "models" / "dfine_s_obj2coco.onnx"
     video = NvidiaMtmcReader(data).video("071", "645")

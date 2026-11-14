@@ -1,17 +1,17 @@
-"""space-usage eval --suite e1-final: the E1 summary from gathered inputs."""
+"""footfall eval --suite e1-final: the E1 summary from gathered inputs."""
 
 import json
 
 import numpy as np
 
-from space_usage_heatmaps import cli, e1_final
-from space_usage_heatmaps.evaluation.application.label_free_validation import (
+from footfall_heatmaps import cli, e1_final
+from footfall_heatmaps.evaluation.application.label_free_validation import (
     LABEL_FREE,
     TRUE_ERRORS,
     LabelFreeValidation,
     SceneLabelFree,
 )
-from space_usage_heatmaps.evaluation.domain.label_free import LabelFree
+from footfall_heatmaps.evaluation.domain.label_free import LabelFree
 
 NAME = "configs_h5-best"
 

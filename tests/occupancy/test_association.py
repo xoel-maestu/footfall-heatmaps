@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.domain.association import (
+from footfall_heatmaps.occupancy.domain.association import (
     Association,
     CameraTracks,
     associate,

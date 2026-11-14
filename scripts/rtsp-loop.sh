@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Serve a video file in a loop as a local RTSP stream, for space-usage run/serve.
+# Serve a video file in a loop as a local RTSP stream, for footfall run/serve.
 #
 #   MEDIAMTX=/path/to/mediamtx scripts/rtsp-loop.sh <video.mp4> [name]
 #   -> rtsp://127.0.0.1:8554/<name> (default name: s071), until Ctrl+C

@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.infrastructure.mot17_reader import CAMERA, Mot17Reader
+from footfall_heatmaps.evaluation.infrastructure.mot17_reader import CAMERA, Mot17Reader
 
 SEQINFO = """[Sequence]
 name=MOT17-02-FRCNN

@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from space_usage_heatmaps.perception.domain.frame import Frame
-from space_usage_heatmaps.perception.infrastructure.round_robin_feed import round_robin_feed
+from footfall_heatmaps.perception.domain.frame import Frame
+from footfall_heatmaps.perception.infrastructure.round_robin_feed import round_robin_feed
 
 
 def frames(n, tag=0):

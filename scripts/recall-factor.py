@@ -16,7 +16,7 @@ reported: the p90, the uncorrected median and p90, and the tune per-camera
 error distribution (raw and corrected), to show whether one factor is plausible.
 
 Choices fixed here before the first run (not in the pre-registration):
-- Recipe: configs/e2a-record.yaml (what `space-usage run` records with) at
+- Recipe: configs/e2a-record.yaml (what `footfall run` records with) at
   stride 10, replayed from the stride-2 TensorRT detection cache
   (track_source(..., detections_stride=2)): the tracker runs on every 10th
   frame, CPU only. Units: every calibrated camera of the split
@@ -76,10 +76,10 @@ def replay(spec, tracks, floor_of, frame_count, stride, fps, t0):
     """The slots the recorder writes for these tracks, read back as the page
     reads them: [{slot_start_utc, person_s, observed_s, mean_occupancy}].
     floor_of(boxes, ids, frames) -> (xs, ys) of one processed frame's rows."""
-    from space_usage_heatmaps.occupancy.application.read_slots import read_minutes
-    from space_usage_heatmaps.occupancy.application.record_slots import RecordSlots
-    from space_usage_heatmaps.occupancy.domain.slots import slot_reading
-    from space_usage_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
+    from footfall_heatmaps.occupancy.application.read_slots import read_minutes
+    from footfall_heatmaps.occupancy.application.record_slots import RecordSlots
+    from footfall_heatmaps.occupancy.domain.slots import slot_reading
+    from footfall_heatmaps.occupancy.infrastructure.sqlite_slot_store import SqliteSlotStore
 
     frames = np.asarray(tracks.frames)
     keep = frames % stride == 0
@@ -136,13 +136,13 @@ def error_summary(cams, f, on_page=None):
 def measure_scene(scene):
     import cv2
 
-    from space_usage_heatmaps.cli import data_dir, load_config, track_source
-    from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
+    from footfall_heatmaps.cli import data_dir, load_config, track_source
+    from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
         NvidiaMtmcReader,
     )
-    from space_usage_heatmaps.floorplan.domain.foot_point import camera_floor_points
-    from space_usage_heatmaps.floorplan.domain.homography import Homography
-    from space_usage_heatmaps.occupancy.domain.grid import GridSpec
+    from footfall_heatmaps.floorplan.domain.foot_point import camera_floor_points
+    from footfall_heatmaps.floorplan.domain.homography import Homography
+    from footfall_heatmaps.occupancy.domain.grid import GridSpec
 
     truth_person_seconds = _truth_module().truth_person_seconds
     reader = NvidiaMtmcReader(data_dir())
@@ -193,8 +193,8 @@ def measure_scene(scene):
 
 
 def measure(split):
-    from space_usage_heatmaps.cli import source_sha256
-    from space_usage_heatmaps.evaluation.domain.splits import SPLITS
+    from footfall_heatmaps.cli import source_sha256
+    from footfall_heatmaps.evaluation.domain.splits import SPLITS
 
     scenes = [s for s, _ in SPLITS[split]]
     with ProcessPoolExecutor(len(scenes)) as pool:

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from space_usage_heatmaps.evaluation.domain.run_config import RunConfig
+from footfall_heatmaps.evaluation.domain.run_config import RunConfig
 
 ITER0 = {
     "detector": "yolov8n",
@@ -160,7 +160,7 @@ def test_a_stride_needs_the_own_pipeline_which_fills_the_skipped_frames():
 
 
 def test_a_stitch_section_gives_the_tracklet_stitcher():
-    from space_usage_heatmaps.occupancy.domain.stitching import Stitch
+    from footfall_heatmaps.occupancy.domain.stitching import Stitch
 
     cfg = RunConfig.from_mapping(ITER0 | {"stitch": {"gap_s": 5, "radius_m": 1.0}})
 

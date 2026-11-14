@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec
+from footfall_heatmaps.occupancy.domain.grid import Grid, GridSpec
 
 
 def spec(nx=4, ny=3, cell=0.5):

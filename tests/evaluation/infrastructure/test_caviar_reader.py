@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.infrastructure.caviar_reader import CAMERA, CaviarReader
+from footfall_heatmaps.evaluation.infrastructure.caviar_reader import CAMERA, CaviarReader
 
 GT = """<?xml version="1.0" encoding="UTF-8"?><dataset name="Walk1cor">
 <frame number="0"><objectlist>

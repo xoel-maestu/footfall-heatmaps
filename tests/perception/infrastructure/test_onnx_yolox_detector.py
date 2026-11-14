@@ -3,8 +3,8 @@ import logging
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.perception.domain.frame import Frame
-from space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector import (
+from footfall_heatmaps.perception.domain.frame import Frame
+from footfall_heatmaps.perception.infrastructure.onnx_yolox_detector import (
     CPU,
     CUDA,
     NMS_THR,
@@ -120,7 +120,7 @@ def test_the_release_model_loads_and_detects_with_onnx_runtime():
     from pathlib import Path
 
     pytest.importorskip("onnxruntime", reason="runtime group not installed")
-    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    data = Path(os.environ.get("FOOTFALL_DATA_DIR", "~/datasets/footfall-heatmaps"))
     path = data.expanduser() / "models" / "yolox_s.onnx"
     if not path.exists():
         pytest.skip(f"no YOLOX-s weights at {path}")
@@ -212,12 +212,12 @@ def test_the_release_model_is_invariant_to_grey_padding_below_a_real_frame():
 
     import cv2
 
-    from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
+    from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import (
         NvidiaMtmcReader,
     )
 
     pytest.importorskip("onnxruntime", reason="runtime group not installed")
-    data = Path(os.environ.get("SPACE_USAGE_DATA_DIR", "~/datasets/space-usage-heatmaps"))
+    data = Path(os.environ.get("FOOTFALL_DATA_DIR", "~/datasets/footfall-heatmaps"))
     data = data.expanduser()
     weights = data / "models" / "yolox_s.onnx"
     video = NvidiaMtmcReader(data).video("071", "645")
@@ -254,7 +254,7 @@ def test_score_and_nms_thresholds_are_parameters():
 
 
 def test_the_recipe_names_the_thresholds_it_ran_with():
-    from space_usage_heatmaps.perception.infrastructure.onnx_yolox_detector import recipe
+    from footfall_heatmaps.perception.infrastructure.onnx_yolox_detector import recipe
 
     assert (recipe()["score_thr"], recipe()["nms_thr"]) == (0.1, 0.45)
     assert recipe(score_thr=0.05, nms_thr=0.6)["score_thr"] == 0.05

@@ -117,7 +117,7 @@ def test_the_zone_table_keeps_the_top_ten():
 
 
 def test_the_reading_note_says_sparse_minutes_count_as_zero():
-    from space_usage_heatmaps.web.server import PAGE
+    from footfall_heatmaps.web.server import PAGE
 
     assert "Minutes in which fewer than 5 track ids were seen count as 0." in PAGE.read_text()
 
@@ -146,7 +146,7 @@ def test_a_single_camera_slot_reads_about_n_people_never_a_bound():
 
 
 def test_no_reading_claims_a_bound():
-    from space_usage_heatmaps.web.server import PAGE
+    from footfall_heatmaps.web.server import PAGE
 
     block = PAGE.read_text().split("// reading:begin")[1].split("// reading:end")[0]
     assert "at least" not in block

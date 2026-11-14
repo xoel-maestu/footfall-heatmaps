@@ -69,14 +69,14 @@ _spec = importlib.util.spec_from_file_location(
 kz = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(kz)
 
-from space_usage_heatmaps.cli import data_dir, load_fusion, source_sha256, track_source  # noqa: E402
-from space_usage_heatmaps.evaluation.application.evaluate_oracle import recipe_floor_points  # noqa: E402
-from space_usage_heatmaps.evaluation.domain.splits import SPLITS  # noqa: E402
-from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader  # noqa: E402
-from space_usage_heatmaps.floorplan.domain.homography import Homography  # noqa: E402
-from space_usage_heatmaps.occupancy.domain.fusion import CameraGrid, fusion_weights  # noqa: E402
-from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec  # noqa: E402
-from space_usage_heatmaps.occupancy.domain.live import RECENT_S  # noqa: E402
+from footfall_heatmaps.cli import data_dir, load_fusion, source_sha256, track_source  # noqa: E402
+from footfall_heatmaps.evaluation.application.evaluate_oracle import recipe_floor_points  # noqa: E402
+from footfall_heatmaps.evaluation.domain.splits import SPLITS  # noqa: E402
+from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader  # noqa: E402
+from footfall_heatmaps.floorplan.domain.homography import Homography  # noqa: E402
+from footfall_heatmaps.occupancy.domain.fusion import CameraGrid, fusion_weights  # noqa: E402
+from footfall_heatmaps.occupancy.domain.grid import Grid, GridSpec  # noqa: E402
+from footfall_heatmaps.occupancy.domain.live import RECENT_S  # noqa: E402
 
 RECIPE, STRIDE, CACHED_STRIDE, CELL_M = kz.RECIPE, kz.STRIDE, kz.CACHED_STRIDE, kz.CELL_M
 PEOPLE = 5  # the promise: a shown cell had at least 5 people

@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.perception.application.reconnect import reconnecting_frames
-from space_usage_heatmaps.perception.domain.frame import Frame
-from space_usage_heatmaps.perception.domain.ports import SourceDropped
+from footfall_heatmaps.perception.application.reconnect import reconnecting_frames
+from footfall_heatmaps.perception.domain.frame import Frame
+from footfall_heatmaps.perception.domain.ports import SourceDropped
 
 IMAGE = np.zeros((4, 4, 3), np.uint8)
 

@@ -3,7 +3,7 @@
 import cv2
 import numpy as np
 
-from space_usage_heatmaps.evaluation.infrastructure.frame_sequence_video import sequence_video
+from footfall_heatmaps.evaluation.infrastructure.frame_sequence_video import sequence_video
 
 
 def write_frames(d, n, size=(48, 64)):

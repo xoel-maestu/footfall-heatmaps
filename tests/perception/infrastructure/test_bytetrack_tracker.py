@@ -1,6 +1,6 @@
 import numpy as np
 
-from space_usage_heatmaps.perception.infrastructure.bytetrack_tracker import ByteTrackTracker
+from footfall_heatmaps.perception.infrastructure.bytetrack_tracker import ByteTrackTracker
 
 
 def walk(x0, frame):

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from space_usage_heatmaps.evaluation.domain.bootstrap import (
+from footfall_heatmaps.evaluation.domain.bootstrap import (
     DOMAINS,
     BlockLayers,
     SceneBlocks,
@@ -9,7 +9,7 @@ from space_usage_heatmaps.evaluation.domain.bootstrap import (
     block_layers,
     estimate,
 )
-from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec
+from footfall_heatmaps.occupancy.domain.grid import Grid, GridSpec
 
 SPEC = GridSpec(0.0, 0.0, 0.5, nx=8, ny=8)  # 4 m x 4 m
 MASK = np.ones((8, 8), dtype=bool)

@@ -21,8 +21,8 @@ from pathlib import Path
 
 import numpy as np
 
-from space_usage_heatmaps.occupancy.domain.grid import Grid, GridSpec
-from space_usage_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, suppress
+from footfall_heatmaps.occupancy.domain.grid import Grid, GridSpec
+from footfall_heatmaps.occupancy.domain.slots import K_MIN_PEOPLE, suppress
 
 # The viewer's light theme (DESIGN.md, web/static/index.html).
 RAMP = ((0xDD, 0xEF, 0xE6), (0x7C, 0xC4, 0xA0), (0x08, 0x7A, 0x50), (0x03, 0x31, 0x1F))
@@ -134,10 +134,10 @@ def render(args):
     import yaml
     from PIL import Image, ImageDraw
 
-    from space_usage_heatmaps.cli import data_dir, load_config, track_source
-    from space_usage_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
-    from space_usage_heatmaps.floorplan.domain.foot_point import camera_floor_points
-    from space_usage_heatmaps.floorplan.domain.homography import Homography
+    from footfall_heatmaps.cli import data_dir, load_config, track_source
+    from footfall_heatmaps.evaluation.infrastructure.nvidia_mtmc_reader import NvidiaMtmcReader
+    from footfall_heatmaps.floorplan.domain.foot_point import camera_floor_points
+    from footfall_heatmaps.floorplan.domain.homography import Homography
 
     run = yaml.safe_load(Path(args.config).read_text())["run"]
     config = load_config(args.config)

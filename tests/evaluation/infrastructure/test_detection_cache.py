@@ -2,8 +2,8 @@ import json
 
 import numpy as np
 
-from space_usage_heatmaps.evaluation.infrastructure.detection_cache import CachedDetections
-from space_usage_heatmaps.perception.domain.frame import Detections
+from footfall_heatmaps.evaluation.infrastructure.detection_cache import CachedDetections
+from footfall_heatmaps.perception.domain.frame import Detections
 
 META = {"weights_sha256": "ab" * 32, "input_size": 960, "score_thr": 0.1}
 # Three processed frames; the middle one has no box, and must still be replayed.
