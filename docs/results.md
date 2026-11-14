@@ -25,9 +25,10 @@ running the commands.
 - **Tracking guard.** An accepted step may not lower HOTA or IDF1 by more than
   1 point against the config it replaced.
 - **Experiment log, phases.** Comments in code, configs and scripts cite the
-  project's experiment log, its phases ("phase 9", "improvements plan,
-  phase 4") and the rules pre-registered there before each run. The log is not
-  published; the decisions and numbers that matter are on this page.
+  [experiment log](experiment-log.md), its phases ("phase 9", "improvements
+  plan, phase 4") and the rules pre-registered there before each run. The log
+  lists every hypothesis, accepted or rejected, with its rule, numbers and
+  decision.
 - **Metrics.** TVD: total variation distance between the predicted and true
   dwell maps (0 is identical, 1 is disjoint). Mass error: the share of total
   dwell missing or added. Zone WAPE: weighted absolute percentage error on 2 m
