@@ -1,6 +1,6 @@
 # Architecture
 
-The package `space_usage_heatmaps` (under `src/`) is split into bounded
+The package `footfall_heatmaps` (under `src/`) is split into bounded
 contexts, and most of them into three layers. Dependencies point inwards:
 infrastructure depends on application and domain, application on domain,
 and domain on nothing outside itself.
@@ -14,7 +14,7 @@ and domain on nothing outside itself.
 | `occupancy` | domain, application, infrastructure | the floor grid, k-suppression, 15-minute slots, multi-camera fusion and stitching; the SQLite slot store |
 | `evaluation` | domain, application, infrastructure, `baseline` | metrics, scene splits and the bootstrap; dataset readers and the cached tracks; the optional Ultralytics reference recipe |
 
-Outside the contexts, at the package root: `cli.py` (the `space-usage`
+Outside the contexts, at the package root: `cli.py` (the `footfall`
 command), `web/` (the viewer's HTTP server and its static page),
 `site_recording.py` and `e1_final.py`. They wire the contexts together and
 may import any layer.

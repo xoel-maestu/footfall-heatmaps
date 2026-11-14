@@ -8,7 +8,7 @@ running the commands.
 ## Terms
 
 - **Tune and sealed.** The 10 test scenes of NVIDIA MTMC_Tracking_2024 used
-  here are split in two (`src/space_usage_heatmaps/evaluation/domain/splits.py`),
+  here are split in two (`src/footfall_heatmaps/evaluation/domain/splits.py`),
   one camera per scene. Every parameter was chosen on the *tune* scenes (071 to
   075). The *sealed* scenes (076 to 080) were held out and scored once, at the
   end, to check that the choices generalise.
@@ -37,7 +37,7 @@ running the commands.
 
 ## E1, one camera
 
-`uv run space-usage eval --suite e1-final` writes the full report to
+`uv run footfall eval --suite e1-final` writes the full report to
 `reports/e1-final.json` and `reports/e1-final.md`. Everything below is
 `configs/h5-best.yaml` (YOLOX-s at 960 on TensorRT fp16, ByteTrack, the
 auto-track foot point), scored on NVIDIA MTMC 2024 against floor ground truth:
@@ -70,12 +70,12 @@ better):
 
 What remains is mostly occlusion. One camera does not see people behind
 shelves: against every person on the floor, TVD is 0.450 on tune and 0.557 on
-sealed. Fusing several cameras of a floor (E2a, `space-usage eval --cameras`,
+sealed. Fusing several cameras of a floor (E2a, `footfall eval --cameras`,
 and the site recorder) covers those gaps.
 
 ## External datasets
 
-Evaluation only, never tuned on (`space-usage eval --config ... --dataset`):
+Evaluation only, never tuned on (`footfall eval --config ... --dataset`):
 
 | Dataset | Metric | Value |
 |---|---|---|
@@ -95,7 +95,7 @@ indications, not proof.
 
 ## Speed and cameras per GPU
 
-Speed, `space-usage bench`, 30 min on one 1080p camera with nothing else on the
+Speed, `footfall bench`, 30 min on one 1080p camera with nothing else on the
 GPU (GTX 1650 Ti, 4 GB): 42.5 fps mean, 40.1 fps p5 (target ≥ 15), VRAM peak
 174 MB (target ≤ 3.5 GB).
 

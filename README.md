@@ -1,4 +1,4 @@
-# space-usage-heatmaps
+# footfall-heatmaps
 
 Anonymous foot-traffic and occupancy heatmaps from fixed cameras: positions on
 a floor plan, never images or identities. Python, runs locally on a modest
@@ -37,8 +37,8 @@ detector serves the cameras in turn, each camera keeps its own tracker, and
 the cameras' grids are fused into one floor grid, weighted by how well each
 camera sees each zone, before k=5 is applied.
 
-A local web viewer (`space-usage serve`) shows the live layer (in memory only)
-and the stored slots. `space-usage eval` scores the whole pipeline against
+A local web viewer (`footfall serve`) shows the live layer (in memory only)
+and the stored slots. `footfall eval` scores the whole pipeline against
 floor ground truth; see [Results](#results).
 
 The code is laid out by context (perception, floorplan, occupancy,
@@ -120,10 +120,10 @@ default dependencies and `dev`):
 
 Datasets, model weights, caches and TensorRT engines live in a data
 directory outside the repository. Set it before the first command (the
-default is `~/datasets/space-usage-heatmaps`):
+default is `~/datasets/footfall-heatmaps`):
 
 ```bash
-export SPACE_USAGE_DATA_DIR=~/datasets/space-usage-heatmaps
+export FOOTFALL_DATA_DIR=~/datasets/footfall-heatmaps
 ```
 
 1. Export the detector the default config runs (YOLOX-s at a 960 input). The
@@ -148,7 +148,7 @@ export SPACE_USAGE_DATA_DIR=~/datasets/space-usage-heatmaps
    ```bash
    base=https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces/resolve/main/MTMC_Tracking_2024/test
    for s in 071 072 073 074 075; do
-     d="$SPACE_USAGE_DATA_DIR/nvidia/MTMC_Tracking_2024/test/scene_$s"
+     d="$FOOTFALL_DATA_DIR/nvidia/MTMC_Tracking_2024/test/scene_$s"
      mkdir -p "$d"
      for f in calibration_2025_format.json ground_truth.txt ground_truth_2025_format.json; do
        curl -fL -o "$d/$f" "$base/scene_$s/$f"
@@ -165,10 +165,10 @@ export SPACE_USAGE_DATA_DIR=~/datasets/space-usage-heatmaps
    under `reports/`, which the command creates:
 
    ```bash
-   uv run --no-sync space-usage eval --config configs/h5-best.yaml --split tune
+   uv run --no-sync footfall eval --config configs/h5-best.yaml --split tune
    ```
 
-   `uv run --no-sync space-usage eval --suite e1-final` produces the full
+   `uv run --no-sync footfall eval --suite e1-final` produces the full
    single-camera report (`reports/e1-final.json` and `.md`). It also compares
    against the iteration 0 baseline, which needs the `baseline` group unless
    its tracks are already cached.
@@ -176,8 +176,8 @@ export SPACE_USAGE_DATA_DIR=~/datasets/space-usage-heatmaps
 5. Record one camera into 15-minute slots and open the viewer:
 
    ```bash
-   uv run --no-sync space-usage serve --config configs/h5-best.yaml --db slots.db \
-     --source "$SPACE_USAGE_DATA_DIR/nvidia/MTMC_Tracking_2024/test/scene_071/camera_0645/video.mp4"
+   uv run --no-sync footfall serve --config configs/h5-best.yaml --db slots.db \
+     --source "$FOOTFALL_DATA_DIR/nvidia/MTMC_Tracking_2024/test/scene_071/camera_0645/video.mp4"
    # open http://127.0.0.1:8000/
    ```
 
@@ -207,11 +207,11 @@ under the data dir).
 
 ```bash
 # 1. Freeze the fusion weights once, from the calibration window (calibration.minutes)
-uv run --no-sync space-usage calibrate --site configs/site-071.yaml
+uv run --no-sync footfall calibrate --site configs/site-071.yaml
 # 2. Record every camera into fused slots (Ctrl+C or SIGTERM writes the open slot)
-uv run --no-sync space-usage run --site configs/site-071.yaml --db data/site-071.db --stats data/site-071-stats.json
+uv run --no-sync footfall run --site configs/site-071.yaml --db data/site-071.db --stats data/site-071-stats.json
 # 3. View the fused slots; with --record, record in the same process and show the fused live layer
-uv run --no-sync space-usage serve --site configs/site-071.yaml --db data/site-071.db --record
+uv run --no-sync footfall serve --site configs/site-071.yaml --db data/site-071.db --record
 ```
 
 The weights are the evaluation's visibility weighting (power 2 on 2 m zones)
@@ -232,7 +232,7 @@ processed frame rate.
 
 ## Live viewer and API
 
-`space-usage serve` hosts a page with the floor-plan heatmap of one camera or
+`footfall serve` hosts a page with the floor-plan heatmap of one camera or
 one site: the live layer (60 s half-life, held in memory only) updating every
 second, and the persisted 15-minute slots. With `--source` it records that
 camera in the same process, so the live layer never leaves memory; without it,
@@ -256,7 +256,7 @@ table ranks the top 10 of the grid's 2 m zones by dwell, with their
 coordinates; a stored map is cropped to its observed extent plus 2 m.
 
 ```bash
-uv run --no-sync space-usage serve --config configs/h5-best.yaml --db slots.db \
+uv run --no-sync footfall serve --config configs/h5-best.yaml --db slots.db \
   --source rtsp://127.0.0.1:8554/s071 --port 8000
 # open http://127.0.0.1:8000/
 ```
@@ -281,7 +281,7 @@ then:
 grep linux_amd64 checksums.sha256 | sha256sum -c -
 tar -xzf mediamtx_v*_linux_amd64.tar.gz -C ~/tools/mediamtx
 MEDIAMTX=~/tools/mediamtx/mediamtx scripts/rtsp-loop.sh \
-  "$SPACE_USAGE_DATA_DIR/nvidia/MTMC_Tracking_2024/test/scene_071/camera_0645/video.mp4" s071
+  "$FOOTFALL_DATA_DIR/nvidia/MTMC_Tracking_2024/test/scene_071/camera_0645/video.mp4" s071
 # -> rtsp://127.0.0.1:8554/s071 until Ctrl+C
 ```
 
@@ -356,7 +356,7 @@ Exceptions and optional parts:
   and distributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - The optional `baseline` group installs ultralytics, which is AGPL-3.0. It is
   used for evaluation only (the iteration 0 baseline), imported only under
-  `src/space_usage_heatmaps/evaluation/baseline/`, never installed by CI and
+  `src/footfall_heatmaps/evaluation/baseline/`, never installed by CI and
   never needed to run the pipeline.
 - The optional `tensorrt` group installs NVIDIA's TensorRT libraries under
   NVIDIA's proprietary licence, from NVIDIA's own index. They are not
@@ -422,7 +422,7 @@ Methods and software this work builds on:
   provides OC-SORT and a port of TrackEval's HOTA and IDF1.
 - **UCMCTrack**: K. Yi et al., "UCMCTrack: Multi-Object Tracking with Uniform
   Camera Motion Compensation", AAAI 2024. The floor-plane tracker in
-  `src/space_usage_heatmaps/perception/infrastructure/ucmc_tracker.py` is an
+  `src/footfall_heatmaps/perception/infrastructure/ucmc_tracker.py` is an
   independent implementation after [its MIT code](https://github.com/corfyi/UCMCTrack).
 - **D-FINE** and **RF-DETR**, evaluated as alternative detectors (Apache-2.0
   weights).

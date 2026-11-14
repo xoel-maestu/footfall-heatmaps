@@ -1,5 +1,5 @@
 ---
-name: space-usage viewer
+name: footfall viewer
 colors:
   ink: "#12151A"
   muted: "#545B66"
@@ -21,9 +21,9 @@ rounded: { control: 12, sheet: 20 }
 spacing: { base: 8 }
 ---
 
-# space-usage viewer
+# footfall viewer
 
-The page `space-usage serve` hosts (`src/space_usage_heatmaps/web/static/index.html`):
+The page `footfall serve` hosts (`src/footfall_heatmaps/web/static/index.html`):
 one static file, no build step, nothing fetched from outside the server.
 
 ## Overview (brand and style)
