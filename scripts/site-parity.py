@@ -1,5 +1,5 @@
 """Map parity of the site recorder (improvements plan, phase 5, P1), as
-pre-registered in the experiment log, "Improvements plan, phase 5: multi-camera recording".
+pre-registered in docs/experiment-log.md, "Improvements plan, phase 5: multi-camera recording".
 
     uv run --no-sync python scripts/site-parity.py --site configs/site-071.yaml \
         --db data/site-071.db --out reports/site-parity-071.json

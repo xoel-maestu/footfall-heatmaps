@@ -1,5 +1,5 @@
 """Fusion weights (improvements plan, phase 4), as pre-registered in
-the experiment log.
+docs/experiment-log.md, "Improvements plan, phase 4: fusion weights".
 
     uv run --no-sync python scripts/weights-sweep.py variant W2     # one variant on tune
     uv run --no-sync python scripts/weights-sweep.py decide         # the rule, from the 3 reports

@@ -6,7 +6,7 @@ Tune scenes 071-075 only (never sealed), every calibrated camera, per-camera
 recipe configs/e2a-stride2.yaml from the cached tracks (CPU only; a missing
 track cache would run the detector). Point values of the whole run (draw 0 of
 the block bootstrap; no CI), pooled as the unweighted mean over scenes, as in
-the sweep rows of the experiment log.
+the sweep rows of docs/experiment-log.md, phase 9.
 """
 
 import json

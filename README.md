@@ -306,6 +306,8 @@ The single-camera targets are missed on the sealed scenes. The confidence
 intervals, each accepted step, the external datasets (WILDTRACK, CAVIAR,
 MOT17), the label-free metrics and the terms used in code comments (E1, H1,
 iteration 0, tune and sealed) are in [docs/results.md](docs/results.md).
+Every hypothesis, the rule fixed before its run, and the decision, rejected
+ones included, are in [docs/experiment-log.md](docs/experiment-log.md).
 
 ## Limitations
 
