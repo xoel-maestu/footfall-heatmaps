@@ -50,8 +50,36 @@ TRUTH_TITLES = {
 }
 
 
+_LEGACY_NOTICED = False
+
+
+def _legacy_notice(message):
+    global _LEGACY_NOTICED
+    if not _LEGACY_NOTICED:
+        _LEGACY_NOTICED = True
+        print(message, file=sys.stderr)
+
+
 def data_dir():
-    return Path(os.environ.get("FOOTFALL_DATA_DIR", "~/datasets/footfall-heatmaps")).expanduser()
+    """The data directory: FOOTFALL_DATA_DIR, else the legacy SPACE_USAGE_DATA_DIR,
+    else ~/datasets/footfall-heatmaps, else the legacy ~/datasets/space-usage-heatmaps
+    if only it exists. A legacy source prints one notice on stderr."""
+    if value := os.environ.get("FOOTFALL_DATA_DIR"):
+        return Path(value).expanduser()
+    if value := os.environ.get("SPACE_USAGE_DATA_DIR"):
+        _legacy_notice(
+            "note: SPACE_USAGE_DATA_DIR still works but is renamed; set FOOTFALL_DATA_DIR instead."
+        )
+        return Path(value).expanduser()
+    default = Path("~/datasets/footfall-heatmaps").expanduser()
+    legacy = Path("~/datasets/space-usage-heatmaps").expanduser()
+    if not default.exists() and legacy.exists():
+        _legacy_notice(
+            f"note: using the legacy data directory {legacy}; "
+            f"rename it to {default} or set FOOTFALL_DATA_DIR."
+        )
+        return legacy
+    return default
 
 
 def _json_value(v):

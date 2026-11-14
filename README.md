@@ -126,6 +126,9 @@ default is `~/datasets/footfall-heatmaps`):
 export FOOTFALL_DATA_DIR=~/datasets/footfall-heatmaps
 ```
 
+`FOOTFALL_DATA_DIR` was formerly `SPACE_USAGE_DATA_DIR`, which is still read,
+as is a data directory left at `~/datasets/space-usage-heatmaps`.
+
 1. Export the detector the default config runs (YOLOX-s at a 960 input). The
    release checkpoint is downloaded from YOLOX's GitHub release, checked
    against its sha256, and exported on the CPU by YOLOX's official exporter:

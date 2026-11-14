@@ -4,7 +4,8 @@
     uv run --no-sync python scripts/fetch-datasets.py nvidia <scene> [<scene> ...]
 
 Only what `footfall eval --dataset` reads, into FOOTFALL_DATA_DIR
-(default ~/datasets/footfall-heatmaps), never into the repo:
+(default ~/datasets/footfall-heatmaps, see footfall_heatmaps.cli.data_dir),
+never into the repo:
 - wildtrack: calibrations, annotations and the frames of cameras C1-C7
   (multi-camera IDs, phase 10), read by HTTP range from the official 6.8 GB
   zip (whose offsets above 4 GiB wrap: it was written without zip64);
@@ -22,7 +23,6 @@ docs/licenses.md. Files already present at their size are kept.
 """
 
 import io
-import os
 import re
 import sys
 import urllib.error
@@ -31,6 +31,7 @@ import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from footfall_heatmaps.cli import data_dir
 from footfall_heatmaps.perception.infrastructure.model_weights import check_url
 
 HOSTS = {"documents.epfl.ch", "homepages.inf.ed.ac.uk", "motchallenge.net"}
@@ -267,13 +268,13 @@ def fetch(name, data_dir):
 
 
 def main(argv):
-    data = Path(os.environ.get("FOOTFALL_DATA_DIR", "~/datasets/footfall-heatmaps"))
+    data = data_dir()
     if len(argv) > 1 and argv[0] == "nvidia":
-        print(f"nvidia: {fetch_nvidia(argv[1:], data.expanduser())} files written")
+        print(f"nvidia: {fetch_nvidia(argv[1:], data)} files written")
         return
     if len(argv) != 1 or argv[0] not in ("wildtrack", "caviar", "mot17"):
         raise SystemExit(__doc__)
-    print(f"{argv[0]}: {fetch(argv[0], data.expanduser())} files written")
+    print(f"{argv[0]}: {fetch(argv[0], data)} files written")
 
 
 if __name__ == "__main__":

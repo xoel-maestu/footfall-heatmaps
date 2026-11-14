@@ -18,6 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from footfall_heatmaps.cli import data_dir
 from footfall_heatmaps.perception.infrastructure.model_weights import (
     EXPORT_HOSTS,
     EXPORTS,
@@ -27,10 +28,6 @@ from footfall_heatmaps.perception.infrastructure.model_weights import (
 )
 
 HERE = Path(__file__).resolve().parent / "export"
-
-
-def data_dir():
-    return Path(os.environ.get("FOOTFALL_DATA_DIR", "~/datasets/footfall-heatmaps"))
 
 
 def checkout(repo, commit, dest):
@@ -73,7 +70,7 @@ def main(name):
     if name not in EXPORTS:
         raise SystemExit(f"no export for {name!r}; known: {sorted(EXPORTS)}")
     e, w = EXPORTS[name], WEIGHTS[name]
-    root = data_dir().expanduser()
+    root = data_dir()
     cwd, src = root / "export", []
     if e.repo:
         cwd = root / "export" / "src" / e.repo_dir
