@@ -1,5 +1,5 @@
 """A higher id threshold per 0.5 m cell (improvements plan, phase 7, H8), as
-pre-registered in the experiment log, "H6 decision and H8 pre-registration".
+pre-registered in docs/experiment-log.md, "Improvements plan, phase 7" (H8).
 
     CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 uv run --no-sync python scripts/k-threshold-sweep.py
     CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 uv run --no-sync \

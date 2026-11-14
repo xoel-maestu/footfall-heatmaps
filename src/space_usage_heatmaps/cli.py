@@ -994,7 +994,8 @@ def run_eval_config(args):
 # eval --cameras: the fused map (E2a) and the single-camera baseline it is compared to.
 FUSION_CONFIG = "configs/e2a-fusion.yaml"
 BASELINE_CONFIG = "configs/h5-best.yaml"
-# Accuracy targets as recalibrated after iteration 0 (experiment log), dwell at 0.5 m.
+# Accuracy targets as recalibrated after iteration 0, dwell at 0.5 m
+# (docs/experiment-log.md, "Target recalibration").
 TARGETS = {"mass_error": 0.10, "tvd": 0.30, "wape_zone": 0.30, "emd_m": 1.2}
 FUSION_TITLES = {
     "full@joint": "every person, on the joint coverage of the fused cameras (E2a target)",
@@ -1171,7 +1172,7 @@ ASSOCIATION_CONFIG = "configs/e2b-association.yaml"
 # detect once a second.
 WILDTRACK_RECIPE = BASELINE_CONFIG
 WILDTRACK_BLOCK_S = 10.0  # 400 frames at 2 fps: 20 blocks of 10 s (30 s would give 7)
-# Pre-registered E2b target (the experiment log, 2026-11-07, before
+# Pre-registered E2b target (docs/experiment-log.md, phase 10, written before
 # any association ran): pooled mc-IDF1 >= baseline + 1/2 (oracle - baseline),
 # .45 on NVIDIA (tune: .114 + .5 x .681); on WILDTRACK from its own baseline
 # and oracle, never tuned there.

@@ -1,5 +1,5 @@
 """Real-time budget, detection stride (improvements plan, phase 3), as
-pre-registered in the experiment log, "Improvements plan, phase 3: real-time budget".
+pre-registered in docs/experiment-log.md, "Improvements plan, phase 3: real-time budget".
 
     uv run --no-sync python scripts/stride-sweep.py sweep
     uv run --no-sync python scripts/stride-sweep.py sealed <stride>

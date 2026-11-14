@@ -1,6 +1,6 @@
 # Improvements plan, phase 4: configs/e2a-stitch.yaml with fusion weights W1,
 # visibility power 2 on 2 m zones. Chosen on tune 071-075 at stride 10 from the
-# stride-2 detection cache by the pre-registered rule (experiment log,
+# stride-2 detection cache by the pre-registered rule (docs/experiment-log.md,
 # "Improvements plan, phase 4: fusion weights"; scripts/weights-sweep.py).
 # Improvements plan, phase 2: the E2a/E2b scene (configs/e2b-association.yaml:
 # per-camera recipe of configs/e2a-stride2.yaml, fusion of configs/e2a-fusion.yaml,
@@ -29,7 +29,7 @@ fusion:
 
 # occupancy.domain.association: cross-camera global ids from floor co-location,
 # no appearance. Chosen on tune 071-075 by the rule pre-registered in
-# the experiment log (highest pooled mc-IDF1 among the accepted
+# docs/experiment-log.md, phase 10 (highest pooled mc-IDF1 among the accepted
 # variants A1-A4; sweep in reports/e2b-sweep-tune.json): A4, colocate with a
 # 1 m gate plus a 2 s handover.
 association:
@@ -42,7 +42,7 @@ association:
   handover_radius_m: 0.5
 
 # occupancy.domain.stitching: relabel-only tracklet stitching per camera on the
-# floor. Chosen on tune 071-075 by the pre-registered rule (experiment log,
+# floor. Chosen on tune 071-075 by the pre-registered rule (docs/experiment-log.md,
 # "Improvements plan, phase 2"; scripts/stitch-sweep.py): lowest pooled fused
 # passage mass error full@joint among G {2, 5, 10} s x R {0.5, 1.0} m: G10 R1.
 stitch:

@@ -1,4 +1,5 @@
-"""The E2b association sweep on tune, as pre-registered in the experiment log.
+"""The E2b association sweep on tune, as pre-registered in
+docs/experiment-log.md, phase 10.
 
     uv run --no-sync python scripts/e2b-sweep.py [reports/e2b-sweep-tune.json]
 

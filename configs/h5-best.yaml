@@ -1,7 +1,7 @@
 # Accepted configuration after phase 5 (H5, H6, H7): configs/h1-best.yaml on
 # TensorRT fp16, a copy of configs/h5-trt.yaml. Same tune metrics as h1-best
 # within CI, faster. No H6 threshold variant and neither stride 2 nor YOLOX-s
-# 1280 (H2a') passed the acceptance rule (experiment log).
+# 1280 (H2a') passed the acceptance rule (docs/experiment-log.md, phase 5).
 detector: yolox-s      # Megvii YOLOX-s 0.1.1rc0 checkpoint, exported by scripts/export-detector.py yolox-s-960
 engine: onnx-trt       # ONNX Runtime, TensorRT execution provider, fp16 (CUDA, then CPU, fallback is logged)
 tracker: bytetrack     # roboflow trackers 2.6.1 ByteTrackTracker, its defaults

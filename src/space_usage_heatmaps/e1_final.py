@@ -25,7 +25,7 @@ from space_usage_heatmaps.evaluation.application.label_free_validation import (
 from space_usage_heatmaps.evaluation.domain.splits import SPLITS
 
 SUITE_CONFIG = "configs/h5-best.yaml"
-# Each accepted step against the config it was accepted over (experiment log).
+# Each accepted step against the config it was accepted over (docs/experiment-log.md).
 # "accuracy": accepted on a TVD gain, holds when the sealed CI is below 0.
 # "no-loss": an engine change, holds when the sealed CI does not sit above 0.
 CONFIRMATIONS = (
@@ -35,7 +35,7 @@ CONFIRMATIONS = (
     ("H5 TensorRT fp16", "configs/h5-best.yaml", "configs/h1-best.yaml", "no-loss"),
 )
 TRUTH = "visible@coverage"  # E1 primary block, dwell layer
-# Accuracy targets after the one recalibration (experiment log, "Target recalibration").
+# Accuracy targets after the one recalibration (docs/experiment-log.md, "Target recalibration").
 MAP_TARGETS = {"tvd": 0.30, "mass_error": 0.10, "wape_zone": 0.30, "emd_m": 1.2}
 SEALED_MAX_DEGRADATION = 0.20
 FPS_MIN, VRAM_MAX_MB = 15.0, 3500.0
